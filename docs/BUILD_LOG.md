@@ -1,16 +1,25 @@
 # Build log (newest first)
 
+## Step 0.1 (size M), 2026-10-13: Phase 0 documents
+**Works:** 11 documents written. No code.
+**Stubbed:** nothing.
+**Tests:** 0 (none apply).
+**Not verified:** the ZIP app was never installed, built or run by us. Package versions in D-13 are lookups only.
+
 ## Step 0.1b (size S), 2026-10-13: machine check
 **Works:** `ls docs` on the owner's machine shows all 11 documents (verified on your machine). Node v22.14.0 and npm 11.21.0 reported by owner (verified on your machine).
 **Verified in my sandbox:** registry `engines` fields of the D-13 candidates accept Node v22.14.0. Lookup only, no install.
 **Not verified:** installs and builds. Whether `argon2` installs on the owner's macOS (A-10).
 **Tests:** 0 (none apply).
 
-## Step 0.1 (size M), 2026-10-13: Phase 0 documents
-**Works:** 11 documents written. No code.
-**Stubbed:** nothing.
+## Step 0.1c (size S), 2026-10-13: switch test fixes
+**Works:** A fresh chat read the resume pack and replied in the required format. It did not invent facts about files it had not seen (reported by owner, verified on your machine).
+**Fixed:** STATUS is replaced whole. It now has the correct "Last updated" line, the machine versions and the next steps with sizes.
 **Tests:** 0 (none apply).
-**Not verified:** the ZIP app was never installed, built or run by us. Package versions in D-13 are lookups only.
+**Found along the way:**
+1. My mistake: I gave three separate edits for STATUS. One did not apply (git showed 4 deletions, expected 5). The guide says to give such a file whole.
+2. `.DS_Store` is untracked. Step 1.1 adds `.gitignore`.
+3. The fresh chat could not size step 1.1 because STATUS did not list it. STATUS now lists the next steps.
 
 ### Found along the way (from reading the ZIP)
 1. The ZIP is React/Vite with localStorage. The PDF assumes Next.js, Prisma and an existing SMS integration. Neither the stack nor the SMS code exists.

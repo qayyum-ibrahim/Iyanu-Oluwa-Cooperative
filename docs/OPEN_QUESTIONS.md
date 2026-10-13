@@ -1,0 +1,20 @@
+# Open questions
+"Needed by" is the phase that cannot finish without an answer.
+
+| ID | Question | Who answers | Needed by | Default until answered |
+|---|---|---|---|---|
+| OQ-00 | Mr. Aro to sign off the money rules in DOMAIN_RULES with real figures | Owner / Mr. Aro | Phase 6 | Rules stay "proposed" |
+| OQ-01 | Where is it hosted, who runs it, and which production database? | Owner | Phase 10 | SQLite for dev only |
+| OQ-02 | Owner's email for the Super Admin account | Owner | Phase 2 | Entered when the setup script runs. Never in git. |
+| OQ-03 | Owner's OS and Node version | Owner | Step 1.1 | Run `node -v; npm -v` |
+| OQ-04 | Deadline, definition of done, credit situation | Owner | Phase 1 | Lean mode, no deadline |
+| OQ-05 | SMS provider and message text | Owner | Phase 4 | Fake adapter, placeholder text |
+| OQ-06 | Can a member be paid off while holding an active loan? | Owner | Phase 6 | No. Blocked (as in the ZIP). |
+| OQ-07 | Can an Inactive member be reactivated? By whom? | Owner | Phase 6 | No reactivation feature |
+| OQ-08 | Who may edit an expense, and must old values be kept? | Owner | Phase 5 | Edits allowed with permission; old values go in the audit log |
+| OQ-09 | Can staff pick members created by other staff when recording a payment? | Owner | Phase 3 | No (own members only) |
+| OQ-10 | Can a pay-off be reversed or corrected? | Owner | Phase 6 | No. A correction is a new reversing entry. |
+| OQ-11 | Does Total Expenditures include Member Withdrawal outflows? Does Income include Loan Repaid and Loan Interest? | Owner | Phase 7 | Expenditure includes all non-deleted outflows. Income includes all payment lines. |
+| OQ-12 | Any real data in anyone's browser (`iyanu_oluwa_react_v2`)? | Owner | Phase 10 | No real data |
+| OQ-13 | Final staff permission list (the PDF list and the ZIP list differ) | Owner | Phase 2 | ZIP's 20 permissions plus `loans.disburse` and `payoff.process` |
+| OQ-14 | Are non-refundable balances (e.g. Development Levy) shown on the member profile? | Owner | Phase 3 | Shown under "Retained by cooperative", not counted in payout |

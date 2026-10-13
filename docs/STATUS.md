@@ -2,7 +2,7 @@
 Last updated: after step 0.1
 
 ## Where we stopped
-Phase 0 documents written (step 0.1). Waiting for the project lead to commit them and confirm. Next: Phase 1, step 1.1.
+Phase 0 documents written and checked on the owner's machine (steps 0.1, 0.1b). Machine: macOS, Node v22.14.0, npm 11.21.0. Next: Phase 1, step 1.1.
 
 ## What exists
 Docs only. No code, no database, no accounts. The prototype is the ZIP (React/Vite, localStorage). It has not been run by us.
@@ -21,7 +21,7 @@ None pinned yet. Candidates are in DECISIONS D-13.
 See PHASE_PLAN.md. Next: 1.1 repo skeleton.
 
 ## Open items
-See OPEN_QUESTIONS.md. Before step 1.1 the owner runs `node -v; npm -v` (OQ-03).
+See OPEN_QUESTIONS.md. OQ-03 is closed.
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

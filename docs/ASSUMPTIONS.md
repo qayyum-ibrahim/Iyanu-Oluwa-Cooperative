@@ -3,7 +3,8 @@ Status: confirmed / illustrative / verify.
 
 | ID | Assumption | Status | Who verifies |
 |---|---|---|---|
-| A-01 | Node version on the owner's machine is new enough for the pinned tools. Sandbox shows Node v22.22.0 and npm 10.9.4, which says nothing about the owner's machine. | verify | Owner: run `node -v; npm -v` before step 1.1 |
+| A-01 | Owner's machine runs Node v22.14.0 and npm 11.21.0 (reported 2026-10-13). Every D-13 candidate that declares a Node requirement accepts v22.14.0 (registry lookup). Installs are not yet tested. | verify | Claude at step 1.2 (clean install) |
+
 | A-02 | Prisma `7.10.0` (CLI and client) is chosen because on 2026-10-13 the CLI `latest` tag was a release candidate (8.0.0-rc.22) while the client `latest` was 7.10.0. | verify | Claude at step 1.2 (clean install) |
 | A-03 | Money is stored as `BigInt` kobo. I did not confirm from the Prisma docs whether `Int` is wide enough, so I chose `BigInt` to be safe. | verify | Claude at step 1.4 |
 | A-04 | SQLite for development. Production database is undecided until hosting is known. | verify | Owner (OQ-01) |

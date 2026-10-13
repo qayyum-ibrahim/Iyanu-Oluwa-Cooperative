@@ -1,5 +1,11 @@
 # Build log (newest first)
 
+## Step 0.1b (size S), 2026-10-13: machine check
+**Works:** `ls docs` on the owner's machine shows all 11 documents (verified on your machine). Node v22.14.0 and npm 11.21.0 reported by owner (verified on your machine).
+**Verified in my sandbox:** registry `engines` fields of the D-13 candidates accept Node v22.14.0. Lookup only, no install.
+**Not verified:** installs and builds. Whether `argon2` installs on the owner's macOS (A-10).
+**Tests:** 0 (none apply).
+
 ## Step 0.1 (size M), 2026-10-13: Phase 0 documents
 **Works:** 11 documents written. No code.
 **Stubbed:** nothing.

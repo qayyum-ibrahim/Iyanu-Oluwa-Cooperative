@@ -6,7 +6,7 @@
 | OQ-00 | Mr. Aro to sign off the money rules in DOMAIN_RULES with real figures | Owner / Mr. Aro | Phase 6 | Rules stay "proposed" |
 | OQ-01 | Where is it hosted, who runs it, and which production database? | Owner | Phase 10 | SQLite for dev only |
 | OQ-02 | Owner's email for the Super Admin account | Owner | Phase 2 | Entered when the setup script runs. Never in git. |
-| OQ-03 | Owner's OS and Node version | Owner | Step 1.1 | Run `node -v; npm -v` |
+| OQ-03 | Owner's OS and Node version. Answered 2026-10-13: macOS, Node v22.14.0, npm 11.21.0 | Owner | Closed | n/a |
 | OQ-04 | Deadline, definition of done, credit situation | Owner | Phase 1 | Lean mode, no deadline |
 | OQ-05 | SMS provider and message text | Owner | Phase 4 | Fake adapter, placeholder text |
 | OQ-06 | Can a member be paid off while holding an active loan? | Owner | Phase 6 | No. Blocked (as in the ZIP). |

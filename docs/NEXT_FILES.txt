@@ -1,0 +1,3 @@
+# One repo path per line. The resume script adds each file in full to the pack.
+# Claude updates this list at the end of every step. Never list secret files.
+# Step 1.1 needs no files.

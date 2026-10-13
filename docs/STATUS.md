@@ -1,27 +1,29 @@
 # Project status
-Last updated: after step 0.1e
+Last updated: after step 0.2
 
 ## Where we stopped
-Phase 0 is done. The documents are written, checked on the owner's machine and committed (steps 0.1, 0.1b, 0.1c). The chat switch test passed. Next: Phase 1, step 1.1.
+Phase 0 is done and committed. The resume routine was rebuilt in step 0.2. Next: Phase 1, step 1.1.
+
+## Next step brief
+Step 1.1 (S): repo skeleton. Create `.gitignore` (including `.DS_Store`), the folders from D-14, and copy the ZIP source into `legacy-prototype/` with the demo password `IYANU@2026` replaced by `REDACTED`.
+Owner inputs needed. Answer once, in your first message:
+1. Was `IYANU@2026` ever used for a real account anywhere? (Default: no.)
+2. Path of the unzipped ZIP folder. In Terminal type `cd ` (with a space), drag the folder in, press Enter, then run `pwd`.
+Files the chat gets automatically: those listed in `docs/NEXT_FILES.txt`. Stable docs are in Project knowledge, folder `mirror/`.
 
 ## What exists
-Docs only (11 files in `docs/`). No code, no database, no accounts. The prototype is the ZIP (React/Vite, localStorage). We have not run it.
+Docs only (11 files in `docs/`) plus `scripts/resume-pack.sh`. No app code, database or accounts. The prototype is the ZIP (React/Vite, localStorage). We have not run it.
 
 ## Settings (names only)
 None yet. Planned: `DATABASE_URL`, token or session secrets, `OWNER_EMAIL` (setup script input). Values never go in git.
 
 ## Commands
-Resume pack. It writes to a file, so the terminal stays silent. `npm run check` does not exist yet.
-```
-(cat docs/STATUS.md; echo; echo '--- BUILD LOG (latest) ---'; head -80 docs/BUILD_LOG.md; echo; echo '--- SNAPSHOT ---'; git log --oneline -10; git status --short; git ls-files | head -150; node -v; npm -v) > /tmp/resume-pack.txt
-cp /tmp/resume-pack.txt ~/Desktop/resume-pack.txt
-```
-resume prompt:
-Resume IYANU-OLUWA.
-Attached: the resume pack (STATUS, latest BUILD_LOG entries, snapshot).
-Follow the Project rules. First reply only with: the current step, the last verified result, the next step, and anything in the docs that looks inconsistent with the snapshot. Do not write code until I say go.
+Resume routine (3 actions):
+1. Commit your work, then run `sh scripts/resume-pack.sh`. It warns if something is uncommitted.
+2. Attach `~/Desktop/resume-pack.txt` to a new chat in this Project.
+3. Send: `Resume IYANU-OLUWA. Resume pack attached.`
 
-Run on the owner's machine on 2026-10-13. A fresh chat read it correctly.
+Mirrors: `mirror/` in Project knowledge holds copies of DECISIONS, DOMAIN_RULES, PROJECT_BRIEF, GLOSSARY, SOURCES and PHASE_PLAN (as of commit 2a0c495). The repo wins on any conflict. When one of these docs changes, the mirror must be replaced too. The session that has the Projects tool does it. Otherwise the owner replaces the file in Project knowledge.
 
 ## Pinned versions
 No package pins yet. Candidates are in DECISIONS D-13.
@@ -29,8 +31,7 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13).
 
 ## Roadmap
 Full plan: PHASE_PLAN.md. Next steps:
-- 1.1 (S) Repo skeleton: `.gitignore` (including `.DS_Store`), folders, copy the ZIP source into `legacy-prototype/` with the demo password redacted. Attach with the resume pack: DECISIONS.md. Tell the chat the path of the unzipped ZIP folder.
-
+- 1.1 (S) Repo skeleton (see Next step brief).
 - 1.2 (M) Server skeleton, pinned versions, `npm run check`, DEV_SETUP.md.
 - 1.3 (S) Money module (whole kobo) with tests.
 - 1.4 (M) Database schema (users, audit), migration, DATA_MODEL.md.

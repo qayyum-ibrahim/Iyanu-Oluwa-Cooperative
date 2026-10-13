@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+coverage/
+*.log
+
+# Secrets and local data (never commit)
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+
+# Resume pack (written to Desktop, listed here as a safeguard)
+resume-pack.txt

@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 1.1 (size S), 2026-10-13: repo skeleton
+**Works (after your check):** `.gitignore`, `web/` and `server/` folders, and `legacy-prototype/` copied from the ZIP folder. The demo password `IYANU@2026` is replaced by `REDACTED` in the copy. The owner confirmed it was never used for a real account (reported by owner).
+**Stubbed:** `web/` and `server/` hold only `.gitkeep`.
+**Tests:** 0 (none apply).
+**Not verified:** the prototype still has not been installed, built or run. Redaction means its demo login no longer works. That is fine, because it is reference only.
+**Found along the way:**
+1. The 0.2 entry was missing from this log. It is added below, rebuilt from STATUS and the git log.
+2. STATUS wording about `NEXT_FILES.txt` was unclear. Fixed: files appear under `===== FILE: path =====` headings, and no heading means no files (owner's wording).
+3. The snapshot of 2026-10-13 showed no `mm.md` and no modified files, so 0.1c item 4 looks resolved. Owner to confirm.
+
+## Step 0.2 (size S), 2026-10-13: one-command resume routine
+**Works:** `scripts/resume-pack.sh` is tracked in git, and the pack attached to the chat after it had STATUS, the log, open questions, assumptions and the snapshot (reported by owner).
+**Not verified:** I have not seen the script itself. This entry was rebuilt in step 1.1 from STATUS and the commit messages (`af1a23d`, `0ef4601`).
+**Tests:** 0 (none apply).
+
 ## Step 0.1c (size S), 2026-10-13: switch test fixes
 **Works:** A fresh chat read the resume pack and replied in the required format. It did not invent facts about files it had not seen (reported by owner, verified on your machine).
 **Fixed:** STATUS is replaced whole. It now has the correct "Last updated" line, the machine versions and the next steps with sizes. BUILD_LOG is replaced whole, because the entries were out of order in the repo.

@@ -1,0 +1,197 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>IYANU-OLUWA Cooperative — Interactive Preview</title><script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script><script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script><script src="https://unpkg.com/@babel/standalone/babel.min.js"></script><style>:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#17201c;background:#f5f7f6}*{box-sizing:border-box}body{margin:0}.app{min-height:100vh}.app header{height:72px;background:#fff;border-bottom:1px solid #e2e8e5;display:flex;align-items:center;gap:20px;padding:0 24px;position:sticky;top:0;z-index:5}.brand{display:flex;align-items:center;gap:10px;min-width:230px}.brand>b,.logo{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#ecfdf5;color:#065f46;font-weight:900}.brand small{display:block;color:#6b7771;font-size:11px}.app nav{display:flex;gap:4px;flex:1;overflow:auto}.app nav button,.secondary{border:0;background:transparent;padding:10px 12px;border-radius:8px;color:#53605a;cursor:pointer}.app nav button.active,.app nav button:hover{background:#ecfdf5;color:#065f46}.logout{border:0;background:#fff2f0;color:#a51d16;padding:9px 12px;border-radius:8px;cursor:pointer}main{max-width:1200px;margin:auto;padding:30px 22px 60px}.title{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}.title h1{margin:0;font-size:28px}.title p{margin:5px 0;color:#6b7771;font-size:13px}.title button,.form>button,.export-grid button,.payoff-main{border:0;border-radius:9px;padding:10px 14px;background:#047857;color:#fff;font-weight:700;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}.card,.panel,.form{background:#fff;border:1px solid #e2e8e5;border-radius:14px}.card{padding:18px}.card small{display:block;color:#6b7771}.card strong{display:block;font-size:23px;margin-top:8px}.panel{margin-top:18px;overflow:hidden}.panel h2{font-size:17px;padding:17px 19px;margin:0;border-bottom:1px solid #e2e8e5}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{padding:13px 16px;border-bottom:1px solid #edf1ef;text-align:left;font-size:13px}th{font-size:10px;color:#6b7771;text-transform:uppercase;background:#fafbfa}.search{width:100%;max-width:380px;padding:11px;border:1px solid #e2e8e5;border-radius:9px}.pill,.loan,.status-inactive{display:inline-block;padding:5px 9px;border-radius:99px;background:#ecfdf5;color:#065f46;font-size:11px;font-weight:700}.status-inactive{background:#f3f4f6;color:#4b5563}.loan{background:#fff7ed;color:#9a3412}.form{padding:20px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.field span{display:block;font-size:11px;font-weight:700;margin-bottom:6px}.field input,.field select{width:100%;padding:11px;border:1px solid #dfe6e2;border-radius:8px;background:#fff}.form>button{grid-column:1/-1;justify-self:end}.category-grid,.export-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.cat{background:#fff;border:1px solid #e2e8e5;border-radius:12px;padding:16px;display:flex;justify-content:space-between}.export-grid button{min-height:80px}.brown{color:#78350f}.toast{position:fixed;right:20px;bottom:20px;background:#12352b;color:#fff;padding:13px 16px;border-radius:9px;z-index:20}.login{min-height:100vh;background:linear-gradient(135deg,#064e3b,#12352b);display:grid;place-items:center;padding:20px}.login-card{width:min(420px,100%);background:#fff;border-radius:18px;padding:30px;box-shadow:0 25px 80px #0005}.login-card h1{margin:18px 0 5px;font-size:25px}.login-card p,.login-card small{color:#6b7771}.login-card input{width:100%;padding:13px;margin-top:12px;border:1px solid #e2e8e5;border-radius:9px}.login-card button{width:100%;padding:13px;margin-top:15px;background:#047857;color:#fff;border:0;border-radius:9px;font-weight:700}.login-card em{display:block;margin-top:10px;color:#b42318;font-style:normal}.overlay{position:fixed;inset:0;background:#0007;display:grid;place-items:center;padding:20px;z-index:10}.modal{background:#fff;border-radius:16px;padding:24px;width:min(700px,100%);max-height:90vh;overflow:auto;position:relative}.x{position:absolute;right:15px;top:15px;border:0;border-radius:50%;width:32px;height:32px;cursor:pointer}.loanbox{padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;margin:8px 0}.member-toolbar{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:12px}.filters{display:flex;gap:5px;background:#fff;border:1px solid #e2e8e5;padding:4px;border-radius:9px}.filters button{border:0;background:transparent;padding:8px 11px;border-radius:7px;color:#53605a;cursor:pointer}.filters button.filter-active{background:#ecfdf5;color:#065f46;font-weight:700}.member-form{margin-bottom:18px}.first-payment-note,.first-payment-banner{grid-column:1/-1;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px;font-size:12px}.form-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;align-items:center}.form-actions button{border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.secondary-btn{background:#f3f4f6;color:#374151}.link-btn{background:transparent;color:#047857}.payoff-link{border:0;background:transparent;color:#9a3412;font-weight:700;margin-left:7px;cursor:pointer}.profile-head{display:flex;justify-content:space-between;gap:15px;padding-right:30px}.profile-head h2{margin:0 0 5px}.profile-head p{margin:0;color:#6b7771;font-size:12px}.balance-summary,.payoff-total{display:flex;justify-content:space-between;align-items:center;background:#f7faf8;border:1px solid #e2e8e5;border-radius:11px;padding:15px;margin:18px 0}.balance-summary b,.payoff-total b{font-size:20px;color:#065f46}.balance-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.balance-grid>div{display:flex;justify-content:space-between;padding:10px 12px;background:#fafbfa;border:1px solid #edf1ef;border-radius:8px;font-size:12px}.balance-grid b{color:#17201c}.payoff-main{width:100%;margin-top:18px;background:#9a3412}.payoff-modal h2{color:#78350f}.warning{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:12px;margin:12px 0;font-size:13px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.danger-btn{border:0;background:#9a3412;color:#fff;padding:11px 14px;border-radius:9px;font-weight:700;cursor:pointer}.danger-btn:disabled{opacity:.45;cursor:not-allowed}.breakdown-box{grid-column:1/-1;border:1px solid #e2e8e5;border-radius:11px;padding:14px;background:#fafbfa}.breakdown-head{display:flex;justify-content:space-between;margin-bottom:10px}.breakdown-row{display:grid;grid-template-columns:1fr 180px 34px;gap:8px;margin-bottom:8px}.breakdown-row select,.breakdown-row input{padding:10px;border:1px solid #dfe6e2;border-radius:8px;background:#fff}.remove-line{border:0;background:#fee2e2;color:#991b1b;border-radius:8px;font-size:18px;cursor:pointer}.add-line{border:0;background:#ecfdf5;color:#065f46;padding:8px 11px;border-radius:8px;font-weight:700;cursor:pointer}.payment-summary{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center}.payment-summary button{border:0;background:#047857;color:#fff;padding:11px 14px;border-radius:9px;font-weight:700;cursor:pointer}@media(max-width:900px){.cards{grid-template-columns:1fr 1fr}.category-grid,.export-grid{grid-template-columns:1fr 1fr}.app header{height:auto;flex-wrap:wrap;padding:12px}.brand{min-width:auto}.app nav{order:3;flex-basis:100%}.member-toolbar{align-items:stretch;flex-direction:column}.search{max-width:none}}@media(max-width:600px){.cards,.form,.category-grid,.export-grid,.balance-grid{grid-template-columns:1fr}.title{flex-direction:column;gap:12px}.app header{position:static}.breakdown-row{grid-template-columns:1fr 110px 34px}.payment-summary{align-items:flex-start;flex-direction:column;gap:10px}.form-actions{align-items:stretch;flex-direction:column}.form-actions button{width:100%}.modal{padding:20px 16px}}
+</style></head><body><div id="root"></div><script type="text/babel" data-presets="react">import React, { useEffect, useMemo, useState } from 'react';
+
+const KEY='iyanu_oluwa_react_v2';
+const ADMIN={username:'admin',password:'REDACTED'};
+const CATEGORIES=['Shares','Savings','Special Savings','Development Levy','Loan Repaid','Loan Interest','Entrance Fee','Stationeries','Empowerment Repaid','Committee Gift','Special Deposit','Investment Repaid','Investment Income','Membership Withdrawal'];
+const EXPENSE_CATS=['Loan','Expenses','Allowances','Members Credit','Membership Withdrawal','Asset Purchase','Office Maintenance','Payment to Union','Payment to Apexes','Others'];
+const MEMBER_BALANCE_CATS=CATEGORIES.filter(c=>!['Loan Repaid','Loan Interest','Membership Withdrawal'].includes(c));
+const money=n=>new Intl.NumberFormat('en-NG',{style:'currency',currency:'NGN',maximumFractionDigits:2}).format(Number(n)||0);
+const id=p=>p+Date.now()+Math.random().toString(36).slice(2,7);
+const today=()=>new Date().toISOString().slice(0,10);
+
+function seed(){
+ const paidOffId='m4';
+ return {
+  members:[
+   {id:'m1',membershipId:'IO-001',fullName:'Adebayo Folake',phone:'08000000001',address:'',occupation:'Trader',status:'ACTIVE',dateJoined:'2026-01-10'},
+   {id:'m2',membershipId:'IO-002',fullName:'Chukwuemeka Obi',phone:'08000000002',address:'',occupation:'Engineer',status:'ACTIVE',dateJoined:'2026-02-12'},
+   {id:'m3',membershipId:'IO-003',fullName:'Ngozi Eze',phone:'08000000003',address:'',occupation:'Teacher',status:'ACTIVE',dateJoined:'2026-03-04'},
+   {id:paidOffId,membershipId:'IO-004',fullName:'Grace Okafor',phone:'08000000004',address:'',occupation:'Consultant',status:'INACTIVE',dateJoined:'2026-01-18',inactiveReason:'MEMBER_PAYOFF',inactiveDate:'2026-09-30'}
+  ],
+  transactions:[
+   {id:'t1',memberId:'m1',date:'2026-09-20',method:'BANK_TRANSFER',type:'PAYMENT',lines:[{category:'Savings',amount:5000},{category:'Shares',amount:2000}]},
+   {id:'t2',memberId:'m2',date:'2026-09-21',method:'CASH',type:'PAYMENT',lines:[{category:'Savings',amount:3000},{category:'Loan Repaid',amount:4000}]},
+   {id:'t3',memberId:'m3',date:'2026-09-22',method:'BANK_TRANSFER',type:'PAYMENT',lines:[{category:'Loan Repaid',amount:10000},{category:'Savings',amount:2000}]},
+   {id:'t4',memberId:paidOffId,date:'2026-09-30',method:'BANK_TRANSFER',type:'PAYMENT',lines:[{category:'Savings',amount:8000},{category:'Shares',amount:12000},{category:'Special Savings',amount:5000}]},
+   {id:'t5',memberId:paidOffId,date:'2026-09-30',method:'BANK_TRANSFER',type:'PAY_OFF',reason:'MEMBER_EXIT',lines:[{category:'Savings',amount:8000},{category:'Shares',amount:12000},{category:'Special Savings',amount:5000}]}
+  ],
+  loans:[{id:'l1',memberId:'m3',amount:50000,amountRepaid:10000,outstanding:40000,dateDisbursed:'2026-09-15',interestRate:0,status:'ACTIVE',notes:'Sample loan'}],
+  expenses:[
+   {id:'e1',date:'2026-09-10',category:'Office Maintenance',description:'Office maintenance',amount:3500,method:'CASH',deleted:false},
+   {id:'e2',date:'2026-09-12',category:'Allowances',description:'Committee allowances',amount:5000,method:'BANK_TRANSFER',deleted:false},
+   {id:'e3',date:'2026-09-15',category:'Loan',description:'Loan disbursed to Ngozi Eze',amount:50000,method:'BANK_TRANSFER',loanId:'l1',deleted:false},
+   {id:'e4',date:'2026-09-30',category:'Membership Withdrawal',description:'Member pay-off / exit — Grace Okafor',amount:25000,method:'BANK_TRANSFER',memberId:paidOffId,payoff:true,deleted:false}
+  ]
+ };
+}
+
+function normalize(raw){
+ const base=raw||seed();
+ const members=(base.members||[]).map(m=>({...m,status:m.status==='INACTIVE'?'INACTIVE':'ACTIVE'}));
+ const transactions=(base.transactions||[]).map(t=>({...t,type:t.type||'PAYMENT',lines:(t.lines||[]).map(l=>({...l,amount:Number(l.amount)||0}))}));
+ const loans=(base.loans||[]).map(l=>({...l,amount:Number(l.amount)||0,amountRepaid:Number(l.amountRepaid)||0,outstanding:Number(l.outstanding??(Number(l.amount||0)-Number(l.amountRepaid||0)))||0}));
+ const expenses=(base.expenses||[]).map(e=>({...e,amount:Number(e.amount)||0,deleted:Boolean(e.deleted)}));
+ return {members,transactions,loans,expenses};
+}
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY));return normalize(x||seed())}catch{return normalize(seed())}}
+
+function categoryBalances(data,mid){
+ const balances=Object.fromEntries(MEMBER_BALANCE_CATS.map(c=>[c,0]));
+ data.transactions.filter(t=>t.memberId===mid).forEach(t=>{
+  const sign=t.type==='PAY_OFF'?-1:1;
+  (t.lines||[]).forEach(l=>{if(Object.prototype.hasOwnProperty.call(balances,l.category))balances[l.category]+=sign*(Number(l.amount)||0)})
+ });
+ return Object.fromEntries(Object.entries(balances).map(([k,v])=>[k,Math.max(0,Math.round(v*100)/100)]));
+}
+function totalMemberBalance(data,mid){return Object.values(categoryBalances(data,mid)).reduce((s,v)=>s+v,0)}
+function activeLoansFor(data,mid){return data.loans.filter(l=>l.memberId===mid&&l.status==='ACTIVE'&&Number(l.outstanding)>0)}
+function zeroBalanceMembers(data){return data.members.filter(m=>data.transactions.some(t=>t.memberId===m.id)&&totalMemberBalance(data,m.id)===0&&activeLoansFor(data,m.id).length===0)}
+
+export default function App(){
+ const [data,setData]=useState(load);
+ const [logged,setLogged]=useState(()=>sessionStorage.getItem('iyanu_admin')==='1');
+ const [page,setPage]=useState('dashboard');
+ const [login,setLogin]=useState({u:'admin',p:''});
+ const [notice,setNotice]=useState('');
+ const [search,setSearch]=useState('');
+ const [memberId,setMemberId]=useState(null);
+ const [memberFilter,setMemberFilter]=useState('ACTIVE');
+ const [transactionPreset,setTransactionPreset]=useState(null);
+ const [payoffMemberId,setPayoffMemberId]=useState(null);
+
+ useEffect(()=>localStorage.setItem(KEY,JSON.stringify(data)),[data]);
+ useEffect(()=>{
+  const zero=zeroBalanceMembers(data);
+  if(!zero.length)return;
+  const ids=new Set(zero.map(m=>m.id));
+  const changed=data.members.some(m=>ids.has(m.id)&&m.status!=='INACTIVE');
+  if(changed)setData(prev=>({...prev,members:prev.members.map(m=>ids.has(m.id)?{...m,status:'INACTIVE',inactiveReason:m.inactiveReason||'ZERO_BALANCE',inactiveDate:m.inactiveDate||today()}:m)}));
+ },[data.members,data.transactions,data.loans]);
+ const flash=m=>{setNotice(m);setTimeout(()=>setNotice(''),2800)};
+ const totals=useMemo(()=>{
+  const collected=data.transactions.filter(t=>t.type!=='PAY_OFF').reduce((s,t)=>s+t.lines.reduce((a,l)=>a+Number(l.amount||0),0),0);
+  const expenses=data.expenses.filter(e=>!e.deleted).reduce((s,e)=>s+Number(e.amount||0),0);
+  const out=data.loans.filter(l=>l.status==='ACTIVE').reduce((s,l)=>s+Number(l.outstanding||0),0);
+  return {collected,expenses,out}
+ },[data]);
+ const activeLoans=m=>activeLoansFor(data,m);
+ const member=m=>data.members.find(x=>x.id===m);
+
+ const addMember=(form,saveWithoutPayment=false)=>{
+  const fullName=form.fullName.trim();
+  if(!fullName)return flash('Full name is required.');
+  const nextNo=data.members.reduce((max,m)=>Math.max(max,parseInt(String(m.membershipId||'').replace(/\D/g,''),10)||0),0)+1;
+  const nm={id:id('m'),membershipId:`IO-${String(nextNo).padStart(3,'0')}`,fullName,phone:form.phone,address:form.address,occupation:form.occupation,status:'ACTIVE',dateJoined:today()};
+  setData(prev=>({...prev,members:[...prev.members,nm]}));
+  if(saveWithoutPayment){flash('Member added successfully.');setPage('members');return}
+  setTransactionPreset({memberId:nm.id,isFirstPayment:true});setPage('transactions');flash(`${fullName} was added. Record the initial payment now.`);
+ };
+
+ const recordPayment=(mid,amount,lines,method,date,type='PAYMENT')=>{
+  if(!mid||amount<=0)return flash('Enter a valid payment.');
+  const m=member(mid); if(!m)return flash('Member not found.');
+  if(m.status==='INACTIVE'&&type!=='PAY_OFF')return flash('Inactive members cannot receive normal payments. Reactivate them first.');
+  const clean=(lines||[]).filter(l=>Number(l.amount)>0).map(l=>({category:l.category,amount:Number(l.amount)}));
+  const total=clean.reduce((s,l)=>s+l.amount,0);
+  if(Math.abs(total-Number(amount))>0.01)return flash('Breakdown total must equal payment amount.');
+  if(clean.some(l=>l.category==='Loan Repaid')){
+   const repay=clean.filter(l=>l.category==='Loan Repaid').reduce((s,l)=>s+l.amount,0);
+   const outstanding=activeLoansFor(data,mid).reduce((s,l)=>s+Number(l.outstanding||0),0);
+   if(!outstanding)return flash('This member has no outstanding loan.');
+   if(repay>outstanding+0.01)return flash('Loan repayment exceeds outstanding balance.');
+   let left=repay;
+   const loans=data.loans.map(l=>{
+    if(l.memberId!==mid||l.status!=='ACTIVE'||left<=0)return l;
+    const applied=Math.min(left,Number(l.outstanding)||0); left-=applied;
+    const o=Math.max(0,(Number(l.outstanding)||0)-applied);
+    return {...l,amountRepaid:(Number(l.amountRepaid)||0)+applied,outstanding:o,status:o<=0.01?'FULLY_REPAID':'ACTIVE'}
+   });
+   setData(prev=>({...prev,loans,transactions:[...prev.transactions,{id:id('t'),memberId:mid,date,method,type,lines:clean}]}));
+  }else setData(prev=>({...prev,transactions:[...prev.transactions,{id:id('t'),memberId:mid,date,method,type,lines:clean}]}));
+  flash(type==='PAY_OFF'?'Member pay-off recorded.':'Payment recorded.');
+  if(type==='PAYMENT'&&transactionPreset?.isFirstPayment){setTransactionPreset(null);setPage('members')}
+ };
+
+ const processPayoff=(mid,method='BANK_TRANSFER',date=today())=>{
+  const m=member(mid); if(!m)return flash('Member not found.');
+  const balances=categoryBalances(data,mid); const total=Object.values(balances).reduce((s,v)=>s+v,0);
+  const loanOut=activeLoansFor(data,mid).reduce((s,l)=>s+Number(l.outstanding||0),0);
+  if(loanOut>0)return flash(`Member has ${money(loanOut)} outstanding loan. Settle the loan before processing exit.`);
+  if(total<=0){setData(prev=>({...prev,members:prev.members.map(x=>x.id===mid?{...x,status:'INACTIVE',inactiveReason:'MEMBER_PAYOFF',inactiveDate:date}:x)}));setPayoffMemberId(null);return flash('Member is already at zero balance and has been made inactive.');}
+  const lines=Object.entries(balances).map(([category,amount])=>({category,amount}));
+  setData(prev=>({...prev,
+   members:prev.members.map(x=>x.id===mid?{...x,status:'INACTIVE',inactiveReason:'MEMBER_PAYOFF',inactiveDate:date}:x),
+   transactions:[...prev.transactions,{id:id('t'),memberId:mid,date,method,type:'PAY_OFF',reason:'MEMBER_EXIT',lines}],
+   expenses:[...prev.expenses,{id:id('e'),date,category:'Membership Withdrawal',description:`Member pay-off / exit — ${m.fullName}`,amount:total,method,memberId:mid,payoff:true,deleted:false}]
+  }));
+  setPayoffMemberId(null);flash(`${m.fullName} has been paid off and marked inactive.`);
+ };
+
+ const addLoan=(mid,amount,date,interest,method,notes)=>{
+  if(!mid||amount<=0)return flash('Select a member and enter loan amount.');
+  if(member(mid)?.status==='INACTIVE')return flash('Inactive members cannot receive new loans.');
+  if(activeLoans(mid).length)return flash('This member already has an active loan.');
+  const lid=id('l');setData(prev=>({...prev,loans:[...prev.loans,{id:lid,memberId:mid,amount,amountRepaid:0,outstanding:amount,dateDisbursed:date,interestRate:Number(interest)||0,status:'ACTIVE',notes}],expenses:[...prev.expenses,{id:id('e'),date,category:'Loan',description:`Loan disbursed to ${member(mid)?.fullName}`,amount,method,loanId:lid,deleted:false}]}));flash('Loan created.');
+ };
+
+ if(!logged)return <Login login={login} setLogin={setLogin} onLogin={()=>{if(login.u===ADMIN.username&&login.p===ADMIN.password){sessionStorage.setItem('iyanu_admin','1');setLogged(true)}else flash('Incorrect admin credentials.')}} notice={notice}/>;
+ return <div className="app"><header><div className="brand"><b>IO</b><div><strong>IYANU-OLUWA</strong><small>Cooperative Multipurpose Society</small></div></div><nav>{['dashboard','members','transactions','expenses','loans','categories','exports'].map(p=><button className={page===p?'active':''} onClick={()=>setPage(p)} key={p}>{p[0].toUpperCase()+p.slice(1)}</button>)}</nav><button className="logout" onClick={()=>{sessionStorage.removeItem('iyanu_admin');setLogged(false)}}>Logout</button></header><main>
+ {page==='dashboard'&&<Dashboard totals={totals} data={data} go={setPage}/>} 
+ {page==='members'&&<Members data={data} search={search} setSearch={setSearch} filter={memberFilter} setFilter={setMemberFilter} addMember={addMember} setMemberId={setMemberId} onPayoff={setPayoffMemberId}/>} 
+ {page==='transactions'&&<Transactions data={data} recordPayment={recordPayment} preset={transactionPreset}/>} 
+ {page==='expenses'&&<Expenses data={data} setData={setData} flash={flash}/>} 
+ {page==='loans'&&<Loans data={data} addLoan={addLoan}/>} 
+ {page==='categories'&&<Categories data={data}/>} 
+ {page==='exports'&&<Exports data={data}/>} 
+ </main>{memberId&&<MemberModal id={memberId} data={data} close={()=>setMemberId(null)} onPayoff={setPayoffMemberId}/>} {payoffMemberId&&<PayoffModal id={payoffMemberId} data={data} close={()=>setPayoffMemberId(null)} confirm={processPayoff}/>} {notice&&<div className="toast">{notice}</div>}</div>
+}
+
+function Login({login,setLogin,onLogin,notice}){return <div className="login"><div className="login-card"><div className="logo">IO</div><h1>Administrator Sign In</h1><p>Manage members, payments, expenses, loans and reports.</p><input value={login.u} onChange={e=>setLogin({...login,u:e.target.value})} placeholder="Username"/><input type="password" value={login.p} onChange={e=>setLogin({...login,p:e.target.value})} onKeyDown={e=>e.key==='Enter'&&onLogin()} placeholder="Password"/><button onClick={onLogin}>Sign in as Admin</button><small>Default: admin / REDACTED</small>{notice&&<em>{notice}</em>}</div></div>}
+const Card=({label,value})=><div className="card"><small>{label}</small><strong>{value}</strong></div>;
+function Dashboard({totals,data,go}){return <><Title title="Dashboard" sub="Overview of cooperative activity, income and expenditure" action={<button onClick={()=>go('expenses')}>+ Record Expense</button>}/><div className="cards"><Card label="Active Members" value={data.members.filter(m=>m.status==='ACTIVE').length}/><Card label="Total Collected" value={money(totals.collected)}/><Card label="Total Expenditures" value={money(totals.expenses)}/><Card label="Outstanding Loans" value={money(totals.out)}/></div><Panel title="Recent Transactions"><Table headers={['Date','Member','Type','Category','Amount']}>{data.transactions.slice(-8).reverse().map(t=><tr key={t.id}><td>{t.date}</td><td>{data.members.find(m=>m.id===t.memberId)?.fullName}</td><td>{t.type==='PAY_OFF'?'PAY-OFF':'PAYMENT'}</td><td>{t.lines.map(x=>x.category).join(', ')}</td><td>{money(t.lines.reduce((s,x)=>s+x.amount,0))}</td></tr>)}</Table></Panel></>}
+
+function Members({data,search,setSearch,filter,setFilter,addMember,setMemberId,onPayoff}){
+ const [showForm,setShowForm]=useState(false);const [form,setForm]=useState({fullName:'',phone:'',address:'',occupation:''});
+ const rows=data.members.filter(m=>(filter==='ALL'||m.status===filter)&&(m.fullName.toLowerCase().includes(search.toLowerCase())||m.membershipId.toLowerCase().includes(search.toLowerCase())));
+ const submit=e=>{e.preventDefault();addMember(form,false);setForm({fullName:'',phone:'',address:'',occupation:''});setShowForm(false)};
+ return <><Title title="Members" sub="Manage cooperative members" action={<button onClick={()=>setShowForm(true)}>+ Add New Member</button>}/>
+ {showForm&&<div className="form member-form"><Field label="Full Name"><input autoFocus value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></Field><Field label="Phone Number"><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></Field><Field label="Address"><input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></Field><Field label="Occupation"><input value={form.occupation} onChange={e=>setForm({...form,occupation:e.target.value})}/></Field><div className="first-payment-note">New members are automatically <b>Active</b>. After saving, you will be taken directly to the payment breakdown so you can record the member's first payment.</div><div className="form-actions"><button onClick={submit}>Add Member & Record Payment</button><button className="secondary-btn" onClick={()=>{addMember(form,true);setShowForm(false)}}>Save without payment</button><button className="link-btn" onClick={()=>setShowForm(false)}>Cancel</button></div></div>}
+ <div className="member-toolbar"><input className="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search members..."/><div className="filters">{['ACTIVE','INACTIVE','ALL'].map(f=><button key={f} className={filter===f?'filter-active':''} onClick={()=>setFilter(f)}>{f[0]+f.slice(1).toLowerCase()}</button>)}</div></div>
+ <Panel title={`${rows.length} ${filter==='ALL'?'':filter.toLowerCase()+' '}members`}><Table headers={['Membership ID','Name','Status','Balance','Loan','Action']}>{rows.map(m=>{const loan=activeLoansFor(data,m.id).reduce((s,l)=>s+Number(l.outstanding||0),0);const balance=totalMemberBalance(data,m.id);return <tr key={m.id}><td>{m.membershipId}</td><td><b>{m.fullName}</b></td><td><span className={m.status==='ACTIVE'?'pill inactive-pill':'status-inactive'}>{m.status==='ACTIVE'?'ACTIVE':'INACTIVE'}</span></td><td>{money(balance)}</td><td>{loan?<span className="loan">ON LOAN</span>:'—'}</td><td><button className="secondary" onClick={()=>setMemberId(m.id)}>View</button>{m.status==='ACTIVE'&&balance>0&&!loan&&<button className="payoff-link" onClick={()=>onPayoff(m.id)}>Pay-Off</button>}</td></tr>})}</Table></Panel></>}
+
+function Transactions({data,recordPayment,preset}){
+ const [f,setF]=useState({mid:preset?.memberId||'',amount:'',method:'BANK_TRANSFER',date:today(),lines:[{category:'Shares',amount:''},{category:'Savings',amount:''}]});
+ useEffect(()=>{if(preset?.memberId)setF(x=>({...x,mid:preset.memberId,date:today()}))},[preset?.memberId]);
+ const updateLine=(i,key,val)=>setF(x=>({...x,lines:x.lines.map((l,n)=>n===i?{...l,[key]:val}:l)}));
+ const total=f.lines.reduce((s,l)=>s+Number(l.amount||0),0);
+ const addLine=()=>setF(x=>({...x,lines:[...x.lines,{category:'Entrance Fee',amount:''}]}));
+ const submit=e=>{e.preventDefault();if(!f.mid)return alert('Select a member.');recordPayment(f.mid,total,f.lines,f.method,f.date)};
+ const selected=data.members.find(m=>m.id===f.mid);
+ return <><Title title="Transactions" sub="Record member payments and loan repayments"/>{preset?.isFirstPayment&&<div className="first-payment-banner"><b>First Payment for New Member</b><span>{selected?.fullName||'New member'} has just been registered. Break down the initial payment below.</span></div>}<form className="form" onSubmit={submit}><Field label="Member"><select value={f.mid} onChange={e=>setF({...f,mid:e.target.value})}><option value="">Select member</option>{data.members.filter(m=>m.status==='ACTIVE').map(m=><option key={m.id} value={m.id}>{m.fullName} — {m.membershipId}</option>)}</select></Field><Field label="Payment Method"><select value={f.method} onChange={e=>setF({...f,method:e.target.value})}><option>BANK_TRANSFER</option><option>CASH</option></select></Field><Field label="Date"><input type="date" value={f.date} onChange={e=>setF({...f,date:e.target.value})}/></Field><div className="breakdown-box"><div className="breakdown-head"><b>Payment Breakdown</b><span>Total: {money(total)}</span></div>{f.lines.map((l,i)=><div className="breakdown-row" key={i}><select value={l.category} onChange={e=>updateLine(i,'category',e.target.value)}>{CATEGORIES.filter(c=>c!=='Membership Withdrawal').map(c=><option key={c}>{c}</option>)}</select><input type="number" min="0" value={l.amount} placeholder="0.00" onChange={e=>updateLine(i,'amount',e.target.value)}/>{f.lines.length>1&&<button type="button" className="remove-line" onClick={()=>setF(x=>({...x,lines:x.lines.filter((_,n)=>n!==i)}))}>×</button>}</div>)}<button type="button" className="add-line" onClick={addLine}>+ Add Category</button></div><div className="payment-summary"><b>Amount to record: {money(total)}</b><button type="submit">Record Payment</button></div></form><Panel title="Payment History"><Table headers={['Date','Member','Type','Method','Breakdown','Total']}>{data.transactions.slice().reverse().map(t=><tr key={t.id}><td>{t.date}</td><td>{data.members.find(m=>m.id===t.memberId)?.fullName}</td><td>{t.type==='PAY_OFF'?'PAY-OFF':'PAYMENT'}</td><td>{t.method}</td><td>{t.lines.map(x=>`${x.category}: ${money(x.amount)}`).join(' • ')}</td><td>{money(t.lines.reduce((s,x)=>s+x.amount,0))}</td></tr>)}</Table></Panel></>}
+
+function Expenses({data,setData,flash}){const [f,setF]=useState({date:today(),cat:'Expenses',desc:'',amount:'',method:'BANK_TRANSFER'});const save=()=>{if(Number(f.amount)<=0)return flash('Enter a valid expense amount.');setData({...data,expenses:[...data.expenses,{id:id('e'),date:f.date,category:f.cat,description:f.desc,amount:Number(f.amount),method:f.method,deleted:false}]});setF({...f,desc:'',amount:''});flash('Expense recorded.')};return <><Title title="Expenses" sub="Track cooperative expenditure"/><div className="form"><Field label="Date"><input type="date" value={f.date} onChange={e=>setF({...f,date:e.target.value})}/></Field><Field label="Category"><select value={f.cat} onChange={e=>setF({...f,cat:e.target.value})}>{EXPENSE_CATS.map(c=><option key={c}>{c}</option>)}</select></Field><Field label="Description"><input value={f.desc} onChange={e=>setF({...f,desc:e.target.value})}/></Field><Field label="Amount"><input type="number" value={f.amount} onChange={e=>setF({...f,amount:e.target.value})}/></Field><Field label="Payment Method"><select value={f.method} onChange={e=>setF({...f,method:e.target.value})}><option>BANK_TRANSFER</option><option>CASH</option></select></Field><button onClick={save}>Save Expense</button></div><Panel title="Expense History"><Table headers={['Date','Category','Description','Amount','Method']}>{data.expenses.filter(e=>!e.deleted).slice().reverse().map(e=><tr key={e.id}><td>{e.date}</td><td>{e.category}</td><td>{e.description}</td><td>{money(e.amount)}</td><td>{e.method}</td></tr>)}</Table></Panel></>}
+function Loans({data,addLoan}){const [f,setF]=useState({mid:'',amount:'',date:today(),interest:'',method:'BANK_TRANSFER',notes:''});return <><Title title="Loans" sub="Issue and monitor member loans"/><div className="form"><Field label="Member"><select value={f.mid} onChange={e=>setF({...f,mid:e.target.value})}><option value="">Select member</option>{data.members.filter(m=>m.status==='ACTIVE').map(m=><option key={m.id} value={m.id}>{m.fullName}</option>)}</select></Field><Field label="Loan Amount"><input type="number" value={f.amount} onChange={e=>setF({...f,amount:e.target.value})}/></Field><Field label="Date"><input type="date" value={f.date} onChange={e=>setF({...f,date:e.target.value})}/></Field><Field label="Interest Rate %"><input type="number" value={f.interest} onChange={e=>setF({...f,interest:e.target.value})}/></Field><Field label="Method"><select value={f.method} onChange={e=>setF({...f,method:e.target.value})}><option>BANK_TRANSFER</option><option>CASH</option></select></Field><Field label="Notes"><input value={f.notes} onChange={e=>setF({...f,notes:e.target.value})}/></Field><button onClick={()=>addLoan(f.mid,Number(f.amount),f.date,f.interest,f.method,f.notes)}>Give Loan</button></div><Panel title="Loan Portfolio"><Table headers={['Member','Original','Repaid','Outstanding','Status']}>{data.loans.slice().reverse().map(l=><tr key={l.id}><td>{data.members.find(m=>m.id===l.memberId)?.fullName}</td><td>{money(l.amount)}</td><td>{money(l.amountRepaid)}</td><td className="brown">{money(l.outstanding)}</td><td><span className={l.status==='ACTIVE'?'loan':'pill'}>{l.status.replace('_',' ')}</span></td></tr>)}</Table></Panel></>}
+function Categories({data}){const sums=Object.fromEntries(CATEGORIES.map(c=>[c,0]));data.transactions.forEach(t=>t.lines.forEach(l=>{if(l.category!=='Membership Withdrawal')sums[l.category]=(sums[l.category]||0)+(t.type==='PAY_OFF'?-1:1)*Number(l.amount||0)}));return <><Title title="Categories" sub="Contribution category totals"/><div className="category-grid">{CATEGORIES.filter(c=>c!=='Membership Withdrawal').map(c=><div className="cat" key={c}><span>{c}</span><b>{money(sums[c])}</b></div>)}</div></>}
+function Exports({data}){const download=(rows,name)=>{if(!rows.length)return alert('No records to export.');const csv=[Object.keys(rows[0]||{}).join(','),...rows.map(r=>Object.values(r).map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name+'.csv';a.click();URL.revokeObjectURL(a.href)};return <><Title title="Export" sub="Download cooperative records for Excel"/><div className="export-grid"><button onClick={()=>download(data.members.map(m=>({Name:m.fullName,'Membership ID':m.membershipId,Status:m.status,'Date Joined':m.dateJoined})),'members')}>Export Members</button><button onClick={()=>download(data.transactions.flatMap(t=>t.lines.map(l=>({Date:t.date,Member:data.members.find(m=>m.id===t.memberId)?.fullName,Type:t.type,Category:l.category,Amount:l.amount,Method:t.method}))),'transactions')}>Export Transactions</button><button onClick={()=>download(data.expenses.filter(e=>!e.deleted).map(e=>({Date:e.date,Category:e.category,Description:e.description,Amount:e.amount,Method:e.method,PayOff:e.payoff?'YES':'NO'})),'expenses')}>Export Expenses</button><button onClick={()=>download([...data.transactions.flatMap(t=>t.lines.map(l=>({Date:t.date,Type:t.type==='PAY_OFF'?'OUTFLOW':'INFLOW',Member:data.members.find(m=>m.id===t.memberId)?.fullName,Category:l.category,Amount:t.type==='PAY_OFF'?-l.amount:l.amount}))),...data.expenses.filter(e=>!e.deleted&&!e.payoff).map(e=>({Date:e.date,Type:'OUTFLOW',Member:'',Category:e.category,Amount:-e.amount}))],'cashflow')}>Export Cashflow</button></div></>}
+
+function MemberModal({id,data,close,onPayoff}){const m=data.members.find(x=>x.id===id);if(!m)return null;const balances=categoryBalances(data,id);const loans=data.loans.filter(l=>l.memberId===id);const tx=data.transactions.filter(t=>t.memberId===id);const total=Object.values(balances).reduce((s,v)=>s+v,0);return <div className="overlay" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><button className="x" onClick={close}>×</button><div className="profile-head"><div><h2>{m.fullName}</h2><p>{m.membershipId} • {m.phone||'No phone'} • {m.occupation||'Occupation not set'}</p></div><span className={m.status==='ACTIVE'?'pill':'status-inactive'}>{m.status}</span></div><div className="balance-summary"><span>Total member balance</span><b>{money(total)}</b></div><h3>Current Balances</h3><div className="balance-grid">{Object.entries(balances).map(([c,v])=><div key={c}><span>{c}</span><b>{money(v)}</b></div>)}</div><h3>Loans</h3>{loans.length?loans.map(l=><div className="loanbox" key={l.id}>{l.status.replace('_',' ')} — {money(l.outstanding)} outstanding</div>):<p>No loans.</p>}<h3>Payment History</h3>{tx.slice().reverse().map(t=><p key={t.id}><b>{t.date}</b> — {t.type==='PAY_OFF'?'Member Pay-Off':'Payment'} — {t.lines.map(l=>`${l.category} ${money(l.amount)}`).join(', ')}</p>)}{m.status==='ACTIVE'&&total>0&&activeLoansFor(data,id).length===0&&<button className="payoff-main" onClick={()=>{close();onPayoff(id)}}>Process Pay-Off / Exit Member</button>}</div></div>}
+
+function PayoffModal({id,data,close,confirm}){const m=data.members.find(x=>x.id===id);const balances=categoryBalances(data,id);const total=Object.values(balances).reduce((s,v)=>s+v,0);const loanOut=activeLoansFor(data,id).reduce((s,l)=>s+Number(l.outstanding||0),0);const [method,setMethod]=useState('BANK_TRANSFER');if(!m)return null;return <div className="overlay"><div className="modal payoff-modal"><button className="x" onClick={close}>×</button><h2>Confirm Member Pay-Off / Exit</h2><p>You are about to close <b>{m.fullName}</b>'s cooperative account. The following balances will be returned and reduced to zero.</p><div className="balance-grid">{Object.entries(balances).map(([c,v])=><div key={c}><span>{c}</span><b>{money(v)}</b></div>)}{total===0&&<p>No withdrawable balance remains.</p>}</div><div className="payoff-total"><span>Total Pay-Off</span><b>{money(total)}</b></div>{loanOut>0&&<div className="warning">This member still owes {money(loanOut)}. The exit cannot be completed until the outstanding loan is settled.</div>}<Field label="Pay-Out Method"><select value={method} onChange={e=>setMethod(e.target.value)}><option>BANK_TRANSFER</option><option>CASH</option></select></Field><div className="modal-actions"><button className="secondary-btn" onClick={close}>Cancel</button><button className="danger-btn" disabled={loanOut>0} onClick={()=>confirm(id,method,today())}>Confirm Pay-Off & Inactivate</button></div></div></div>}
+
+const Title=({title,sub,action})=><div className="title"><div><h1>{title}</h1><p>{sub}</p></div>{action}</div>;
+const Panel=({title,children})=><section className="panel"><h2>{title}</h2>{children}</section>;
+const Table=({headers,children})=><div className="table-wrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;
+const Field=({label,children})=><label className="field"><span>{label}</span>{children}</label>;
+
+const root=ReactDOM.createRoot(document.getElementById('root'));root.render(<App/>);</script></body></html>

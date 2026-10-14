@@ -43,6 +43,12 @@ export function createMemoryStore(): Store {
         const u = users.get(id);
         return u ? copyUser(u) : null;
       },
+      async hasSuperAdmin() {
+        for (const u of users.values()) {
+          if (u.role === "SUPER_ADMIN") return true;
+        }
+        return false;
+      },
     },
     audit: {
       async append(entry) {

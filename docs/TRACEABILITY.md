@@ -20,13 +20,13 @@ Source: PDF = Context Memory PDF section. Owner = chat 2026-10-13. Test column f
 | R-15 | Dashboard: income and expenditure cards, month and all time, recent expenses | PDF §8, §9 | 7 | Dashboard | TBD | Partly in prototype |
 | R-16 | Member Withdrawal card (month, all time) | PDF §9 | 7 | Dashboard | TBD | Prototype only |
 | R-17 | Totals match lists and exports; Lagos month-end tested | PDF §9 | 7 | Dashboard | TBD | Missing |
-| R-18 | Email + password login; owner from setup script | D-06 | 2 | Login | TBD | Missing |
+| R-18 | Email + password login; owner from setup script | D-06, D-24 | 2 | Login | test/password.test.ts (14), test/email.test.ts (17), test/owner.test.ts (10), test/store-contract (hasSuperAdmin) | Hashing, email rules and owner creation done (2.1a, 2.1b); sign-in missing |
 | R-19 | Staff accounts, deny-by-default permissions, server-side | PDF §10, D-04 | 2 | Staff & Access | TBD | Client-only |
 | R-20 | Staff data scope; Super Admin filter | PDF §10, D-04 | 2-7 | All lists | TBD | Client-only |
 | R-21 | Restricted permissions granted only by Super Admin | D-05 | 2 | Staff & Access | TBD | Missing |
-| R-22 | Activity log of key actions | PDF §12 | 2-8 | Staff & Access | test/db.test.ts, test/store-contract (audit) | Table and store interface exist; nothing writes to it yet |
+| R-22 | Activity log of key actions | PDF §12 | 2-8 | Staff & Access | test/db.test.ts, test/store-contract (audit), test/owner.test.ts (owner.setup entry) | Table and store interface exist; only `owner.setup` is written so far |
 | R-23 | Excel exports: members, transactions, expenses, combined cashflow, single category | PDF §11 | 8 | Export | TBD | Partial |
-| R-24 | Atomic writes; actor on every record | PDF §4 | 1-6 | n/a | test/db.test.ts, test/store-contract (audit actor) | Audit actor only; other records later |
+| R-24 | Atomic writes; actor on every record | PDF §4 | 1-6 | n/a | test/db.test.ts, test/store-contract (audit actor), test/owner.test.ts (actor) | Audit actor only; other records later |
 | R-26 | Fake SMS adapter behind an interface | D-07 | 4 | Payments | TBD | Missing |
 | R-27 | Money as whole kobo | D-15 | 1 | n/a | test/money.test.ts (47) | Module done (1.3); no money column yet |
 | R-28 | Add "Building Funds" category | D-12 | 3-4 | Payments | TBD | Missing |

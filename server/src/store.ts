@@ -58,6 +58,8 @@ export interface UserStore {
   create(input: NewUser): Promise<UserRecord>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
+  /** True if any user has role SUPER_ADMIN, active or not. Staff do not count. */
+  hasSuperAdmin(): Promise<boolean>;
 }
 
 export interface AuditStore {

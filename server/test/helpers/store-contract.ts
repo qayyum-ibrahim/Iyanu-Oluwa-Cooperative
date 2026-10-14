@@ -5,8 +5,19 @@ let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
 const uniqueEmail = (tag: string) => `${tag}-${Date.now()}-${++counter}@example.test`;
 
-/** The same rules for every adapter. The in-memory adapter must behave like the real one. */
-export function runStoreContract(label: string, makeStore: () => Promise<Store> | Store): void {
+// Building a fresh database runs the real migrations, which is slow on a slow machine.
+const EMPTY_STORE_TIMEOUT = 120_000;
+
+/**
+ * The same rules for every adapter. The in-memory adapter must behave like the real one.
+ * makeStore may return a store that keeps data between tests.
+ * makeEmptyStore must return a brand new, empty store every time it is called.
+ */
+export function runStoreContract(
+  label: string,
+  makeStore: () => Promise<Store> | Store,
+  makeEmptyStore: () => Promise<Store> | Store,
+): void {
   describe(`Store contract: ${label}`, () => {
     const newUser = (store: Store, tag: string, role?: "SUPER_ADMIN" | "STAFF") =>
       store.users.create({
@@ -52,7 +63,7 @@ export function runStoreContract(label: string, makeStore: () => Promise<Store> 
       ).rejects.toBeInstanceOf(DuplicateEmailError);
     });
 
-    it("matches email exactly: a different letter case is a different email (Phase 2 may change this)", async () => {
+    it("matches email exactly: a different letter case is a different email (logic code normalises, D-22)", async () => {
       const store = await makeStore();
       const u = await newUser(store, "case");
       expect(await store.users.findByEmail(u.email.toUpperCase())).toBeNull();
@@ -67,6 +78,19 @@ export function runStoreContract(label: string, makeStore: () => Promise<Store> 
       expect(again?.displayName).toBe("Test User");
       expect(again?.role).toBe("STAFF");
     });
+
+    it(
+      "reports whether a Super Admin exists (staff do not count)",
+      { timeout: EMPTY_STORE_TIMEOUT },
+      async () => {
+        const store = await makeEmptyStore();
+        expect(await store.users.hasSuperAdmin()).toBe(false);
+        await newUser(store, "staff-only", "STAFF");
+        expect(await store.users.hasSuperAdmin()).toBe(false);
+        await newUser(store, "the-admin", "SUPER_ADMIN");
+        expect(await store.users.hasSuperAdmin()).toBe(true);
+      },
+    );
 
     it("stores an audit entry with its actor and lists it", async () => {
       const store = await makeStore();

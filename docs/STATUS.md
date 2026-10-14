@@ -1,25 +1,25 @@
 # Project status
-Last updated: after step 2.1a
+Last updated: after step 2.1b
 
 ## Where we stopped
-Step 2.1a done: argon2id password hashing (`src/password.ts`) and email normalising (`src/email.ts`), 31 new tests. `npm run check` expected: 110 tests. Phase 2 has started. Next: step 2.1b.
+Step 2.1b done: `hasSuperAdmin` in the Store (both adapters and the shared contract), `createOwner` logic (`src/owner.ts`) and the terminal script `npm run setup:owner` (`src/setup-owner.ts`). 12 new tests. `npm run check` expected: 120 tests. Live check: the script creates the owner once and refuses the second time. Next: step 2.2a.
 
 ## Next step brief
-Step 2.1b (M): the owner setup script. It adds a `hasSuperAdmin` method to the Store (both adapters and the contract tests, D-21) so it can refuse a second Super Admin, then the script that asks for the owner email and password at run time. Say "continue" to start it.
+Step 2.2a (M): the permission table. One list of named permissions, one table of which role has which, and a test that tries every role against every permission (OQ-13 default: the ZIP's 20 permissions plus `loans.disburse` and `payoff.process`). Pure logic, no database. Say "continue" to start it.
 Owner inputs needed:
 1. Nothing by hand if `docs/NEXT_FILES.txt` lists the needed files. Check that the pack shows them under `===== FILE: path =====` headings.
-2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-23).
-3. The owner email (OQ-02) and the owner password are typed only when the setup script runs. Never in chat or in git.
+2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-24).
+3. Optional: answer OQ-13 (final staff permission list) now. If you do not, the default stands.
 Stable docs are in Project knowledge, folder `mirror/`.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 110 tests (shared helpers in `test/helpers/`). Route: `GET /health`. No accounts, sign-in or UI code yet. No route uses the money module, the store, the password module or the email module.
+Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 120 tests (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No sign-in, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module or the owner logic.
 
 ## Settings (names only)
-`PORT` (optional), `DATABASE_URL` (see `server/.env.example`). Planned: token or session secrets, `OWNER_EMAIL`. Values never go in git.
+`PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`). Planned: token or session secrets. Values never go in git. The owner email and password are typed when the script runs.
 
 ## Commands
-Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run check`, `npm start`.
+Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run check`, `npm start`.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
 2. Attach `~/Desktop/resume-pack.txt` to a new chat in this Project.
@@ -32,11 +32,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.1b (M) Store `hasSuperAdmin` and the owner setup script.
-- Then sign-in, permission table, staff accounts, audit log writes.
+- 2.2a (M) Permission table and role × permission test.
+- Then sign-in (login, tokens), staff accounts, audit log writes for sensitive actions.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-23. A-21 is settled by D-22 (owner may overrule). A-22 (password rules) and A-23 (email rules) are new. TRACEABILITY.md has not been seen since step 1.4 and is not updated for step 2.1a; 2.1b updates it. No break-on-purpose run for step 1.4. DEV_SETUP.md lacks the database commands; 2.1b fixes it.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-24. A-22, A-23, A-24 and A-25 are Claude's choices. No break-on-purpose run for steps 1.4 and 2.1b (the 2.1b run was not done; do it at the start of Phase 9 or when sign-in is built). The no-echo password prompt is verified only by the owner's live check. The numbering in TRACEABILITY.md skips R-25; I did not fill it.
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

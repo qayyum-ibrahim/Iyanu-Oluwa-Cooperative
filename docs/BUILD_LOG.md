@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 2.1b (size M), 2026-10-14: owner setup script
+**Works (expected; not verified, I ran nothing in my sandbox):** `hasSuperAdmin` on the Store interface, `memory-store.ts` and `prisma-store.ts`. `src/owner.ts` (`createOwner`, `OwnerAlreadyExistsError`). `src/setup-owner.ts` and `npm run setup:owner`. Expected `npm run check`: 8 test files, 120 tests.
+**Stubbed:** no route uses `createOwner`. No sign-in yet.
+**Tests:** 12 new: 2 contract cases (1 per adapter, on a fresh empty store) and 10 in `test/owner.test.ts`. Total 120.
+**Not verified:** everything above until the owner pastes the check output and the live-check output. The no-echo password prompt. A break-on-purpose run (not done; this is security code, so it is owed).
+**Found along the way:**
+1. The Prisma contract shares one database, so "no Super Admin yet" could not be tested there. `runStoreContract` now takes a third argument that gives a fresh empty store. The Prisma file builds one extra temporary database for it.
+2. `hasSuperAdmin` counts inactive Super Admins too (A-24).
+3. User creation and the audit write are two separate Store calls, not one transaction (A-25).
+4. TRACEABILITY.md and DEV_SETUP.md were seen and updated as whole files. DEV_SETUP now has the database commands.
+5. The prototype's permission list lives in `legacy-prototype/src/App.jsx`. I have not read it yet. It is in NEXT_FILES for step 2.2a.
+
 ## Step 2.1a (size S), 2026-10-14: password hashing and email normalising
 **Works (verified on your machine, output pasted; also in my sandbox, Node v22.22.0, npm 10.9.4):** `server/src/password.ts` (`hashPassword`, `verifyPassword`, `assertPasswordAllowed`, `PasswordPolicyError`) and `server/src/email.ts` (`normalizeEmail`, `InvalidEmailError`). argon2 0.45.1, argon2id, library defaults read from a real hash: `m=65536,p=4,t=3`. One hash took 134 ms. Typecheck clean, 31 tests pass, live `tsx` run printed the expected lines. This was an isolated project with the exact pins and the real `tsconfig.json`, not the real `server/`.
 **Stubbed:** nothing uses the modules yet. No route, no setup script.

@@ -59,6 +59,13 @@ export function createPrismaStore(prisma: PrismaClient): Store {
         const row = await prisma.user.findUnique({ where: { id } });
         return row ? toUser(row) : null;
       },
+      async hasSuperAdmin() {
+        const row = await prisma.user.findFirst({
+          where: { role: "SUPER_ADMIN" },
+          select: { id: true },
+        });
+        return row !== null;
+      },
     },
     audit: {
       async append(entry) {

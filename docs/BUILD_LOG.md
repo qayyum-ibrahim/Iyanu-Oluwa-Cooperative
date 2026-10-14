@@ -1,10 +1,20 @@
 # Build log (newest first)
 
+## Step 1.2 (size M), 2026-10-13: server skeleton
+**Works (verified in my sandbox; your check pending):** `server/` with Express 5.3.0, strict TypeScript 6.0.3, ESLint, Vitest and Supertest. `npm run check` passes: typecheck, lint, 3 tests. A live run answered `GET /health` with 200 and `{"status":"ok"}`. Sandbox: Node v22.22.0, npm 10.9.4.
+**Stubbed:** no database, auth or other routes. `web/` is still empty.
+**Tests:** 3 (health route: 200 and body, no `x-powered-by` header, 404 on unknown route). No break-on-purpose run, because the step has no security, money or data code.
+**Not verified:** install and check on the owner's machine (Node v22.14.0, npm 11.21.0). Prisma, zod, argon2, exceljs and the web packages were not installed.
+**Found along the way:**
+1. D-13 candidate typescript 7.0.2 conflicts with typescript-eslint 8.71.2, whose registry peer range is `typescript >=4.8.4 <6.1.0`. Pinned 6.0.3 instead (D-19, A-16). I did not test TypeScript 7 itself.
+2. The owner's step 1.1 output showed the demo password in 3 files (`preview.html` 2 lines, `README.md` 1 line, `src/App.jsx` 3 lines, 6 lines in all) and none after redaction. Step 1.1 below now says verified.
+3. TRACEABILITY.md was not in the resume pack and was not changed. No requirement was built in this step.
+
 ## Step 1.1 (size S), 2026-10-13: repo skeleton
-**Works (after your check):** `.gitignore`, `web/` and `server/` folders, and `legacy-prototype/` copied from the ZIP folder. The demo password `IYANU@2026` is replaced by `REDACTED` in the copy. The owner confirmed it was never used for a real account (reported by owner).
-**Stubbed:** `web/` and `server/` hold only `.gitkeep`.
+**Works (verified on your machine, outputs pasted):** `.gitignore`, `web/` and `server/` folders, and `legacy-prototype/` copied from the ZIP folder. The demo password `IYANU@2026` is replaced by `REDACTED` in the copy (3 files, 6 lines; second grep found no match). No `node_modules` was copied. `.DS_Store` is ignored. The owner confirmed the password was never used for a real account (reported by owner).
+**Stubbed:** `web/` and `server/` held only `.gitkeep`.
 **Tests:** 0 (none apply).
-**Not verified:** the prototype still has not been installed, built or run. Redaction means its demo login no longer works. That is fine, because it is reference only.
+**Not verified:** the prototype was never installed, built or run. Its demo login no longer works. That is fine, because it is reference only.
 **Found along the way:**
 1. The 0.2 entry was missing from this log. It is added below, rebuilt from STATUS and the git log.
 2. STATUS wording about `NEXT_FILES.txt` was unclear. Fixed: files appear under `===== FILE: path =====` headings, and no heading means no files (owner's wording).

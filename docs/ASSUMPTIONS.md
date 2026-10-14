@@ -3,9 +3,8 @@ Status: confirmed / illustrative / verify.
 
 | ID | Assumption | Status | Who verifies |
 |---|---|---|---|
-| A-01 | Owner's machine runs Node v22.14.0 and npm 11.21.0 (reported 2026-10-13). Every D-13 candidate that declares a Node requirement accepts v22.14.0 (registry lookup). Installs are not yet tested. | verify | Claude at step 1.2 (clean install) |
-
-| A-02 | Prisma `7.10.0` (CLI and client) is chosen because on 2026-10-13 the CLI `latest` tag was a release candidate (8.0.0-rc.22) while the client `latest` was 7.10.0. | verify | Claude at step 1.2 (clean install) |
+| A-01 | Owner's machine runs Node v22.14.0 and npm 11.21.0 (reported 2026-10-13). The server packages pinned in step 1.2 declare Node requirements that accept v22.14.0 (registry lookup). A clean install and check passed in Claude's sandbox (Node v22.22.0, npm 10.9.4), not yet on the owner's machine. | verify | Owner at step 1.2 (run `npm install`, `npm run check`) |
+| A-02 | Prisma `7.10.0` (CLI and client) is chosen because on 2026-10-13 the CLI `latest` tag was a release candidate (8.0.0-rc.22) while the client `latest` was 7.10.0. Not installed yet. | verify | Claude at step 1.4 (clean install) |
 | A-03 | Money is stored as `BigInt` kobo. I did not confirm from the Prisma docs whether `Int` is wide enough, so I chose `BigInt` to be safe. | verify | Claude at step 1.4 |
 | A-04 | SQLite for development. Production database is undecided until hosting is known. | verify | Owner (OQ-01) |
 | A-05 | Member personal data (name, phone, address) has legal handling duties in Nigeria. I have not checked what they are. | verify | Owner with a legal adviser |
@@ -19,3 +18,4 @@ Status: confirmed / illustrative / verify.
 | A-13 | The label "Building Funds" is used exactly as the owner wrote it. | verify | Owner |
 | A-14 | Names and amounts in the ZIP seed are fictional. | confirmed | Owner (D-08) |
 | A-15 | Express 5 is acceptable as the server framework. Fastify was the alternative. | illustrative | Owner |
+| A-16 | TypeScript 6.0.3 is used because typescript-eslint 8.71.2 declares peer `typescript <6.1.0` (registry lookup). TypeScript 7 itself was not tested. Revisit when typescript-eslint lists TypeScript 7 support. | verify | Claude, at the start of Phase 9 and whenever typescript-eslint changes |

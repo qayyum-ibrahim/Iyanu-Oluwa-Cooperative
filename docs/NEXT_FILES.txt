@@ -1,3 +1,10 @@
 # One repo path per line. The resume script adds each file in full to the pack.
 # Claude updates this list at the end of every step. Never list secret files.
-# Step 1.1 needs no files.
+# Step 2.1 (argon2 and owner setup script) needs:
+server/package.json
+server/tsconfig.json
+server/.env.example
+server/prisma/schema.prisma
+server/src/store.ts
+server/src/db.ts
+docs/DEV_SETUP.md

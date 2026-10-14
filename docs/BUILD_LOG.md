@@ -1,5 +1,31 @@
 # Build log (newest first)
 
+## Step 1.5 (size S), 2026-10-14: in-memory adapter and store interface
+**Works (verified on your machine, output pasted):** `npm run check` passes: generate, typecheck, lint, 5 test files, 79 tests (money 47, health 3, memory-store 11, prisma-store 11, db 7). The Prisma adapter passes the 11 shared tests on a real SQLite file built by the real migration. Committed `6ddf251` and pushed (output pasted).
+**Also verified in my sandbox (Node v22.22.0):** the same 11 tests on both adapters (Prisma on hand-made tables). 10 deliberate bugs, each caught: duplicate check removed (1 test failed), unknown actor allowed (1), no copy returned (1), list ignores actor (1, memory), default role wrong (2), email compared ignoring case (1), duplicate error not mapped (1), unknown-actor error not mapped (1), list ignores actor (1, Prisma), role never saved (1). Code restored, 22 pass.
+**Stubbed:** nothing writes to the store from a route.
+**Tests:** 22 new (11 per adapter). Total 79.
+**Not verified:** a break-on-purpose run on your machine (not needed for the step).
+**Found along the way:**
+1. Email case sensitivity is undecided (A-21).
+2. `listByActor` order is not guaranteed.
+3. `prisma generate` runs in my sandbox when `PRISMA_SCHEMA_ENGINE_BINARY` points at a stand-in file. Only `migrate` needs the real engine.
+4. `test/db.test.ts` and `test/helpers/temp-db.ts` repeat setup code (left as is).
+5. My mistake: I did not update `docs/NEXT_FILES.txt` in steps 1.4 and 1.5, so a new chat received no code files. Fixed: every step ends with the new `NEXT_FILES.txt` contents.
+6. My mistake: STATUS was given as partial edits in step 1.5. It is now given whole.
+
+## Step 1.4 (size M), 2026-10-14: database schema, first migration
+**Works (verified on your machine, output pasted):** `npm install` (166 added, 394 audited), `prisma migrate dev --name init` created and applied `20261014160109_init`, `npm run check` passes: generate, typecheck, lint, 3 test files, 57 tests (50 old + 7 new). `.tables` lists AuditLog, User, _prisma_migrations. Also verified in my sandbox (Node v22.22.0, npm 10.9.4 and 11.21.0): exact-pinned install of prisma, @prisma/client, @prisma/adapter-better-sqlite3 and dotenv, and the SQLite driver storing 99999999999999 and 9223372036854775807 exactly.
+**Stubbed:** nothing writes to `AuditLog`. No route uses the database.
+**Tests:** 7 new in `server/test/db.test.ts` (default role and status, duplicate email, audit actor read back, audit with no actor, unknown actor rejected, user with audit rows cannot be deleted, INTEGER holds the A-17 cap and 2^63−1).
+**Not verified:** no break-on-purpose run (Prisma cannot run in my sandbox: engine download blocked, 403). The BigInt check used a raw INTEGER column, not a Prisma BigInt model field.
+**Found along the way:**
+1. The first run failed because `prisma.config.ts` was in the wrong folder. Prisma then reported "datasource.url property is required". Signal: the line `Loaded Prisma config from prisma.config.ts.` was missing. After the owner moved the file into `server/`, everything passed.
+2. `npm audit` shows 4 high findings, all through the Prisma CLI's own dependencies (A-20).
+3. npm 11.21.0 prints an `install-scripts` warning for 5 packages. It had no effect on build or tests.
+4. The Prisma SQLite docs page does not say an adapter is required. We use one (D-20).
+5. TRACEABILITY.md was seen and updated for the first time. DEV_SETUP.md has not been seen, so it is not updated for the new commands.
+
 ## Step 1.3 (size S), 2026-10-14: money module
 **Works (verified in my sandbox; your check pending):** `server/src/money.ts` with `parseNaira`, `formatNaira`, `sumKobo`, `MoneyError` and the `Kobo` type (D-15, DR-01, DR-02 sum). `npm run check` passes: typecheck, lint, 2 test files, 50 tests. A live run printed `₦20,000.50`, `₦20,000.00` and the rejection message for `"1.234"`. Sandbox: Node v22.22.0, npm 10.9.4.
 **Stubbed:** nothing in the module. No route, database column or screen uses it yet.

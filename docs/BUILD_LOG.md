@@ -1,14 +1,28 @@
 # Build log (newest first)
 
+## Step 1.3 (size S), 2026-10-14: money module
+**Works (verified in my sandbox; your check pending):** `server/src/money.ts` with `parseNaira`, `formatNaira`, `sumKobo`, `MoneyError` and the `Kobo` type (D-15, DR-01, DR-02 sum). `npm run check` passes: typecheck, lint, 2 test files, 50 tests. A live run printed `₦20,000.50`, `₦20,000.00` and the rejection message for `"1.234"`. Sandbox: Node v22.22.0, npm 10.9.4.
+**Stubbed:** nothing in the module. No route, database column or screen uses it yet.
+**Tests:** 47 new in `server/test/money.test.ts` (valid input 10, invalid text 17, non-string input 6, format 9, round trip 1, sum 4). Total 50.
+**Break on purpose (sandbox):** 10 deliberate bugs, each caught by failing tests: 3 decimals allowed (2 failed), padding on the wrong side (2), cap removed (1), format loses kobo padding (6), sum skips first value (2), minus sign accepted (1), format loses minus sign (1), numbers converted to text (3), wrong divisor in format (8), spaces trimmed (2). Code restored, 50 pass.
+**Not verified:** anything on the owner's machine (Node v22.14.0, npm 11.21.0). Whether the database column accepts the largest allowed amount (A-03, step 1.4).
+**Found along the way:**
+1. The ZIP used JavaScript numbers with a 0.01 tolerance (step 0.1 item 8). The new tests pin exact sums with no tolerance, and `0.1 + 0.2` equals `0.3`.
+2. `JSON.stringify` throws "Do not know how to serialize a BigInt" (checked in my sandbox, Node v22.22.0). So amounts must cross the API as strings (A-18). Phase 4 must follow this.
+3. My first live-check command failed: `tsx -e` runs the code as CommonJS, so `import` did not work. The command given to the owner uses `import()` and printed the expected lines in my sandbox.
+4. Claude has not seen TRACEABILITY.md, so it was not updated for steps 1.2 and 1.3. The owner is asked to paste it.
+
 ## Step 1.2 (size M), 2026-10-13: server skeleton
-**Works (verified in my sandbox; your check pending):** `server/` with Express 5.3.0, strict TypeScript 6.0.3, ESLint, Vitest and Supertest. `npm run check` passes: typecheck, lint, 3 tests. A live run answered `GET /health` with 200 and `{"status":"ok"}`. Sandbox: Node v22.22.0, npm 10.9.4.
+**Works (verified on your machine, outputs pasted):** `server/` with Express 5.3.0, strict TypeScript 6.0.3, ESLint, Vitest and Supertest. The test run passed (3 of 3). `GET /health` answered 200 with `{"status":"ok"}` and no `X-Powered-By` header. `npm install` added 227 packages with 0 vulnerabilities. Committed and pushed as `272e2b4` (reported by owner). Also verified in my sandbox: typecheck, lint, tests and a live run (Node v22.22.0, npm 10.9.4).
 **Stubbed:** no database, auth or other routes. `web/` is still empty.
 **Tests:** 3 (health route: 200 and body, no `x-powered-by` header, 404 on unknown route). No break-on-purpose run, because the step has no security, money or data code.
-**Not verified:** install and check on the owner's machine (Node v22.14.0, npm 11.21.0). Prisma, zod, argon2, exceljs and the web packages were not installed.
+**Not verified:** the typecheck and lint stages on the owner's machine (the paste showed only the test summary). Step 1.3 asks for the full output. Prisma, zod, argon2, exceljs and the web packages were not installed.
 **Found along the way:**
 1. D-13 candidate typescript 7.0.2 conflicts with typescript-eslint 8.71.2, whose registry peer range is `typescript >=4.8.4 <6.1.0`. Pinned 6.0.3 instead (D-19, A-16). I did not test TypeScript 7 itself.
-2. The owner's step 1.1 output showed the demo password in 3 files (`preview.html` 2 lines, `README.md` 1 line, `src/App.jsx` 3 lines, 6 lines in all) and none after redaction. Step 1.1 below now says verified.
-3. TRACEABILITY.md was not in the resume pack and was not changed. No requirement was built in this step.
+2. The owner's step 1.1 output showed the demo password in 3 files (`preview.html` 2 lines, `README.md` 1 line, `src/App.jsx` 3 lines, 6 lines in all) and none after redaction.
+3. TRACEABILITY.md was not in the resume pack and was not changed.
+4. `npm install` took 38 minutes on the owner's machine (`audited 228 packages in 38m`, pasted). Cause unknown, probably the network.
+5. My expected `git status` output showed `?? server/` as one line. Git listed the new files one by one because `server/.gitkeep` was already tracked. Harmless.
 
 ## Step 1.1 (size S), 2026-10-13: repo skeleton
 **Works (verified on your machine, outputs pasted):** `.gitignore`, `web/` and `server/` folders, and `legacy-prototype/` copied from the ZIP folder. The demo password `IYANU@2026` is replaced by `REDACTED` in the copy (3 files, 6 lines; second grep found no match). No `node_modules` was copied. `.DS_Store` is ignored. The owner confirmed the password was never used for a real account (reported by owner).

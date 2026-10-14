@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 2.1a (size S), 2026-10-14: password hashing and email normalising
+**Works (verified on your machine, output pasted; also in my sandbox, Node v22.22.0, npm 10.9.4):** `server/src/password.ts` (`hashPassword`, `verifyPassword`, `assertPasswordAllowed`, `PasswordPolicyError`) and `server/src/email.ts` (`normalizeEmail`, `InvalidEmailError`). argon2 0.45.1, argon2id, library defaults read from a real hash: `m=65536,p=4,t=3`. One hash took 134 ms. Typecheck clean, 31 tests pass, live `tsx` run printed the expected lines. This was an isolated project with the exact pins and the real `tsconfig.json`, not the real `server/`.
+**Stubbed:** nothing uses the modules yet. No route, no setup script.
+**Tests:** 31 new (password 14, email 17). Expected total 110.
+**Break on purpose (sandbox):** 12 deliberate bugs. 11 were caught at once. One escaped: removing the max-length guard in `verifyPassword` changed nothing, because a wrong long password fails anyway. I changed the test to use a hash made with raw argon2 from an over-length password, and the bug is then caught (1 failed). Code restored, 31 pass.
+**Not verified:** hash time on your machine (the password tests took 1.8 s for 14 tests there, well inside the 30 s limit). The audit details (4 high findings, believed to be A-20).
+**Found along the way:**
+1. My miss: the `NEXT_FILES.txt` I wrote at step 1.5 did not list the adapters, contract tests or config files, so this chat could not build the owner setup script. I split the step (2.1a, 2.1b). The new `NEXT_FILES.txt` lists them.
+2. The setup script needs a "does a Super Admin exist" guard. The Store has none. 2.1b adds `hasSuperAdmin` to the interface, both adapters and the contract.
+3. The argon2 PHC string from this library writes its parameters in the order `m,p,t`. I used the real output in the live check.
+4. TRACEABILITY.md and DECISIONS.md (repo copy) were not in the pack, so I could not edit them as whole files. D-22 and D-23 are given as text to add at the end of DECISIONS.md. TRACEABILITY is updated at 2.1b.
+5. The `mirror/DECISIONS.md` copy in Project knowledge is stale (no D-22 or D-23, and D-20 is garbled).
+
 ## Step 1.5 (size S), 2026-10-14: in-memory adapter and store interface
 **Works (verified on your machine, output pasted):** `npm run check` passes: generate, typecheck, lint, 5 test files, 79 tests (money 47, health 3, memory-store 11, prisma-store 11, db 7). The Prisma adapter passes the 11 shared tests on a real SQLite file built by the real migration. Committed `6ddf251` and pushed (output pasted).
 **Also verified in my sandbox (Node v22.22.0):** the same 11 tests on both adapters (Prisma on hand-made tables). 10 deliberate bugs, each caught: duplicate check removed (1 test failed), unknown actor allowed (1), no copy returned (1), list ignores actor (1, memory), default role wrong (2), email compared ignoring case (1), duplicate error not mapped (1), unknown-actor error not mapped (1), list ignores actor (1, Prisma), role never saved (1). Code restored, 22 pass.

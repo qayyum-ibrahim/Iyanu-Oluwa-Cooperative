@@ -1,20 +1,19 @@
 # Project status
-Last updated: after step 2.3a
+Last updated: after step 2.3a (verified on the owner's machine)
 
 ## Where we stopped
-Step 2.3a done: `server/src/auth.ts` (`authenticate`: same failure for every kind of failure, `login.success` and `login.failure` audit entries, inactive users refused, fail closed if the audit write fails) and `test/auth.test.ts` (31 tests). Step 2.2a is verified on the owner's machine (9 files, 160 tests, commit d10b19e, pushed). The break-on-purpose run owed for 2.1b is done in my sandbox (9 bugs caught). `npm run check` expected after 2.3a: 10 test files, 191 tests (not yet verified on the owner's machine). Next: step 2.3b.
+Step 2.3a is verified on the owner's machine: `npm run check` gives 10 test files, 191 tests (reported 2026-10-15). It added `server/src/auth.ts` (`authenticate`: same failure for every kind of failure, `login.success` and `login.failure` audit entries, inactive users refused, fail closed if the audit write fails) and `test/auth.test.ts` (31 tests). Step 2.2a is verified on the owner's machine (9 files, 160 tests, commit d10b19e, pushed). The break-on-purpose run owed for 2.1b was done in my sandbox at 2.3a (9 bugs caught). Commit `0c1fa80` holds 2.3a; I do not know if it is pushed. The live `tsx` check from the 2.3a message was not reported. Next: step 2.3b.
 
 ## Next step brief
-Step 2.3b (M): session tokens as a pure module (no routes yet). A short-lived access token and a rotating refresh token, with the signing secret read from a setting. Details are chosen at the step and recorded in DECISIONS. Then 2.3c: sign-in lockout. Say "continue" to start 2.3b.
-Owner inputs needed:
-1. Run `npm run check` in `server/` and the live check from the 2.3a message. Paste the last lines. Then commit.
-2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-26).
-3. Optional: answer OQ-13 (final staff permission list). If you do not, the default stands.
-4. Optional: say "fix decisions" (D-20 and D-21 formatting).
-Stable docs are in Project knowledge, folder `mirror/`.
+Step 2.3b (M): session tokens as a pure module (no routes yet). A short-lived access token and a rotating refresh token, with the signing secret read from a setting. Rotating refresh tokens need stored state, so the step may touch the schema, `Store` and both adapters; if so it is split. Details are chosen at the step and recorded in DECISIONS. Then 2.3c: sign-in lockout. Say "go" to start 2.3b.
+Owner inputs needed (all optional):
+1. Push `0c1fa80` if not pushed, and paste the live-check output from the 2.3a message if you ran it.
+2. Say "fix decisions" to repair the garbled D-20, D-21, D-23/D-24 text in `docs/DECISIONS.md` and A-02, A-03, A-19, A-20 in `docs/ASSUMPTIONS.md` (whole-file fixes).
+3. Answer OQ-13 (final staff permission list). If you do not, the default stands.
+Stable docs are in Project knowledge, folder `mirror/`. The mirror of DECISIONS looked current (D-01 to D-26) when last shown. Replace it after 2.3b adds decisions.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), permission table (`src/permissions.ts`), sign-in logic (`src/auth.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 191 tests expected (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No token, no sign-in route, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module, the owner logic, the permission table or `authenticate`.
+Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), permission table (`src/permissions.ts`), sign-in logic (`src/auth.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 191 tests (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No token, no sign-in route, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module, the owner logic, the permission table or `authenticate`.
 
 ## Settings (names only)
 `PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`). Planned: token signing secret (name chosen at 2.3b). Values never go in git. The owner email and password are typed when the script runs.
@@ -38,7 +37,7 @@ Full plan: PHASE_PLAN.md.
 - Then sign-in routes, staff accounts (stored permission list), route guards, audit writes for sensitive actions.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-26. A-22 to A-30 are Claude's choices or checks. The break-on-purpose run for step 1.4 (database schema) is still owed: it needs the real Prisma engine, so it must run on the owner's machine or in a later step. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). Sign-in lockout is not built (2.3c). The no-echo password prompt is verified only by the owner's live check. `mirror/DECISIONS.md` is stale, and the D-20 and D-21 formatting is garbled in the copy I was shown (a whole-file fix is pending: say "fix decisions"). TRACEABILITY.md skips R-25; I did not fill it. I have not seen `server/tsconfig.json` in this chat; typecheck of the new files was run in my sandbox with my own approximation.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-26. A-22 to A-30 are Claude's choices or checks. The break-on-purpose run for step 1.4 (database schema) is still owed: it needs the real Prisma engine, so it must run on the owner's machine or in a later step. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). Sign-in lockout is not built (2.3c). The no-echo password prompt is verified only by the owner's live check. The D-20, D-21 and A-02, A-03, A-19, A-20 formatting is garbled in the repo (whole-file fix pending: say "fix decisions"). TRACEABILITY.md skips R-25; not filled. `server/tsconfig.json` `include` lists `test` twice (harmless).
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

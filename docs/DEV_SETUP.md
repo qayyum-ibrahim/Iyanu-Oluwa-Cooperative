@@ -23,4 +23,4 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 - `web/` has no setup yet. `legacy-prototype/` is reference only. Do not install or run it.
 
 ## Settings (names only)
-`PORT` (optional, default 3000). `DATABASE_URL` (optional for the setup script; default `file:./dev.db`). More are added with the step that needs them.
+`PORT` (optional, default 3000). `DATABASE_URL` (optional for the setup script; default `file:./dev.db`). `TOKEN_SECRET` (at least 32 bytes; no code path reads it yet; its name goes in `server/.env.example` when a route needs it). More are added with the step that needs them.

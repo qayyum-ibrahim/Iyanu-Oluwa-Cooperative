@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 2.3b (size S), 2026-10-15: access tokens and refresh-token primitives
+**Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/tokens.ts`: `createAccessToken`, `verifyAccessToken`, `readTokenSecret`, `assertSecretAllowed`, `createRefreshToken`, `hashRefreshToken`, `refreshTokenMatches`, `isRefreshTokenShape`, `TokenConfigError`. No new dependency. Expected `npm run check`: 11 test files, 265 tests.
+**Stubbed:** no route, no stored refresh tokens, no rotation, no lockout. `TOKEN_SECRET` is not in `server/.env.example` yet (nothing reads it).
+**Tests:** 74 new in `test/tokens.test.ts` (secret 13, access tokens 50, refresh tokens 11), by my count.
+**Not verified:** everything. No break-on-purpose run (owed; security code). Lint (I have not seen `eslint.config.js`).
+**Found along the way:**
+1. Plan change: rotating refresh tokens need stored state, so 2.3b is the pure part only. 2.3c is refresh-token storage and rotation. 2.3d is lockout.
+2. I did not edit `server/.env.example` (I have not seen it).
+
 ## Step 2.3a (size M), 2026-10-15: sign-in logic
 **Works (verified on your machine: `npm run check` 10 files, 191 tests, reported 2026-10-15; also in my sandbox, Node v22.22.0, npm 10.9.4):** `server/src/auth.ts`: `authenticate(store, email, password)` returns `{ ok: true, user }` (no hash) or `{ ok: false }`. Every failure looks the same to the caller (unknown email, wrong password, bad input, inactive user). Reason codes (`invalid_input`, `unknown_email`, `bad_password`, `inactive`) go only to the audit `detail`. Writes `login.success` and `login.failure`. An unknown email still checks a dummy argon2 hash (timing). If the audit write fails, the error is thrown (no sign-in without its audit entry). Typecheck clean, lint clean, 41 tests pass in an isolated project (typescript 6.0.3, vitest 5.0.4, eslint 10.12.0, typescript-eslint 8.71.2, argon2 0.45.1, my own approximation of `tsconfig.json`). A live `tsx` run on an in-memory store printed the expected lines. `npm run check` on your machine: 10 test files, 191 tests (matches the expected count).
 **Stubbed:** no token, no route, no lockout. No route uses `authenticate`.

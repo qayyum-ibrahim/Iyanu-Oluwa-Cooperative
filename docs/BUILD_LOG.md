@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 2.3d-docs (size S), 2026-10-15: docs formatting fix
+
+**Works (not verified: docs only, nothing run):** `docs/DECISIONS.md` and `docs/ASSUMPTIONS.md` replaced as whole files. Fixed missing spaces and backticks in D-20, D-21, D-23/D-24 (blank line between them), A-02, A-03, A-19, A-20 and A-36. Meaning unchanged. TRACEABILITY R-18 and STATUS updated.
+**Tests:** none. Last `npm run check` on the owner's machine: 12 files, 333 tests (2.3d).
+**Found along the way:**
+1. 2.3d is verified on the owner's machine: 12 files, 333 tests, commit b8336e4. This closes the "not verified anywhere" notes in the 2.3d entry.
+2. A-36 had the same garbling as the listed items. Fixed too.
+3. `NEXT_FILES.txt` for 2.3e now lists `owner.ts`, `owner.test.ts` and `db.test.ts` as a precaution. I have not seen them.
+4. D-27 still says storage and rotation come in step 2.3c. D-29 already notes the correction. I left D-27 as it was.
+
 ## Step 2.3d (size M), 2026-10-15: session logic
 
 **Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/sessions.ts`: `issueSession`, `refreshSession`, `signOut`, `SessionError`, `REFRESH_TOKEN_SECONDS` (7 days). Reuse of a used token revokes its family and writes `session.reuse_detected`. Sign-out revokes the family and writes `session.logout`. Inactive or missing user: all tokens revoked. Lost race: fails, no revoke (A-40). Expected `npm run check`: 12 test files, 333 tests.

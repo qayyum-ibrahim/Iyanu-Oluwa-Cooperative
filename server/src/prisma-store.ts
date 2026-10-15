@@ -1,8 +1,11 @@
 import type { PrismaClient } from "./generated/prisma/client.js";
 import {
   DuplicateEmailError,
+  DuplicateTokenHashError,
   UnknownActorError,
+  UnknownUserError,
   type AuditRecord,
+  type RefreshTokenRecord,
   type Store,
   type UserRecord,
 } from "./store.js";
@@ -29,6 +32,17 @@ const toAudit = (r: AuditRecord): AuditRecord => ({
   entityType: r.entityType,
   entityId: r.entityId,
   detail: r.detail,
+});
+
+const toToken = (r: RefreshTokenRecord): RefreshTokenRecord => ({
+  id: r.id,
+  userId: r.userId,
+  familyId: r.familyId,
+  tokenHash: r.tokenHash,
+  createdAt: r.createdAt,
+  expiresAt: r.expiresAt,
+  usedAt: r.usedAt,
+  revokedAt: r.revokedAt,
 });
 
 /** Real adapter: stores data through Prisma. */
@@ -88,6 +102,51 @@ export function createPrismaStore(prisma: PrismaClient): Store {
       async listByActor(actorId) {
         const rows = await prisma.auditLog.findMany({ where: { actorId } });
         return rows.map(toAudit);
+      },
+    },
+    refreshTokens: {
+      async create(input) {
+        try {
+          const row = await prisma.refreshToken.create({
+            data: {
+              userId: input.userId,
+              familyId: input.familyId,
+              tokenHash: input.tokenHash,
+              expiresAt: input.expiresAt,
+            },
+          });
+          return toToken(row);
+        } catch (e) {
+          if (hasCode(e, "P2002")) throw new DuplicateTokenHashError();
+          if (hasCode(e, "P2003")) throw new UnknownUserError(input.userId);
+          throw e;
+        }
+      },
+      async findByHash(tokenHash) {
+        const row = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+        return row ? toToken(row) : null;
+      },
+      async consume(id, now) {
+        // One UPDATE with every condition in its WHERE: the database decides who wins a race.
+        const result = await prisma.refreshToken.updateMany({
+          where: { id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+          data: { usedAt: now },
+        });
+        return result.count === 1;
+      },
+      async revokeFamily(familyId, now) {
+        const result = await prisma.refreshToken.updateMany({
+          where: { familyId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        return result.count;
+      },
+      async revokeAllForUser(userId, now) {
+        const result = await prisma.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        return result.count;
       },
     },
   };

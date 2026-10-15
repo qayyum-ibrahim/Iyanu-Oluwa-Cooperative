@@ -1,19 +1,42 @@
 import { randomUUID } from "node:crypto";
 import {
   DuplicateEmailError,
+  DuplicateTokenHashError,
   UnknownActorError,
+  UnknownUserError,
   type AuditRecord,
+  type RefreshTokenRecord,
   type Store,
   type UserRecord,
 } from "./store.js";
 
+const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
 const copyUser = (u: UserRecord): UserRecord => ({ ...u, createdAt: new Date(u.createdAt) });
 const copyAudit = (a: AuditRecord): AuditRecord => ({ ...a, createdAt: new Date(a.createdAt) });
+const copyToken = (t: RefreshTokenRecord): RefreshTokenRecord => ({
+  ...t,
+  createdAt: new Date(t.createdAt),
+  expiresAt: new Date(t.expiresAt),
+  usedAt: copyDate(t.usedAt),
+  revokedAt: copyDate(t.revokedAt),
+});
 
 /** In-memory adapter for tests. Nothing is saved to disk. */
 export function createMemoryStore(): Store {
   const users = new Map<string, UserRecord>();
   const audit: AuditRecord[] = [];
+  const tokens = new Map<string, RefreshTokenRecord>();
+
+  function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
+    let changed = 0;
+    for (const t of tokens.values()) {
+      if (t.revokedAt === null && match(t)) {
+        t.revokedAt = new Date(now);
+        changed += 1;
+      }
+    }
+    return changed;
+  }
 
   return {
     users: {
@@ -68,6 +91,47 @@ export function createMemoryStore(): Store {
       },
       async listByActor(actorId) {
         return audit.filter((a) => a.actorId === actorId).map(copyAudit);
+      },
+    },
+    refreshTokens: {
+      async create(input) {
+        if (!users.has(input.userId)) throw new UnknownUserError(input.userId);
+        for (const t of tokens.values()) {
+          if (t.tokenHash === input.tokenHash) throw new DuplicateTokenHashError();
+        }
+        const record: RefreshTokenRecord = {
+          id: randomUUID(),
+          userId: input.userId,
+          familyId: input.familyId,
+          tokenHash: input.tokenHash,
+          createdAt: new Date(),
+          expiresAt: new Date(input.expiresAt),
+          usedAt: null,
+          revokedAt: null,
+        };
+        tokens.set(record.id, record);
+        return copyToken(record);
+      },
+      async findByHash(tokenHash) {
+        for (const t of tokens.values()) {
+          if (t.tokenHash === tokenHash) return copyToken(t);
+        }
+        return null;
+      },
+      async consume(id, now) {
+        // No await between the check and the change, so this step cannot be interleaved.
+        const t = tokens.get(id);
+        if (!t) return false;
+        if (t.usedAt !== null || t.revokedAt !== null) return false;
+        if (now.getTime() >= t.expiresAt.getTime()) return false;
+        t.usedAt = new Date(now);
+        return true;
+      },
+      async revokeFamily(familyId, now) {
+        return revokeWhere((t) => t.familyId === familyId, now);
+      },
+      async revokeAllForUser(userId, now) {
+        return revokeWhere((t) => t.userId === userId, now);
       },
     },
   };

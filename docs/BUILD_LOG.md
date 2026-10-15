@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 2.3c (size M), 2026-10-15: refresh-token storage
+**Works (verified in my sandbox, Node v22.22.0, isolated project with the exact pins and real tsconfig and ESLint config: typecheck clean, lint clean, 128 tests = 74 tokens + 27 contract per adapter; the Prisma contract ran on migration SQL applied by hand with better-sqlite3, not through `prisma migrate deploy`):** table `RefreshToken`, migration `20261015090000_refresh_tokens` (hand-written, A-36), `RefreshTokenStore` (create, findByHash, consume, revokeFamily, revokeAllForUser) on the interface and in both adapters, 15 new contract cases per adapter. Expected `npm run check`: 11 test files, 295 tests.
+**Stubbed:** no rotation logic, no route, no lockout. Nothing calls `refreshTokens` yet.
+**Tests:** 30 new (15 per adapter, in the shared contract). Total 295 expected.
+**Break on purpose (sandbox):** `tokens.ts` (owed from 2.3b): 29 bugs, 26 caught, 3 equivalent (non-constant-time compare, redundant `exp <= iat`, redundant stored-hash shape check; A-37). Storage: 33 bugs across both adapters. 2 escaped at first (copy protection in the memory adapter). I strengthened the copy test and both are now caught. One more related bug still escapes (`usedAt` not copied on a used record in the memory adapter; low risk, test code only). Code restored, 128 pass.
+**Not verified:** the live migration check, the real Prisma migration engine, and the 31 auth tests against the real `email.ts` and `password.ts` (my sandbox used stand-ins for those two files). `npm run check` on the owner's machine: the first run showed 4 type errors in `test/auth.test.ts` (hand-built stores without `refreshTokens`) and a stale generated Prisma client (fixed by `npm run db:generate`).
+**Found along the way:**
+1. Plan change: 2.3c is storage only. Rotation logic (reuse detection) is 2.3d. Lockout is 2.3e.
+2. My first copy-protection test was too weak: it changed only the record returned by `create`. Two bugs escaped. Fixed (see above).
+3. A comment in `tokens.ts` still says "Rotation and storage come in step 2.3c". It is stale. Fix it when that file is next changed.
+4. 2.3b is now verified on the owner's machine (11 files, 265 tests, commit c994af4).
+5. My miss: the `NEXT_FILES.txt` from 2.3b did not list `test/auth.test.ts`, so I had not seen it. It builds four `Store` objects by hand. Fixed: `refreshTokens` added to each. The new `NEXT_FILES.txt` lists it, plus `email.ts` and `password.ts`, which my sandbox needs to run the auth tests.
+6. The generated Prisma client is git-ignored. After a schema change, run `npm run db:generate` (or `npm run check`, which does it first) before an editor or `npm run typecheck` will see the new model.
+
 ## Step 2.3b (size S), 2026-10-15: access tokens and refresh-token primitives
 **Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/tokens.ts`: `createAccessToken`, `verifyAccessToken`, `readTokenSecret`, `assertSecretAllowed`, `createRefreshToken`, `hashRefreshToken`, `refreshTokenMatches`, `isRefreshTokenShape`, `TokenConfigError`. No new dependency. Expected `npm run check`: 11 test files, 265 tests.
 **Stubbed:** no route, no stored refresh tokens, no rotation, no lockout. `TOKEN_SECRET` is not in `server/.env.example` yet (nothing reads it).

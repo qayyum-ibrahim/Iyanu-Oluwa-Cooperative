@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { DuplicateEmailError, UnknownActorError, type Store } from "../../src/store.js";
+import {
+  DuplicateEmailError,
+  DuplicateTokenHashError,
+  UnknownActorError,
+  UnknownUserError,
+  type Store,
+} from "../../src/store.js";
 
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
 const uniqueEmail = (tag: string) => `${tag}-${Date.now()}-${++counter}@example.test`;
+const uniqueHash = () => `hash-${Date.now()}-${++counter}`;
+const uniqueFamily = () => `family-${Date.now()}-${++counter}`;
 
 // Building a fresh database runs the real migrations, which is slow on a slow machine.
 const EMPTY_STORE_TIMEOUT = 120_000;
@@ -140,6 +148,215 @@ export function runStoreContract(
       const forB = (await store.audit.listByActor(b.id)).map((e) => e.action);
       expect(forA).toEqual(["a.one", "a.two"]);
       expect(forB).toEqual(["b.one"]);
+    });
+
+    describe("refresh tokens", () => {
+      // Fixed times, far from "now", so a clock bug in an adapter cannot hide behind them.
+      const T0 = new Date("2026-10-15T10:00:00.000Z");
+      const EXPIRY = new Date("2026-10-22T10:00:00.123Z");
+      const at = (ms: number) => new Date(EXPIRY.getTime() + ms);
+
+      async function newToken(store: Store, userId: string, familyId = uniqueFamily()) {
+        return store.refreshTokens.create({
+          userId,
+          familyId,
+          tokenHash: uniqueHash(),
+          expiresAt: EXPIRY,
+        });
+      }
+
+      it("creates a token: unused, not revoked, with an id, a date and the exact expiry", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-create");
+        const familyId = uniqueFamily();
+        const hash = uniqueHash();
+        const t = await store.refreshTokens.create({
+          userId: u.id,
+          familyId,
+          tokenHash: hash,
+          expiresAt: EXPIRY,
+        });
+        expect(t.id.length).toBeGreaterThan(0);
+        expect(t).toMatchObject({ userId: u.id, familyId, tokenHash: hash, usedAt: null, revokedAt: null });
+        expect(t.createdAt).toBeInstanceOf(Date);
+        expect(t.expiresAt.getTime()).toBe(EXPIRY.getTime());
+      });
+
+      it("finds a token by its hash, in any state, and returns null for an unknown hash", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-find");
+        const t = await newToken(store, u.id);
+        expect(await store.refreshTokens.findByHash(t.tokenHash)).toMatchObject({
+          id: t.id,
+          userId: u.id,
+        });
+        await store.refreshTokens.consume(t.id, T0);
+        await store.refreshTokens.revokeFamily(t.familyId, T0);
+        expect(await store.refreshTokens.findByHash(t.tokenHash)).toMatchObject({ id: t.id });
+        expect(await store.refreshTokens.findByHash("no-such-hash")).toBeNull();
+      });
+
+      it("matches the hash exactly (letter case counts)", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-case");
+        const t = await newToken(store, u.id);
+        expect(await store.refreshTokens.findByHash(t.tokenHash.toUpperCase())).toBeNull();
+      });
+
+      it("rejects a duplicate hash with DuplicateTokenHashError", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-dup");
+        const t = await newToken(store, u.id);
+        await expect(
+          store.refreshTokens.create({
+            userId: u.id,
+            familyId: uniqueFamily(),
+            tokenHash: t.tokenHash,
+            expiresAt: EXPIRY,
+          }),
+        ).rejects.toBeInstanceOf(DuplicateTokenHashError);
+      });
+
+      it("rejects a token for an unknown user with UnknownUserError", async () => {
+        const store = await makeStore();
+        await expect(
+          store.refreshTokens.create({
+            userId: "no-such-user",
+            familyId: uniqueFamily(),
+            tokenHash: uniqueHash(),
+            expiresAt: EXPIRY,
+          }),
+        ).rejects.toBeInstanceOf(UnknownUserError);
+      });
+
+      it("consumes a token once: true, then false, and records the time used", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-once");
+        const t = await newToken(store, u.id);
+        expect(await store.refreshTokens.consume(t.id, T0)).toBe(true);
+        expect(await store.refreshTokens.consume(t.id, T0)).toBe(false);
+        const after = await store.refreshTokens.findByHash(t.tokenHash);
+        expect(after?.usedAt?.getTime()).toBe(T0.getTime());
+        expect(after?.revokedAt).toBeNull();
+      });
+
+      it("gives only one winner when two callers consume the same token at once", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-race");
+        const t = await newToken(store, u.id);
+        const results = await Promise.all([
+          store.refreshTokens.consume(t.id, T0),
+          store.refreshTokens.consume(t.id, T0),
+          store.refreshTokens.consume(t.id, T0),
+        ]);
+        expect(results.filter(Boolean)).toHaveLength(1);
+      });
+
+      it("does not consume an unknown id", async () => {
+        const store = await makeStore();
+        expect(await store.refreshTokens.consume("no-such-id", T0)).toBe(false);
+      });
+
+      it("consumes up to the last millisecond before expiry, not at or after it", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-expiry");
+        const before = await newToken(store, u.id);
+        const exact = await newToken(store, u.id);
+        const later = await newToken(store, u.id);
+        expect(await store.refreshTokens.consume(before.id, at(-1))).toBe(true);
+        expect(await store.refreshTokens.consume(exact.id, at(0))).toBe(false);
+        expect(await store.refreshTokens.consume(later.id, at(1))).toBe(false);
+        expect((await store.refreshTokens.findByHash(exact.tokenHash))?.usedAt).toBeNull();
+      });
+
+      it("does not consume a revoked token", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-revoked");
+        const t = await newToken(store, u.id);
+        await store.refreshTokens.revokeFamily(t.familyId, T0);
+        expect(await store.refreshTokens.consume(t.id, T0)).toBe(false);
+        expect((await store.refreshTokens.findByHash(t.tokenHash))?.usedAt).toBeNull();
+      });
+
+      it("revokes one family only, and counts only what changed", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-family");
+        const fam = uniqueFamily();
+        const a = await newToken(store, u.id, fam);
+        const b = await newToken(store, u.id, fam);
+        const other = await newToken(store, u.id);
+        expect(await store.refreshTokens.revokeFamily(fam, T0)).toBe(2);
+        expect((await store.refreshTokens.findByHash(a.tokenHash))?.revokedAt?.getTime()).toBe(
+          T0.getTime(),
+        );
+        expect((await store.refreshTokens.findByHash(b.tokenHash))?.revokedAt).not.toBeNull();
+        expect((await store.refreshTokens.findByHash(other.tokenHash))?.revokedAt).toBeNull();
+        expect(await store.refreshTokens.revokeFamily(fam, at(5))).toBe(0);
+        // The first revoke time is kept.
+        expect((await store.refreshTokens.findByHash(a.tokenHash))?.revokedAt?.getTime()).toBe(
+          T0.getTime(),
+        );
+      });
+
+      it("revokes used tokens of the family as well", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-used-family");
+        const fam = uniqueFamily();
+        const used = await newToken(store, u.id, fam);
+        await store.refreshTokens.consume(used.id, T0);
+        const fresh = await newToken(store, u.id, fam);
+        expect(await store.refreshTokens.revokeFamily(fam, T0)).toBe(2);
+        expect((await store.refreshTokens.findByHash(used.tokenHash))?.revokedAt).not.toBeNull();
+        expect(await store.refreshTokens.consume(fresh.id, T0)).toBe(false);
+      });
+
+      it("revokes every token of one user and no other user's", async () => {
+        const store = await makeStore();
+        const a = await newUser(store, "rt-user-a");
+        const b = await newUser(store, "rt-user-b");
+        const a1 = await newToken(store, a.id);
+        const a2 = await newToken(store, a.id);
+        const b1 = await newToken(store, b.id);
+        expect(await store.refreshTokens.revokeAllForUser(a.id, T0)).toBe(2);
+        expect((await store.refreshTokens.findByHash(a1.tokenHash))?.revokedAt).not.toBeNull();
+        expect((await store.refreshTokens.findByHash(a2.tokenHash))?.revokedAt).not.toBeNull();
+        expect((await store.refreshTokens.findByHash(b1.tokenHash))?.revokedAt).toBeNull();
+        expect(await store.refreshTokens.revokeAllForUser(a.id, T0)).toBe(0);
+      });
+
+      it("returns 0 when revoking an unknown family or user", async () => {
+        const store = await makeStore();
+        expect(await store.refreshTokens.revokeFamily("no-such-family", T0)).toBe(0);
+        expect(await store.refreshTokens.revokeAllForUser("no-such-user", T0)).toBe(0);
+      });
+
+      it("does not let a caller change stored data through a returned record or a passed-in date", async () => {
+        const store = await makeStore();
+        const u = await newUser(store, "rt-copy");
+        const expiry = new Date(EXPIRY);
+        const t = await store.refreshTokens.create({
+          userId: u.id,
+          familyId: uniqueFamily(),
+          tokenHash: uniqueHash(),
+          expiresAt: expiry,
+        });
+        // Change the date we passed in, and the record that create returned.
+        expiry.setFullYear(2000);
+        t.revokedAt = new Date();
+        t.usedAt = new Date();
+        t.expiresAt.setFullYear(2000);
+        // Change a record that findByHash returned.
+        const found = await store.refreshTokens.findByHash(t.tokenHash);
+        if (!found) throw new Error("token not found");
+        found.revokedAt = new Date();
+        found.usedAt = new Date();
+        found.expiresAt.setFullYear(2000);
+        // The stored data is unchanged.
+        const again = await store.refreshTokens.findByHash(t.tokenHash);
+        expect(again?.revokedAt).toBeNull();
+        expect(again?.usedAt).toBeNull();
+        expect(again?.expiresAt.getTime()).toBe(EXPIRY.getTime());
+      });
     });
   });
 }

@@ -2,14 +2,15 @@
 
 ## Step 2.3e (size M), 2026-10-15: sign-in lockout
 
-**Works (not verified anywhere; I ran nothing in this chat):** columns `User.failedLoginCount` and `User.lockedUntil`, migration `20261015130000_sign_in_lockout` (hand-written, like A-36). `getLockout`, `recordFailedLogin`, `clearLockout` on `UserStore` and in both adapters. `authenticate` takes an optional `now`, locks after 5 failures for 900 seconds, writes `account.locked`, refuses a locked user with reason `locked`, resets the count on success. Expected `npm run check`: 13 test files, 364 tests.
+**Works (verified on your machine, output pasted: `migrate deploy` applied the migration, `migrate dev` "Already in sync", `npm run check` clean, 13 files, 364 tests; I ran nothing in my sandbox):** columns `User.failedLoginCount` and `User.lockedUntil`, migration `20261015130000_sign_in_lockout` (hand-written, like A-36). `getLockout`, `recordFailedLogin`, `clearLockout` on `UserStore` and in both adapters. `authenticate` takes an optional `now`, locks after 5 failures for 900 seconds, writes `account.locked`, refuses a locked user with reason `locked`, resets the count on success. Expected `npm run check`: 13 test files, 364 tests.
 **Stubbed:** no route. Nothing calls `authenticate` yet. No manual unlock. No per-IP limit.
 **Tests:** 31 new by my count: 10 contract cases per adapter (20, in `test/helpers/lockout-contract.ts`, called from `store-contract.ts`) and 11 in `test/lockout.test.ts`.
-**Not verified:** everything. No break-on-purpose run (owed; security code). The hand-written migration against the real Prisma engine. `test/sessions.test.ts` (not seen) may build a `UserStore` by hand and fail to type-check.
+**Not verified:** no break-on-purpose run (owed; security code). The lockout race behaviour on a server database (A-44). Real timing of a locked sign-in (the test only counts that a hash is checked).
 **Found along the way:**
 1. `TRACEABILITY.md` was not seen in this chat, so it was not updated. It is in `NEXT_FILES.txt`.
 2. `DATA_MODEL.md` says lockout fields arrive in Phase 2. It now lists them.
-3. The existing auth tests build stores with `...store.users` or `users: base.users`, so I expect them to pass unchanged. This is not verified.
+3. The existing auth tests and `test/sessions.test.ts` passed unchanged (verified on your machine).
+4. The hand-written migration matches the schema: `migrate dev` reported "Already in sync" (same result as A-36).
 
 ## Step 2.3d-docs (size S), 2026-10-15: docs formatting fix
 

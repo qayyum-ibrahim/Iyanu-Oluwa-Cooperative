@@ -8,7 +8,5 @@ server/.env.example
 server/vitest.config.ts
 server/test/health.test.ts
 server/test/sessions.test.ts
-server/test/memory-store.test.ts
-server/test/prisma-store.test.ts
 docs/TRACEABILITY.md
 docs/DEV_SETUP.md

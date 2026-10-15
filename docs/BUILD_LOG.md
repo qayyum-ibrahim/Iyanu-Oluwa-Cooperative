@@ -1,9 +1,22 @@
 # Build log (newest first)
 
+## Step 2.2a (size M), 2026-10-14: permission table
+**Works (verified in my sandbox, Node v22.22.0, npm 10.9.4; your check pending):** `server/src/permissions.ts`: `PERMISSION_TABLE` (22 permissions), `isPermission`, `hasPermission`, `canGrant`, `normalizeStaffGrants`, `PermissionGrantError`. Typecheck clean and 38 tests pass in an isolated project (typescript 6.0.3, vitest 5.0.4, @types/node 22.20.5, the real tsconfig options, a stub `store.ts` with only `Role`). Expected `npm run check`: 9 test files, 160 tests.
+**Stubbed:** no route or guard uses the table. No staff accounts. No stored staff permission lists.
+**Tests:** 38 new in `test/permissions.test.ts` (table 4, matrix 6, hasPermission edge cases 4, canGrant 5, normalizeStaffGrants 19). Expected total 160.
+**Break on purpose (sandbox):** 18 deliberate bugs, each caught: inactive check removed (4 failed), staffGrantable ignored (3), Staff always allowed (4), unknown permission not checked (1, also a type error), unknown role not refused (1), users.manage made grantable (6), payoff.process removed (8), key typo (6), isPermission accepts any string (3), canGrant without users.manage check (2), canGrant without staffGrantable check (2), upfront actor check removed (1), canGrant check removed in normalize (1), isArray check removed (4), table order lost (3), no dedupe (1), unknown entries skipped (6), error message echoes input (1). Code restored, 38 pass.
+**Not verified:** lint (I have not seen `eslint.config.js`). Anything on your machine. The owed break-on-purpose runs for steps 1.4 and 2.1b (planned for 2.3a).
+**Found along the way:**
+1. My mistake: STATUS and BUILD_LOG said 120 tests for step 2.1b. Your pasted output shows 122 (110 + 12). Corrected below.
+2. Step 2.1b is now verified on your machine: 8 files, 122 tests; the setup script created the owner, and a second run refused with "A Super Admin already exists. Nothing was changed."
+3. I first gave permissions a `restricted` flag for `loans.disburse` and `payoff.process`. No test can reach that branch, because only the Super Admin holds `users.manage`. I removed it. DR-14 holds by construction and tests pin it (A-26).
+4. No live check applies: no route uses the table yet.
+5. `mirror/DECISIONS.md` is still stale, and the D-20 and D-21 formatting is still garbled in the copy I was shown. It may be a paste artifact. Fixing it needs a whole-file replacement. Say "fix decisions" and I do it as a small step.
+
 ## Step 2.1b (size M), 2026-10-14: owner setup script
-**Works (expected; not verified, I ran nothing in my sandbox):** `hasSuperAdmin` on the Store interface, `memory-store.ts` and `prisma-store.ts`. `src/owner.ts` (`createOwner`, `OwnerAlreadyExistsError`). `src/setup-owner.ts` and `npm run setup:owner`. Expected `npm run check`: 8 test files, 120 tests.
+**Works (verified on your machine, output pasted: 8 files, 122 tests; owner script created the owner once and refused the second run; I ran nothing in my sandbox):** `hasSuperAdmin` on the Store interface, `memory-store.ts` and `prisma-store.ts`. `src/owner.ts` (`createOwner`, `OwnerAlreadyExistsError`). `src/setup-owner.ts` and `npm run setup:owner`. Expected `npm run check`: 8 test files, 122 tests.
 **Stubbed:** no route uses `createOwner`. No sign-in yet.
-**Tests:** 12 new: 2 contract cases (1 per adapter, on a fresh empty store) and 10 in `test/owner.test.ts`. Total 120.
+**Tests:** 12 new: 2 contract cases (1 per adapter, on a fresh empty store) and 10 in `test/owner.test.ts`. Total 122.
 **Not verified:** everything above until the owner pastes the check output and the live-check output. The no-echo password prompt. A break-on-purpose run (not done; this is security code, so it is owed).
 **Found along the way:**
 1. The Prisma contract shares one database, so "no Super Admin yet" could not be tested there. `runStoreContract` now takes a third argument that gives a fresh empty store. The Prisma file builds one extra temporary database for it.

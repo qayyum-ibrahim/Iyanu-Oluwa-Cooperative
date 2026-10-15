@@ -1,9 +1,12 @@
-legacy-prototype/src/App.jsx
+server/package.json
+server/eslint.config.js
+server/vitest.config.ts
 server/src/store.ts
+server/src/memory-store.ts
+server/src/email.ts
+server/src/password.ts
 server/src/owner.ts
-server/src/app.ts
-server/tsconfig.json
-server/prisma/schema.prisma
+server/src/permissions.ts
+server/test/owner.test.ts
 docs/DECISIONS.md
 docs/TRACEABILITY.md
-docs/DEV_SETUP.md

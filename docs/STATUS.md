@@ -1,19 +1,19 @@
 # Project status
-Last updated: after step 2.1b
+Last updated: after step 2.2a
 
 ## Where we stopped
-Step 2.1b done: `hasSuperAdmin` in the Store (both adapters and the shared contract), `createOwner` logic (`src/owner.ts`) and the terminal script `npm run setup:owner` (`src/setup-owner.ts`). 12 new tests. `npm run check` expected: 120 tests. Live check: the script creates the owner once and refuses the second time. Next: step 2.2a.
+Step 2.2a done: `server/src/permissions.ts` (permission table of 22, `hasPermission`, `canGrant`, `normalizeStaffGrants`) and `test/permissions.test.ts` (38 tests). Step 2.1b is verified on the owner's machine (122 tests; owner script created the owner once and refused a second run). `npm run check` expected after 2.2a: 9 test files, 160 tests (not yet verified on the owner's machine). Lint of the new files not yet run. Next: step 2.3a.
 
 ## Next step brief
-Step 2.2a (M): the permission table. One list of named permissions, one table of which role has which, and a test that tries every role against every permission (OQ-13 default: the ZIP's 20 permissions plus `loans.disburse` and `payoff.process`). Pure logic, no database. Say "continue" to start it.
+Step 2.3a (M): sign-in logic. A pure `authenticate(store, email, password)`: normalise the email, give the same failure for an unknown email and a wrong password, refuse inactive users, write `login.success` and `login.failure` audit entries. No tokens and no routes yet (later steps). Also does the break-on-purpose run owed for steps 1.4 and 2.1b. Say "continue" to start it.
 Owner inputs needed:
 1. Nothing by hand if `docs/NEXT_FILES.txt` lists the needed files. Check that the pack shows them under `===== FILE: path =====` headings.
-2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-24).
-3. Optional: answer OQ-13 (final staff permission list) now. If you do not, the default stands.
+2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-25).
+3. Optional: answer OQ-13 (final staff permission list). If you do not, the default stands.
 Stable docs are in Project knowledge, folder `mirror/`.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 120 tests (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No sign-in, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module or the owner logic.
+Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), permission table (`src/permissions.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 160 tests expected (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No sign-in, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module, the owner logic or the permission table.
 
 ## Settings (names only)
 `PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`). Planned: token or session secrets. Values never go in git. The owner email and password are typed when the script runs.
@@ -32,11 +32,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.2a (M) Permission table and role × permission test.
-- Then sign-in (login, tokens), staff accounts, audit log writes for sensitive actions.
+- 2.3a (M) Sign-in logic and the owed break-on-purpose run for 1.4 and 2.1b.
+- Then tokens and sign-in routes, staff accounts, route guards, audit writes for sensitive actions.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-24. A-22, A-23, A-24 and A-25 are Claude's choices. No break-on-purpose run for steps 1.4 and 2.1b (the 2.1b run was not done; do it at the start of Phase 9 or when sign-in is built). The no-echo password prompt is verified only by the owner's live check. The numbering in TRACEABILITY.md skips R-25; I did not fill it.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-25. A-22 to A-27 are Claude's choices. Break-on-purpose runs for steps 1.4 and 2.1b are still owed (2.3a). The no-echo password prompt is verified only by the owner's live check. `mirror/DECISIONS.md` is stale, and the D-20 and D-21 formatting is garbled in the copy I was shown (a whole-file fix is pending: say "fix decisions"). TRACEABILITY.md skips R-25; I did not fill it. Lint of `permissions.ts` and its test is not yet verified.
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

@@ -147,7 +147,7 @@ export function hashRefreshToken(token: string): string {
 
 /**
  * Makes a new refresh token from 32 random bytes. Give `token` to the client once.
- * Store `hash` only. Rotation and storage come in step 2.3c.
+ * Store `hash` only. Storage is in the Store; rotation is in sessions.ts.
  */
 export function createRefreshToken(): { token: string; hash: string } {
   const token = randomBytes(32).toString("base64url");

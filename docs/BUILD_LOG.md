@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 2.3d (size M), 2026-10-15: session logic
+
+**Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/sessions.ts`: `issueSession`, `refreshSession`, `signOut`, `SessionError`, `REFRESH_TOKEN_SECONDS` (7 days). Reuse of a used token revokes its family and writes `session.reuse_detected`. Sign-out revokes the family and writes `session.logout`. Inactive or missing user: all tokens revoked. Lost race: fails, no revoke (A-40). Expected `npm run check`: 12 test files, 333 tests.
+**Stubbed:** no route, no lockout. Nothing calls `sessions.ts` yet.
+**Tests:** 38 new in `test/sessions.test.ts` (issue 11, refresh 16, sign-out 8, audit rules 3), by my count.
+**Not verified:** everything. No break-on-purpose run (owed; security code). The race test relies on lockstep async steps on the memory store.
+**Found along the way:**
+1. 2.3c is verified on the owner's machine: 11 files, 295 tests, `migrate deploy` applied, `migrate dev` "Already in sync" (A-36 settled). Commit 6d49656, pushed.
+2. D-27 still says rotation comes in 2.3c. The real split is storage 2.3c, rotation 2.3d (D-28). D-29 notes this.
+3. The stale comment in `tokens.ts` is fixed in this step.
+4. My first design revoked the family on a lost race. I dropped it: the winner's new token could be created after the revoke and survive.
+
 ## Step 2.3c (size M), 2026-10-15: refresh-token storage
 **Works (verified in my sandbox, Node v22.22.0, isolated project with the exact pins and real tsconfig and ESLint config: typecheck clean, lint clean, 128 tests = 74 tokens + 27 contract per adapter; the Prisma contract ran on migration SQL applied by hand with better-sqlite3, not through `prisma migrate deploy`):** table `RefreshToken`, migration `20261015090000_refresh_tokens` (hand-written, A-36), `RefreshTokenStore` (create, findByHash, consume, revokeFamily, revokeAllForUser) on the interface and in both adapters, 15 new contract cases per adapter. Expected `npm run check`: 11 test files, 295 tests.
 **Stubbed:** no rotation logic, no route, no lockout. Nothing calls `refreshTokens` yet.

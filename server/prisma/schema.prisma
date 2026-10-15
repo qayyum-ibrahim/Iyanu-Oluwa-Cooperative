@@ -1,4 +1,4 @@
-// Database schema. Users, the audit log and refresh tokens (step 2.3c).
+// Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e).
 // Money tables arrive in Phase 3 and later. Money columns will be BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -20,16 +20,18 @@ enum Role {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  passwordHash  String
-  displayName   String
-  role          Role           @default(STAFF)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
+  id               String         @id @default(uuid())
+  email            String         @unique
+  passwordHash     String
+  displayName      String
+  role             Role           @default(STAFF)
+  isActive         Boolean        @default(true)
+  failedLoginCount Int            @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  auditLogs        AuditLog[]
+  refreshTokens    RefreshToken[]
 }
 
 model AuditLog {

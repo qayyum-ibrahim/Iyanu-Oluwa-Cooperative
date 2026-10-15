@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   type AuditRecord,
+  type LockoutState,
   type RefreshTokenRecord,
   type Store,
   type UserRecord,
@@ -13,6 +14,10 @@ import {
 const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
 const copyUser = (u: UserRecord): UserRecord => ({ ...u, createdAt: new Date(u.createdAt) });
 const copyAudit = (a: AuditRecord): AuditRecord => ({ ...a, createdAt: new Date(a.createdAt) });
+const copyLockout = (l: LockoutState): LockoutState => ({
+  failedCount: l.failedCount,
+  lockedUntil: copyDate(l.lockedUntil),
+});
 const copyToken = (t: RefreshTokenRecord): RefreshTokenRecord => ({
   ...t,
   createdAt: new Date(t.createdAt),
@@ -24,6 +29,7 @@ const copyToken = (t: RefreshTokenRecord): RefreshTokenRecord => ({
 /** In-memory adapter for tests. Nothing is saved to disk. */
 export function createMemoryStore(): Store {
   const users = new Map<string, UserRecord>();
+  const lockouts = new Map<string, LockoutState>();
   const audit: AuditRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
@@ -71,6 +77,29 @@ export function createMemoryStore(): Store {
           if (u.role === "SUPER_ADMIN") return true;
         }
         return false;
+      },
+      async getLockout(userId) {
+        if (!users.has(userId)) return null;
+        return copyLockout(lockouts.get(userId) ?? { failedCount: 0, lockedUntil: null });
+      },
+      async recordFailedLogin(userId, now, maxFailures, lockSeconds) {
+        // No await in this method, so it cannot be interleaved with another call.
+        if (!users.has(userId)) throw new UnknownUserError(userId);
+        let state = lockouts.get(userId) ?? { failedCount: 0, lockedUntil: null };
+        if (state.lockedUntil !== null && state.lockedUntil.getTime() <= now.getTime()) {
+          state = { failedCount: 0, lockedUntil: null };
+        }
+        if (state.lockedUntil === null) {
+          state = { failedCount: state.failedCount + 1, lockedUntil: null };
+          if (state.failedCount >= maxFailures) {
+            state.lockedUntil = new Date(now.getTime() + lockSeconds * 1000);
+          }
+        }
+        lockouts.set(userId, state);
+        return copyLockout(state);
+      },
+      async clearLockout(userId) {
+        lockouts.delete(userId);
       },
     },
     audit: {

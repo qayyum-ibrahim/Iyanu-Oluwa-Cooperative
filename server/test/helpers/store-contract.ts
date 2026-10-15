@@ -6,6 +6,7 @@ import {
   UnknownUserError,
   type Store,
 } from "../../src/store.js";
+import { runLockoutContract } from "./lockout-contract.js";
 
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
@@ -358,5 +359,7 @@ export function runStoreContract(
         expect(again?.expiresAt.getTime()).toBe(EXPIRY.getTime());
       });
     });
+
+    runLockoutContract(makeStore);
   });
 }

@@ -21,6 +21,14 @@ export interface NewUser {
   role?: Role;
 }
 
+/** Sign-in lockout state of one user (D-30). Kept apart from UserRecord on purpose. */
+export interface LockoutState {
+  /** Failed sign-ins in a row. Reset by a correct password or when a lock has expired. */
+  failedCount: number;
+  /** While this is in the future, the user cannot sign in. Null when not locked. */
+  lockedUntil: Date | null;
+}
+
 export interface AuditRecord {
   id: string;
   createdAt: Date;
@@ -98,6 +106,25 @@ export interface UserStore {
   findById(id: string): Promise<UserRecord | null>;
   /** True if any user has role SUPER_ADMIN, active or not. Staff do not count. */
   hasSuperAdmin(): Promise<boolean>;
+  /**
+   * The lockout state of a user, or null if there is no such user.
+   * A lock that has expired is still reported as stored: the caller compares lockedUntil with its clock.
+   */
+  getLockout(userId: string): Promise<LockoutState | null>;
+  /**
+   * Counts one failed sign-in and returns the new state. Throws UnknownUserError for an unknown user.
+   * - A lock that has expired (lockedUntil <= now) is cleared first, so counting starts again at 1.
+   * - While locked (lockedUntil > now) nothing changes.
+   * - When the count reaches maxFailures, lockedUntil becomes now + lockSeconds.
+   */
+  recordFailedLogin(
+    userId: string,
+    now: Date,
+    maxFailures: number,
+    lockSeconds: number,
+  ): Promise<LockoutState>;
+  /** Sets the count to 0 and removes any lock. Does nothing for an unknown user. */
+  clearLockout(userId: string): Promise<void>;
 }
 
 export interface AuditStore {

@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   type AuditRecord,
+  type LockoutState,
   type RefreshTokenRecord,
   type Store,
   type UserRecord,
@@ -45,8 +46,19 @@ const toToken = (r: RefreshTokenRecord): RefreshTokenRecord => ({
   revokedAt: r.revokedAt,
 });
 
+const toLockout = (r: { failedLoginCount: number; lockedUntil: Date | null }): LockoutState => ({
+  failedCount: r.failedLoginCount,
+  lockedUntil: r.lockedUntil,
+});
+
 /** Real adapter: stores data through Prisma. */
 export function createPrismaStore(prisma: PrismaClient): Store {
+  const readLockout = (userId: string) =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { failedLoginCount: true, lockedUntil: true },
+    });
+
   return {
     users: {
       async create(input) {
@@ -79,6 +91,41 @@ export function createPrismaStore(prisma: PrismaClient): Store {
           select: { id: true },
         });
         return row !== null;
+      },
+      async getLockout(userId) {
+        const row = await readLockout(userId);
+        return row ? toLockout(row) : null;
+      },
+      async recordFailedLogin(userId, now, maxFailures, lockSeconds) {
+        // Each statement has its own condition in its WHERE, so the database settles races.
+        // 1. A lock that has expired is cleared.
+        await prisma.user.updateMany({
+          where: { id: userId, lockedUntil: { lte: now } },
+          data: { failedLoginCount: 0, lockedUntil: null },
+        });
+        // 2. Count one failure, but only while not locked. The increment is atomic.
+        await prisma.user.updateMany({
+          where: { id: userId, lockedUntil: null },
+          data: { failedLoginCount: { increment: 1 } },
+        });
+        let row = await readLockout(userId);
+        if (!row) throw new UnknownUserError(userId);
+        // 3. Lock when the count has reached the limit (only if not already locked).
+        if (row.lockedUntil === null && row.failedLoginCount >= maxFailures) {
+          await prisma.user.updateMany({
+            where: { id: userId, lockedUntil: null },
+            data: { lockedUntil: new Date(now.getTime() + lockSeconds * 1000) },
+          });
+          row = await readLockout(userId);
+          if (!row) throw new UnknownUserError(userId);
+        }
+        return toLockout(row);
+      },
+      async clearLockout(userId) {
+        await prisma.user.updateMany({
+          where: { id: userId },
+          data: { failedLoginCount: 0, lockedUntil: null },
+        });
       },
     },
     audit: {

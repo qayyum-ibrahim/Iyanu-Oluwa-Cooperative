@@ -1,22 +1,23 @@
 # Project status
-Last updated: after step 2.2a
+Last updated: after step 2.3a
 
 ## Where we stopped
-Step 2.2a done: `server/src/permissions.ts` (permission table of 22, `hasPermission`, `canGrant`, `normalizeStaffGrants`) and `test/permissions.test.ts` (38 tests). Step 2.1b is verified on the owner's machine (122 tests; owner script created the owner once and refused a second run). `npm run check` expected after 2.2a: 9 test files, 160 tests (not yet verified on the owner's machine). Lint of the new files not yet run. Next: step 2.3a.
+Step 2.3a done: `server/src/auth.ts` (`authenticate`: same failure for every kind of failure, `login.success` and `login.failure` audit entries, inactive users refused, fail closed if the audit write fails) and `test/auth.test.ts` (31 tests). Step 2.2a is verified on the owner's machine (9 files, 160 tests, commit d10b19e, pushed). The break-on-purpose run owed for 2.1b is done in my sandbox (9 bugs caught). `npm run check` expected after 2.3a: 10 test files, 191 tests (not yet verified on the owner's machine). Next: step 2.3b.
 
 ## Next step brief
-Step 2.3a (M): sign-in logic. A pure `authenticate(store, email, password)`: normalise the email, give the same failure for an unknown email and a wrong password, refuse inactive users, write `login.success` and `login.failure` audit entries. No tokens and no routes yet (later steps). Also does the break-on-purpose run owed for steps 1.4 and 2.1b. Say "continue" to start it.
+Step 2.3b (M): session tokens as a pure module (no routes yet). A short-lived access token and a rotating refresh token, with the signing secret read from a setting. Details are chosen at the step and recorded in DECISIONS. Then 2.3c: sign-in lockout. Say "continue" to start 2.3b.
 Owner inputs needed:
-1. Nothing by hand if `docs/NEXT_FILES.txt` lists the needed files. Check that the pack shows them under `===== FILE: path =====` headings.
-2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-25).
+1. Run `npm run check` in `server/` and the live check from the 2.3a message. Paste the last lines. Then commit.
+2. Replace `mirror/DECISIONS.md` in Project knowledge with `docs/DECISIONS.md` (now D-01 to D-26).
 3. Optional: answer OQ-13 (final staff permission list). If you do not, the default stands.
+4. Optional: say "fix decisions" (D-20 and D-21 formatting).
 Stable docs are in Project knowledge, folder `mirror/`.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), permission table (`src/permissions.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 160 tests expected (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No sign-in, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module, the owner logic or the permission table.
+Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), money module (`src/money.ts`), password module (`src/password.ts`), email module (`src/email.ts`), owner logic (`src/owner.ts`), owner setup script (`src/setup-owner.ts`), permission table (`src/permissions.ts`), sign-in logic (`src/auth.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`, config files and 191 tests expected (shared helpers in `test/helpers/`). Route: `GET /health`. One owner can be created by script. No token, no sign-in route, no staff accounts, no UI code yet. No route uses the money module, the store, the password module, the email module, the owner logic, the permission table or `authenticate`.
 
 ## Settings (names only)
-`PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`). Planned: token or session secrets. Values never go in git. The owner email and password are typed when the script runs.
+`PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`). Planned: token signing secret (name chosen at 2.3b). Values never go in git. The owner email and password are typed when the script runs.
 
 ## Commands
 Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run check`, `npm start`.
@@ -32,11 +33,12 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.3a (M) Sign-in logic and the owed break-on-purpose run for 1.4 and 2.1b.
-- Then tokens and sign-in routes, staff accounts, route guards, audit writes for sensitive actions.
+- 2.3b (M) Session tokens (pure module).
+- 2.3c (S or M) Sign-in lockout.
+- Then sign-in routes, staff accounts (stored permission list), route guards, audit writes for sensitive actions.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-25. A-22 to A-27 are Claude's choices. Break-on-purpose runs for steps 1.4 and 2.1b are still owed (2.3a). The no-echo password prompt is verified only by the owner's live check. `mirror/DECISIONS.md` is stale, and the D-20 and D-21 formatting is garbled in the copy I was shown (a whole-file fix is pending: say "fix decisions"). TRACEABILITY.md skips R-25; I did not fill it. Lint of `permissions.ts` and its test is not yet verified.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-26. A-22 to A-30 are Claude's choices or checks. The break-on-purpose run for step 1.4 (database schema) is still owed: it needs the real Prisma engine, so it must run on the owner's machine or in a later step. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). Sign-in lockout is not built (2.3c). The no-echo password prompt is verified only by the owner's live check. `mirror/DECISIONS.md` is stale, and the D-20 and D-21 formatting is garbled in the copy I was shown (a whole-file fix is pending: say "fix decisions"). TRACEABILITY.md skips R-25; I did not fill it. I have not seen `server/tsconfig.json` in this chat; typecheck of the new files was run in my sandbox with my own approximation.
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

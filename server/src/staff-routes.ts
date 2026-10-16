@@ -12,7 +12,9 @@ import {
 } from "./guards.js";
 import {
   createStaff,
+  deactivateStaff,
   listStaff,
+  reactivateStaff,
   setStaffPermissions,
   type StaffActor,
   type StaffFailure,
@@ -107,6 +109,24 @@ export function createStaffRouter(deps: GuardDeps): Router {
     }
     res.status(200).json({ staff: viewJson(result.value) });
   });
+
+  const activeRoute =
+    (run: typeof deactivateStaff): express.RequestHandler =>
+    async (req, res) => {
+      const actor = actorOf(res);
+      if (actor === null) {
+        sendUnauthorized(res);
+        return;
+      }
+      const result = await run(deps.store, actor, req.params["id"], deps.now());
+      if (!result.ok) {
+        sendFailure(res, result.reason);
+        return;
+      }
+      res.status(200).json({ staff: viewJson(result.value) });
+    };
+  router.post("/:id/deactivate", activeRoute(deactivateStaff));
+  router.post("/:id/reactivate", activeRoute(reactivateStaff));
 
   return router;
 }

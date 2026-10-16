@@ -17,7 +17,7 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 | Reset the dev database | delete `server/dev.db`, then `npm run db:deploy` |
 
 ## Routes
-`GET /health` is live. `POST /auth/login`, `/auth/refresh` and `/auth/logout` are served and live-checked (2.4b). `GET /auth/me` needs the header `Authorization: Bearer <access token>` and returns the user and the permissions held. `/staff` (2.5b) needs the same header and the `users.manage` permission, so only the Super Admin: `POST /staff` (create), `GET /staff` (list), `PUT /staff/:id/permissions` (replace the list). Guards for data routes are in `server/src/guards.ts`: `requireAuth` (401), then `requirePermission` (403). Live check: `sh scripts/live-check-auth.sh` with the server running; it creates one fictional staff account per run.
+`GET /health` is live. `POST /auth/login`, `/auth/refresh` and `/auth/logout` are served and live-checked (2.4b). `GET /auth/me` needs the header `Authorization: Bearer <access token>` and returns the user and the permissions held. `/staff` (2.5b) needs the same header and the `users.manage` permission, so only the Super Admin: `POST /staff` (create), `GET /staff` (list), `PUT /staff/:id/permissions` (replace the list), `POST /staff/:id/deactivate` and `POST /staff/:id/reactivate` (2.5c; deactivating ends the account's sessions at once). Guards for data routes are in `server/src/guards.ts`: `requireAuth` (401), then `requirePermission` (403). Live check: `sh scripts/live-check-auth.sh` with the server running; it creates one fictional staff account per run.
 
 ## Rules
 - Versions in `package.json` are exact. Change one only in a step that says so. Commit `package-lock.json`.

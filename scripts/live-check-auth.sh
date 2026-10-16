@@ -117,6 +117,31 @@ expect "users.manage cannot be granted" "$code" 400
 code=$(authed_send PUT "/staff/$SID/permissions" "$SAT")
 expect "staff cannot change permissions" "$code" 403
 
+# --- deactivate and reactivate staff (step 2.5c) ---
+printf '%s' '{}' > "$REQ"
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "staff second login" "$code" 200
+SAT=$(field accessToken)
+SRT=$(field refreshToken)
+code=$(authed_send POST "/staff/$SID/deactivate" "$SAT")
+expect "staff cannot deactivate" "$code" 403
+code=$(authed_send POST "/staff/$SID/deactivate" "$AT")
+expect "owner deactivates staff" "$code" 200
+expect "staff isActive false" "$(pick staff.isActive)" false
+code=$(get_me "$SAT")
+expect "deactivated access token refused" "$code" 401
+code=$(token_json "$SRT" | send /auth/refresh)
+expect "deactivated refresh token refused" "$code" 401
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "deactivated login refused" "$code" 401
+code=$(authed_send POST "/staff/$SID/reactivate" "$AT")
+expect "owner reactivates staff" "$code" 200
+expect "staff isActive true" "$(pick staff.isActive)" true
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "login after reactivation" "$code" 200
+code=$(authed_send POST "/staff/no-such-id/deactivate" "$AT")
+expect "deactivate unknown id" "$code" 404
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

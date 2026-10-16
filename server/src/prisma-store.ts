@@ -19,7 +19,7 @@ function hasCode(e: unknown, code: string): boolean {
 type UserRow = Omit<UserRecord, "permissions"> & { permissions: string };
 
 /** Reads the stored permission text. Anything that is not a JSON list of strings reads as empty (fail closed). */
-function parsePermissions(raw: string): string[] {
+export function parsePermissions(raw: string): string[] {
   try {
     const value: unknown = JSON.parse(raw);
     if (Array.isArray(value)) {
@@ -113,6 +113,13 @@ export function createPrismaStore(prisma: PrismaClient): Store {
         const result = await prisma.user.updateMany({
           where: { id: userId },
           data: { permissions: JSON.stringify([...permissions]) },
+        });
+        return result.count === 1;
+      },
+      async setActive(userId, isActive) {
+        const result = await prisma.user.updateMany({
+          where: { id: userId },
+          data: { isActive },
         });
         return result.count === 1;
       },

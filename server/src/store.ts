@@ -118,6 +118,11 @@ export interface UserStore {
    * The list is saved exactly as given (cleaning is the logic code's job).
    */
   setPermissions(userId: string, permissions: readonly string[]): Promise<boolean>;
+  /**
+   * Sets isActive. Returns false if there is no such user. It does not touch tokens or the
+   * lockout state: ending sessions is the logic code's job (staff.ts).
+   */
+  setActive(userId: string, isActive: boolean): Promise<boolean>;
   /** True if any user has role SUPER_ADMIN, active or not. Staff do not count. */
   hasSuperAdmin(): Promise<boolean>;
   /**

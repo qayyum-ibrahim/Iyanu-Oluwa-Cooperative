@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 2.5c (size M), 2026-10-16: deactivate and reactivate staff, parsePermissions tests
+
+**Works (not verified yet; I ran nothing in my sandbox):** `UserStore.setActive` in the Store and both adapters. `deactivateStaff` and `reactivateStaff` in `staff.ts`. `POST /staff/:id/deactivate` and `/reactivate` in `staff-routes.ts`. Deactivating ends all of the account's refresh tokens and writes `staff.deactivated` (detail `tokens_revoked=N`); reactivating writes `staff.reactivated`. `parsePermissions` is exported and unit-tested. Expected `npm run check`: 20 test files, 584 tests. Expected live check: 44 passed.
+**Stubbed:** no change-password or reset (2.5d, 2.5e). No audit viewer. A deactivated Super Admin is not possible here (A-60).
+**Tests:** 52 new by my count: `test/helpers/active-contract.ts` 5 cases x 2 adapters = 10, `test/parse-permissions.test.ts` 12, `test/staff-active.test.ts` 30 (deactivate 12, reactivate 5, list 1, routes 12).
+**Not verified:** everything. Break-on-purpose runs P1 to P5 and S1 to S7 are listed in the 2.5c message and not yet run.
+**Found along the way:**
+1. 2.5b is verified on the owner's machine (5a1b368: 18 files, 532 tests, live check 33) and its break-on-purpose run is done (7 of 7 caught). STATUS and TRACEABILITY still said "not verified"; fixed here.
+2. The owner asked for a change-password or reset-password step. Added to the plan as 2.5d and 2.5e (OQ-15). Defaults recorded, details await the owner.
+3. The `parsePermissions` run was owed because only the Prisma suite could reach it. It is now exported and tested as a pure function. P4 is expected to be an equivalent mutant (the try block also catches the error).
+4. The `mirror/DECISIONS.md` copy ends at D-34, as the repo did. It must get D-35 by hand.
+
 ## Step 2.5b (size M), 2026-10-16: staff accounts and stored permissions
 
 **Works (verified on your machine: `db:deploy` applied the migration, `migrate dev` "Already in sync", `npm run check` clean, 18 files, 532 tests; live check "33 passed, 0 failed"; commit 5a1b368; I ran nothing in my sandbox):** `User.permissions` column and migration `20261016120000_user_permissions` (hand-written, like A-36). `UserRecord.permissions`, `NewUser.permissions`, `list()` and `setPermissions()` in the Store and both adapters. `server/src/staff.ts` (`createStaff`, `listStaff`, `setStaffPermissions`), `server/src/staff-routes.ts` (`POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`), mounted in `app.ts`. `subjectOf` in `guards.ts` now reads the stored list. Expected `npm run check`: 18 test files, 532 tests. Expected live check: 33 passed.

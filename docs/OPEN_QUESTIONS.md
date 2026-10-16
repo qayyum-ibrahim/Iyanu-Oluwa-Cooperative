@@ -18,3 +18,4 @@
 | OQ-12 | Any real data in anyone's browser (`iyanu_oluwa_react_v2`)? | Owner | Phase 10 | No real data |
 | OQ-13 | Final staff permission list. Answered 2026-10-16: the default (the 22 permissions in `permissions.ts`) | Owner | Closed | n/a |
 | OQ-14 | Are non-refundable balances (e.g. Development Levy) shown on the member profile? | Owner | Phase 3 | Shown under "Retained by cooperative", not counted in payout |
+| OQ-15 | Change-password design. The owner asked for a change-password or reset-password step on 2026-10-16 but gave no details. | Owner | Step 2.5d | Proposed default: a signed-in user changes their own password by giving the current one (all their sessions end); the Super Admin sets a new password for a Staff account (their sessions end); a forgotten owner password is reset by a terminal script (2.5e). No email links, no forced change on next sign-in. |

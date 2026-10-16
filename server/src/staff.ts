@@ -175,3 +175,62 @@ export async function setStaffPermissions(
   if (updated === null) return failure("not_found");
   return { ok: true, value: toView(updated) };
 }
+
+async function setStaffActive(
+  store: Store,
+  actor: StaffActor,
+  userId: unknown,
+  active: boolean,
+  now: Date,
+): Promise<StaffResult<StaffView>> {
+  if (!mayManage(actor)) return failure("forbidden");
+  if (typeof userId !== "string" || userId.length === 0) return failure("not_found");
+  const user = await store.users.findById(userId);
+  // A Super Admin id is not_found: this does not deactivate owners (A-24, A-60).
+  if (user === null || user.role !== "STAFF") return failure("not_found");
+  // Already in the wanted state: nothing to change, revoke or audit (A-59).
+  if (user.isActive === active) return { ok: true, value: toView(user) };
+
+  if (!(await store.users.setActive(user.id, active))) return failure("not_found");
+  // Order matters for safety: the account is closed first, then its sessions end, then the
+  // audit entry is written. If a later call fails, the account is already refused (A-58).
+  const revoked = active ? 0 : await store.refreshTokens.revokeAllForUser(user.id, now);
+  await store.audit.append({
+    actorId: actor.id,
+    action: active ? "staff.reactivated" : "staff.deactivated",
+    entityType: "User",
+    entityId: user.id,
+    ...(active ? {} : { detail: `tokens_revoked=${revoked}` }),
+  });
+  const updated = await store.users.findById(user.id);
+  if (updated === null) return failure("not_found");
+  return { ok: true, value: toView(updated) };
+}
+
+/**
+ * Makes a Staff account inactive, ends all its sessions (refresh tokens) and writes
+ * "staff.deactivated" (actor = the caller, detail: how many tokens were revoked).
+ * Its access token stops working at once, because requireAuth loads the user on every request.
+ * `now` is for tests.
+ */
+export function deactivateStaff(
+  store: Store,
+  actor: StaffActor,
+  userId: unknown,
+  now: Date = new Date(),
+): Promise<StaffResult<StaffView>> {
+  return setStaffActive(store, actor, userId, false, now);
+}
+
+/**
+ * Makes a Staff account active again and writes "staff.reactivated". Sessions that were
+ * ended stay ended: the person signs in again.
+ */
+export function reactivateStaff(
+  store: Store,
+  actor: StaffActor,
+  userId: unknown,
+  now: Date = new Date(),
+): Promise<StaffResult<StaffView>> {
+  return setStaffActive(store, actor, userId, true, now);
+}

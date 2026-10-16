@@ -1,5 +1,21 @@
 # Build log (newest first)
 
+## Step 2.5d-mutate (size S), 2026-10-16: break-on-purpose for 2.5d, verify-before-docs rule
+
+**Works (verified on your machine, output pasted: `npm run check` clean, 23 files, 649 tests):** one new test in `test/account.test.ts` ("refuses 1 ms before the lock ends and accepts at the end instant"). Two throwaway scripts on your Desktop (`mutate-2.5d.mjs`, `mutate-2.5d-part2.mjs`), not in git.
+**Break on purpose (your machine, one mutation at a time, files restored by the script):** 28 mutations, 26 caught, 2 escaped.
+- `account.ts` (17): A1 to A14, A16, A17 caught. A4 (lock ends at the exact instant, `>=` for `>`) escaped at first. That was a real gap. The new test catches it (1 failed). A15 (user id guard removed) escaped.
+- `resetStaffPassword` (11): R1 to R9 and R11 caught. R10 (non-text id guard removed) escaped.
+- A15 and R10 change nothing on the memory store: a non-text id finds no user. Treated as equivalent there (A-66).
+**Tests:** 1 new. Total 649 (was 648).
+**Not verified:** how the Prisma store handles a non-text id (A-66). The break-on-purpose run did not use the Prisma store.
+**Found along the way:**
+1. Process change (D-37): docs now come after the owner pastes the real check output, in the same chat. A fresh chat must not ask for earlier checks. Item 13 is in the Project instructions (owner reported). STATUS "How we work" is rewritten.
+2. My count error: I wrote "29 mutations, 27 caught". The right count is 28 and 26, because A4 ran twice.
+3. NEXT_FILES miss: the 2.5e list written at 2.5d-docs lacked `server/src/staff.ts` (needed to mutate `resetStaffPassword`). You pasted it. The new list carries it, plus `auth.ts` (lock constants).
+4. Commit slip at 2.5d-docs: the first commit ran from `server/`, so it held only `tsconfig.json` (c9a6480). The docs went in a second commit from the repo root (52a50c0). Same message, harmless. STATUS now says git runs from the repo root.
+5. Your first paste of part 1 ended with no `git status` lines. The part 2 run showed only `M test/account.test.ts`, so the tree was clean.
+
 ## Step 2.5d-docs (size S), 2026-10-16: verify 2.5d, repair docs, NEXT_FILES for 2.5e
 
 **Works (not verified: docs and one config file; typecheck and lint owed on your machine):** `server/tsconfig.json` `include` no longer lists `test` twice. ASSUMPTIONS A-55 repaired. TRACEABILITY R-29 status updated and an R-25 row added. STATUS and `docs/NEXT_FILES.txt` replaced for 2.5e.
@@ -17,7 +33,7 @@
 **Works (verified on your machine: `npm run check` clean, 23 files, 648 tests; live check "60 passed, 0 failed"; commit 57db980, pushed; I ran nothing in my sandbox):** `UserStore.setPasswordHash` in the Store and both adapters. `changeOwnPassword` in `server/src/account.ts`. `resetStaffPassword` in `staff.ts`. `POST /auth/password` and `PUT /staff/:id/password`. A wrong current password counts toward the sign-in lockout. Success ends the account's refresh tokens and clears the lockout. Audit: `password.changed`, `password.change_failed`, `staff.password_reset`. Expected `npm run check`: 23 test files, 648 tests. Expected live check: 60 passed.
 **Stubbed:** no owner password reset by script (2.5e). No audit viewer. No manual unlock for a locked owner (A-43).
 **Tests:** 64 new by my count: `test/helpers/password-contract.ts` 4 cases x 2 adapters = 8, `test/account.test.ts` 22, `test/account-routes.test.ts` 10, `test/staff-password.test.ts` 24. Live check gains 16 checks.
-**Not verified:** the break-on-purpose run, owed for `account.ts` and `resetStaffPassword` (security code). Everything else in this entry is verified. The owner's own password is not changed by the live check.
+**Not verified:** nothing outstanding. The break-on-purpose run was done in step 2.5d-mutate (26 of 28 caught, 2 equivalent on the memory store). The owner's own password is not changed by the live check.
 **Found along the way:**
 1. 2.5c is verified on the owner's machine (b1f6430, 20 files, 584 tests, live check 44, break-on-purpose set done). STATUS, ASSUMPTIONS A-30 and the 2.5c entry are corrected here.
 2. OQ-15 answered: the default. Closed.

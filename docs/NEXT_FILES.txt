@@ -15,12 +15,13 @@ server/.env.example
 server/src/db.ts
 server/src/email.ts
 server/src/password.ts
+server/src/auth.ts
 server/src/owner.ts
 server/src/setup-owner.ts
 server/src/account.ts
+server/src/staff.ts
 server/src/store.ts
 server/src/memory-store.ts
 server/src/prisma-store.ts
 server/test/owner.test.ts
 server/test/account.test.ts
-server/test/helpers/store-contract.ts

@@ -177,6 +177,19 @@ describe("changeOwnPassword: wrong current password and lockout", () => {
     expect((await changeOwnPassword(store, user.id, PASSWORD, NEW_PASSWORD, later)).ok).toBe(true);
   });
 
+  it("refuses 1 ms before the lock ends and accepts at the end instant", slow, async () => {
+    const { store, user } = await setup();
+    await wrongTimes(store, user.id, LOCKOUT_MAX_FAILURES, T0);
+    const end = new Date(T0.getTime() + LOCKOUT_SECONDS * 1000);
+    const justBefore = new Date(end.getTime() - 1);
+    expect(await changeOwnPassword(store, user.id, PASSWORD, NEW_PASSWORD, justBefore)).toEqual({
+      ok: false,
+      reason: "wrong_password",
+    });
+    expect(await hashOf(store, user.id)).toBe(HASH);
+    expect((await changeOwnPassword(store, user.id, PASSWORD, NEW_PASSWORD, end)).ok).toBe(true);
+  });
+
   it("resets the failure count after a success", slow, async () => {
     const { store, user } = await setup();
     await wrongTimes(store, user.id, LOCKOUT_MAX_FAILURES - 1, T0);

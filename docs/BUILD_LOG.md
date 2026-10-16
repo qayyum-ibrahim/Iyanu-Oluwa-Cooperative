@@ -1,11 +1,24 @@
 # Build log (newest first)
 
+## Step 2.4b (size M), 2026-10-16: serve the auth routes, live check
+
+**Works (verified on your machine: `npm run check` clean, 14 files, 389 tests; `npm run typecheck` clean with the final `server.ts`; live check `sh scripts/live-check-auth.sh` printed "12 passed, 0 failed" against the real server and a real SQLite database; I ran nothing in my sandbox):** `server/src/server.ts` uses the Prisma store and `TOKEN_SECRET`, mounts `/auth`, reports a listen error, and stops cleanly on Ctrl+C. `scripts/live-check-auth.sh` runs 12 checks: health, wrong password, login, refresh, reuse, family revoke, second login, logout, refresh after logout.
+**Stubbed:** no route guard, no staff accounts, no per-IP limit (A-42).
+**Tests:** none new (389 total). The live check is the evidence.
+**Not verified:** no break-on-purpose run (owed for the routes and `server.ts`). Lockout over HTTP beyond the one wrong try. Behaviour on a hosted server.
+**Found along the way:**
+1. My bug: the first `server.ts` printed "server listening" even when the port was busy, because it ignored the error passed to the `listen` callback. A stale node process held port 3000, so the old server answered and `/auth/login` returned 404. Fixed: it now prints "Could not listen on port N" and sets a failing exit code. Confirmed on your machine: typecheck clean, then "Could not listen" while the port was busy, then success once it was free.
+2. The stale server kept coming back after `kill` (PIDs 1193, 90290, 90600). The cause was not shown. It is probably a `tsx watch` or an old tab. The live check passed after it was cleared.
+3. The dev database was reset because the owner password was forgotten, and a new owner was created. Dev data is fictional only (D-08), so nothing real was lost. There is still no reset-password feature. If you want one, say so and it becomes a small step with a decision.
+4. 2.4a is verified on your machine: 14 files, 389 tests, commit 99cdcab. The 2.4a entry, A-46 and TRACEABILITY R-18 are corrected here.
+5. A-48: the server must be started from inside `server/`.
+
 ## Step 2.4a (size M), 2026-10-16: auth routes
 
-**Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/auth-routes.ts` (`POST /auth/login`, `/auth/refresh`, `/auth/logout`), `createApp(deps?)` in `app.ts` with a JSON error handler, `TOKEN_SECRET` name in `.env.example`. Expected `npm run check`: 14 test files, 389 tests.
+**Works (verified on your machine: `npm run check` clean, 14 files, 389 tests, commit 99cdcab; I ran nothing in my sandbox):** `server/src/auth-routes.ts` (`POST /auth/login`, `/auth/refresh`, `/auth/logout`), `createApp(deps?)` in `app.ts` with a JSON error handler, `TOKEN_SECRET` name in `.env.example`. Expected `npm run check`: 14 test files, 389 tests.
 **Stubbed:** `server.ts` is unchanged, so the running server does not serve `/auth` yet (step 2.4b). No route guard, no staff accounts, no per-IP limit (A-42 stays open).
 **Tests:** 25 new in `test/auth-routes.test.ts` by my count (login 14, refresh 6, logout 2, createApp 3).
-**Not verified:** everything. No break-on-purpose run (owed; security code). Express error behaviour (A-46). No live check this step.
+**Not verified:** break-on-purpose run (owed; security code). Live check (moved to 2.4b).
 **Found along the way:**
 1. Plan change: 2.4a is routes plus tests on the memory store. The live check moves to 2.4b, because `db.ts`, `prisma-store.ts`, `setup-owner.ts` and `prisma.config.ts` had not been shown.
 2. NEXT_FILES miss: the list from 2.3e did not carry `auth.ts`, `store.ts`, `package.json`, `tsconfig.json` or `eslint.config.js`, so you had to paste them. `.env.example` was skipped by the resume script as "looks private" although it held a name only. NEXT_FILES for 2.4b lists what it needs.

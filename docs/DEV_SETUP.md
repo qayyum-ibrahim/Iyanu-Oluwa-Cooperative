@@ -17,7 +17,7 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 | Reset the dev database | delete `server/dev.db`, then `npm run db:deploy` |
 
 ## Routes
-`GET /health` is live. `POST /auth/login`, `/auth/refresh` and `/auth/logout` exist in `createApp(deps)` and are tested on the memory store (2.4a). The running server does not serve them until step 2.4b.
+`GET /health` is live. `POST /auth/login`, `/auth/refresh` and `/auth/logout` exist in `createApp(deps)` and are tested on the memory store (2.4a). The running server serves them from step 2.4b. Live check: `sh scripts/live-check-auth.sh`.
 
 ## Rules
 - Versions in `package.json` are exact. Change one only in a step that says so. Commit `package-lock.json`.

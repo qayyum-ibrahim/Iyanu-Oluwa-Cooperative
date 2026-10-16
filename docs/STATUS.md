@@ -1,24 +1,25 @@
 # Project status
-Last updated: after step 2.4a (written, not yet verified)
+Last updated: after step 2.4b (verified on the owner's machine)
 
 ## Where we stopped
-Step 2.3e is verified on the owner's machine (13 files, 364 tests). Step 2.4a adds `server/src/auth-routes.ts` (`POST /auth/login`, `/auth/refresh`, `/auth/logout`), `createApp(deps?)` with a JSON error handler, and `test/auth-routes.test.ts` (25 tests). Expected `npm run check`: 14 test files, 389 tests. Not run by anyone yet. The routes use the memory store in tests only. `server.ts` is unchanged, so the running server does not serve `/auth` yet.
+Step 2.4b is verified on the owner's machine: `npm run check` clean (14 files, 389 tests), and the live check `sh scripts/live-check-auth.sh` printed "12 passed, 0 failed" against the running server and the real SQLite database. `server/src/server.ts` serves `/auth/login`, `/auth/refresh` and `/auth/logout` with the Prisma store and `TOKEN_SECRET`, reports a busy port, and stops cleanly. The dev database was reset on 2026-10-16 (fictional data only) and a new owner was created. The code and docs are committed once you run the commit below.
 
 ## Next step brief
-Step 2.4b (M): wire `server.ts` to the real database and `TOKEN_SECRET`, then a live curl check of login, refresh and logout. Owner inputs needed:
-1. Run `npm run check` in `server/` and report the last lines (expect 14 files, 389 tests). If it fails, send the first error.
-2. Commit from the repo root: `git add .`, commit, `git status --short` shows nothing.
-3. Have the owner account made by `npm run setup:owner` on your dev database. Say if it is not. For the live check you type the password yourself; never paste it in chat.
-4. Optional: answer OQ-13 (final staff permission list). The default stands if you do not.
+Step 2.5a (M): route guards and `GET /auth/me`. Owner inputs needed:
+1. Run the docs commands from the 2.4b-final message, check that the four `grep -c` lines each print 1, then commit from the repo root: `git add .`, commit, `git status --short` shows nothing.
+2. Make sure no old server is running before the next live check (`lsof -nP -iTCP:3000 -sTCP:LISTEN` prints nothing).
+3. Optional: answer OQ-13 (final staff permission list). The default stands if you do not.
+4. Optional: say whether you want a reset-password script. It is outside the plan and needs your decision.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (`src/auth-routes.ts`), money, password and email modules, owner logic and setup script, permission table, sign-in logic with lockout (`src/auth.ts`), tokens (`src/tokens.ts`), session logic (`src/sessions.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, three migrations, config files, and tests. Live route today: `GET /health` only. No staff accounts, no route guards, no UI code yet.
+Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (`src/auth-routes.ts`), money, password and email modules, owner logic and setup script, permission table, sign-in logic with lockout (`src/auth.ts`), tokens (`src/tokens.ts`), session logic (`src/sessions.ts`), database client (`src/db.ts`), storage interface and adapters (`src/store.ts`, `src/memory-store.ts`, `src/prisma-store.ts`), `prisma/schema.prisma`, three migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`. An owner account exists on the owner's dev database. No staff accounts, no route guards, no UI code yet.
 
 ## Settings (names only)
-`PORT` (optional), `DATABASE_URL` (see `server/.env.example`; the setup script falls back to `file:./dev.db`), `TOKEN_SECRET` (at least 32 bytes; now in `server/.env.example`; set on the owner's machine; read by the running server from step 2.4b). Values never go in git.
+`PORT` (optional), `DATABASE_URL` (see `server/.env.example`; default `file:./dev.db`), `TOKEN_SECRET` (at least 32 bytes; set on the owner's machine; read by the running server). Values never go in git.
 
 ## Commands
-Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run check`, `npm start`.
+Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run check`, `npm start` (run it from inside `server/`, A-48).
+Live check of sign-in: with the server running, `sh scripts/live-check-auth.sh` from the repo root.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
 2. Attach `~/Desktop/resume-pack.txt` to a new chat in this Project.
@@ -31,11 +32,12 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.4b (M) Wire `server.ts` (real store, `TOKEN_SECRET`), live check.
-- Then staff accounts (stored permission list), route guards (access-token check plus `hasPermission`), audit writes for sensitive actions.
+- 2.5a (M) Route guards: `requireAuth` (checks the access token, loads the user from the store, refuses inactive users) and `requirePermission` (uses `hasPermission`), plus `GET /auth/me` for a live check.
+- 2.5b Staff accounts: stored permission list, create and list staff through the API (Super Admin only).
+- Then audit writes for sensitive actions. A reset-password script if the owner wants one.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-31. A-22 to A-47 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e) and the auth routes (2.4a). A-42 (no per-IP limit) stays open. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). A locked user, including the owner, has no manual unlock (A-43). The no-echo password prompt is verified only by the owner's live check. TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless).
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-32. A-22 to A-48 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a) and `server.ts` (2.4b). A-42 (no per-IP limit) stays open. No reset-password feature; a forgotten owner password needs a dev database reset. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). A locked user, including the owner, has no manual unlock (A-43). TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless).
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.

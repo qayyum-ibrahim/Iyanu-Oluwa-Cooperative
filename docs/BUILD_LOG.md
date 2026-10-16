@@ -1,11 +1,23 @@
 # Build log (newest first)
 
+## Step 2.5d-docs (size S), 2026-10-16: verify 2.5d, repair docs, NEXT_FILES for 2.5e
+
+**Works (not verified: docs and one config file; typecheck and lint owed on your machine):** `server/tsconfig.json` `include` no longer lists `test` twice. ASSUMPTIONS A-55 repaired. TRACEABILITY R-29 status updated and an R-25 row added. STATUS and `docs/NEXT_FILES.txt` replaced for 2.5e.
+**Tests:** none new (648 total, verified at 2.5d).
+**Found along the way:**
+1. 2.5d is verified on your machine: `npm run check` clean, 23 files, 648 tests; live check "60 passed, 0 failed"; commit 57db980, pushed. The counts match my predictions. The first `npm run check` in your paste (20 files, 584 tests) is from before the 2.5d files, so I ignored it.
+2. NEXT_FILES miss: the 2.5e list written at 2.5d lacked `vitest.config.ts`, `prisma.config.ts`, `store-contract.ts`, `account.test.ts` and `.env.example`. You pasted them. The new list carries them.
+3. `vitest.config.ts` is now seen: `include` is `test/**/*.test.ts`, `testTimeout` is 15000. The explicit 30 s in the hashing tests is above that on purpose.
+4. A-55 was garbled in the repo (leftover text after the table row, from the 2.5d edit). Repaired.
+5. TRACEABILITY skipped R-25. I do not know what it was. The row now says "unused". If you remember it, tell me.
+6. `mirror/DECISIONS.md` is stale (stops at D-30). Replace it with the repo copy.
+
 ## Step 2.5d (size M), 2026-10-16: change own password, reset a Staff password
 
-**Works (not verified yet; I ran nothing in my sandbox):** `UserStore.setPasswordHash` in the Store and both adapters. `changeOwnPassword` in `server/src/account.ts`. `resetStaffPassword` in `staff.ts`. `POST /auth/password` and `PUT /staff/:id/password`. A wrong current password counts toward the sign-in lockout. Success ends the account's refresh tokens and clears the lockout. Audit: `password.changed`, `password.change_failed`, `staff.password_reset`. Expected `npm run check`: 23 test files, 648 tests. Expected live check: 60 passed.
+**Works (verified on your machine: `npm run check` clean, 23 files, 648 tests; live check "60 passed, 0 failed"; commit 57db980, pushed; I ran nothing in my sandbox):** `UserStore.setPasswordHash` in the Store and both adapters. `changeOwnPassword` in `server/src/account.ts`. `resetStaffPassword` in `staff.ts`. `POST /auth/password` and `PUT /staff/:id/password`. A wrong current password counts toward the sign-in lockout. Success ends the account's refresh tokens and clears the lockout. Audit: `password.changed`, `password.change_failed`, `staff.password_reset`. Expected `npm run check`: 23 test files, 648 tests. Expected live check: 60 passed.
 **Stubbed:** no owner password reset by script (2.5e). No audit viewer. No manual unlock for a locked owner (A-43).
 **Tests:** 64 new by my count: `test/helpers/password-contract.ts` 4 cases x 2 adapters = 8, `test/account.test.ts` 22, `test/account-routes.test.ts` 10, `test/staff-password.test.ts` 24. Live check gains 16 checks.
-**Not verified:** everything. Break-on-purpose run owed for `account.ts` and `resetStaffPassword` (security code). The owner's own password is not changed by the live check.
+**Not verified:** the break-on-purpose run, owed for `account.ts` and `resetStaffPassword` (security code). Everything else in this entry is verified. The owner's own password is not changed by the live check.
 **Found along the way:**
 1. 2.5c is verified on the owner's machine (b1f6430, 20 files, 584 tests, live check 44, break-on-purpose set done). STATUS, ASSUMPTIONS A-30 and the 2.5c entry are corrected here.
 2. OQ-15 answered: the default. Closed.

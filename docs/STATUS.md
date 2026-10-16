@@ -1,18 +1,18 @@
 # Project status
-Last updated: after step 2.5d (written as if the checks pass; not verified yet)
+Last updated: after step 2.5d-docs (written as if the checks pass; the tsconfig change is not verified yet)
 
 ## Where we stopped
-2.5c is verified and committed (b1f6430, pushed; 20 files, 584 tests; live check 44 of 44; break-on-purpose P1 to P5 and S1 to S7 all caught, except P4, the expected equivalent mutant). Step 2.5d (D-36) is written, not verified: `UserStore.setPasswordHash` in the Store and both adapters, `changeOwnPassword` in `server/src/account.ts`, `resetStaffPassword` in `server/src/staff.ts`, routes `POST /auth/password` and `PUT /staff/:id/password`, 64 new tests by my count, 16 new live checks. Expected `npm run check`: 23 test files, 648 tests. Expected live check: "60 passed, 0 failed". No schema change, so no `db:deploy`. Restart the server before the live check.
+2.5d is verified and committed (57db980, pushed), all on the owner's machine: `npm run check` clean, 23 test files, 648 tests; live check "60 passed, 0 failed". Step 2.5d-docs repairs the docs (A-55 row, R-29 status, R-25 row), removes the duplicate `test` entry in `server/tsconfig.json`, and writes NEXT_FILES for 2.5e. Not verified: the tsconfig change (run typecheck and lint). Break-on-purpose for 2.5d (`account.ts`, `resetStaffPassword`) is still owed.
 
 ## Next step brief
 Step 2.5e (S or M, proposed): a terminal script to reset a forgotten owner password. Owner inputs needed:
-1. Apply the 2.5d files. In `server/`: `npm run check`. Free port 3000, `npm start` (inside `server/`), then `sh scripts/live-check-auth.sh` from the repo root. Report the last lines of each. Commit only if all pass.
-2. Add D-36 to `mirror/DECISIONS.md` in Project knowledge by hand (and confirm D-35 is there).
+1. Apply the three whole files and three edits of 2.5d-docs. In `server/`: `npm run typecheck && npm run lint`. Report the output. Commit only if clean.
+2. Replace `mirror/DECISIONS.md` in Project knowledge with the repo's `docs/DECISIONS.md`. The mirror stops at D-30; the repo has D-31 to D-36.
 3. Optional: say "mutate 2.5d" and the next chat gives the break-on-purpose run for `account.ts` and `resetStaffPassword`.
 4. 2.5e needs no decision. Default: the script mirrors `setup:owner` (terminal only, no piped input, password typed twice with no echo), changes the existing Super Admin's password, ends all of that account's sessions, clears its lockout, and writes one audit entry. Say so if you want it different.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (including change own password), staff routes and logic (create, list, change permissions, deactivate, reactivate, reset password), route guards, money, password and email modules, `account.ts`, owner logic and setup script, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters, `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password` (2.5d), `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, and `PUT /staff/:id/password` (2.5d). An owner account exists on the owner's dev database. No data routes, no UI code yet.
+Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (including change own password), staff routes and logic (create, list, change permissions, deactivate, reactivate, reset password), route guards, money, password and email modules, `account.ts`, owner logic and setup script, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters, `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, and `PUT /staff/:id/password`. An owner account exists on the owner's dev database. No data routes, no UI code yet.
 
 ## Settings (names only)
 `PORT` (optional), `DATABASE_URL` (see `server/.env.example`; default `file:./dev.db`), `TOKEN_SECRET` (at least 32 bytes; set on the owner's machine). Values never go in git.
@@ -32,12 +32,12 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.5e (S or M, proposed) Terminal script to reset a forgotten owner password.
+- 2.5e (S or M, proposed) Terminal script to reset a forgotten owner password. The Store has `list()` but no "find the Super Admin" method, so the plan is to filter `list()` by role. No Store change expected.
 - Then audit viewer (list entries, including those with no actor, A-28).
 - Phase 3: members and derived balances, with the "staff see only their own records" rule (DR-13) built into the data routes.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2 or 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. OQ-15 is closed (D-36). Owner may overrule D-19 to D-36. A-22 to A-65 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b), and 2.5d (`account.ts`, `resetStaffPassword`). A-42 (no per-IP limit) stays open. A forgotten owner password needs a dev database reset until 2.5e. A locked owner has no manual unlock (A-43); a Staff reset clears that account's lock (A-65). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63); after deactivation it is refused at once. TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless). Commits ddf8f2b and 566cd6a have the same message (harmless). `mirror/DECISIONS.md` in Project knowledge must get D-36 by hand.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2 or 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. OQ-15 is closed (D-36). Owner may overrule D-19 to D-36. A-22 to A-65 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b), and 2.5d (`account.ts`, `resetStaffPassword`). A-42 (no per-IP limit) stays open. A forgotten owner password needs a dev database reset until 2.5e. A locked owner has no manual unlock (A-43); a Staff reset clears that account's lock (A-65). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused (origin not known; tell me if you remember it). Commits ddf8f2b and 566cd6a have the same message (harmless). `mirror/DECISIONS.md` in Project knowledge must be replaced by the repo copy (brief item 2).
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

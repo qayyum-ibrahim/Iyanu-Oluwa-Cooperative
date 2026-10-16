@@ -9,6 +9,9 @@ docs/NEXT_FILES.txt
 server/package.json
 server/tsconfig.json
 server/eslint.config.js
+server/vitest.config.ts
+server/prisma.config.ts
+server/.env.example
 server/src/db.ts
 server/src/email.ts
 server/src/password.ts
@@ -19,3 +22,5 @@ server/src/store.ts
 server/src/memory-store.ts
 server/src/prisma-store.ts
 server/test/owner.test.ts
+server/test/account.test.ts
+server/test/helpers/store-contract.ts

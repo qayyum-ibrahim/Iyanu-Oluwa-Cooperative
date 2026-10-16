@@ -1,8 +1,11 @@
-// Sign-in, refresh and sign-out routes (D-31). Thin: all rules live in auth.ts and sessions.ts.
-// Tokens travel in the JSON body (no cookies). Never log a body, a token or a password.
+// Sign-in, refresh, sign-out and "who am I" routes (D-31, D-33). Thin: all rules live in
+// auth.ts, sessions.ts and guards.ts. Tokens travel in the JSON body (no cookies).
+// Never log a body, a token or a password.
 
 import { Router, type Request } from "express";
 import { authenticate } from "./auth.js";
+import { getAuth, requireAuth, sendUnauthorized } from "./guards.js";
+import { ALL_PERMISSIONS, hasPermission } from "./permissions.js";
 import { SessionError, issueSession, refreshSession, signOut, type Session } from "./sessions.js";
 import type { Store } from "./store.js";
 
@@ -82,6 +85,19 @@ export function createAuthRouter(deps: AuthRouteDeps): Router {
     const body = bodyOf(req);
     await signOut(deps.store, body["refreshToken"], deps.now());
     res.status(204).end();
+  });
+
+  // Who am I? The user (never the hash) and the permissions held right now.
+  router.get("/me", requireAuth(deps), (_req, res) => {
+    const auth = getAuth(res);
+    if (auth === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    res.status(200).json({
+      user: auth.user,
+      permissions: ALL_PERMISSIONS.filter((permission) => hasPermission(auth.subject, permission)),
+    });
   });
 
   return router;

@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 2.5a (size M), 2026-10-16: route guards and GET /auth/me
+
+**Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/guards.ts`: `requireAuth` (Bearer header, access token check, user loaded from the store on every request, inactive and unknown users refused, one 401 body), `requirePermission` (403, or 401 if no guard ran before it), `getAuth`, `subjectOf`. `GET /auth/me` returns the user (no hash) and the permissions held. `app.ts` unchanged. Expected `npm run check`: 16 test files, 461 tests. Expected live check: 19 passed.
+**Stubbed:** Staff hold no permissions (A-49) until 2.5b. No data route uses a guard yet. Failed guard attempts are not audited (A-52). No per-IP limit (A-42).
+**Tests:** 72 new by my count: `test/guards.test.ts` 64 (requireAuth 16, requirePermission 48 = 22 Super Admin + 22 Staff + 4), `test/auth-me.test.ts` 8. The live check gains 7 checks.
+**Not verified:** everything. No break-on-purpose run (owed; security code). The staff-with-grants case cannot be tested yet (no stored list). Whether `curl -K -` reads headers on stdin on your macOS curl (the live check will show it).
+**Found along the way:**
+1. 2.4c is verified on the owner's machine: commit 7f44280, `NEXT_FILES` paths all exist, `git status` clean.
+2. Access tokens are stateless, so one stays valid until it expires even after sign-out (A-50). Pinned by design, not by a test.
+3. `DEV_SETUP.md` was stale about `/auth`. Fixed in this step.
+
 ## Step 2.4c (size S), 2026-10-16: fix NEXT_FILES for 2.5a
 
 **Works (not verified: docs only, nothing run):** `docs/NEXT_FILES.txt` replaced. It now lists the 18 paths that step 2.5a changes, imports, or needs to run `npm run check`. STATUS gains handoff rule 2 (write the list for the next step only).

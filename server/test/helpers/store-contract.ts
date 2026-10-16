@@ -7,6 +7,7 @@ import {
   type Store,
 } from "../../src/store.js";
 import { runLockoutContract } from "./lockout-contract.js";
+import { runPermissionsContract } from "./permissions-contract.js";
 
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
@@ -361,5 +362,6 @@ export function runStoreContract(
     });
 
     runLockoutContract(makeStore);
+    runPermissionsContract(makeStore);
   });
 }

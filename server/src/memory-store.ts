@@ -12,7 +12,11 @@ import {
 } from "./store.js";
 
 const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
-const copyUser = (u: UserRecord): UserRecord => ({ ...u, createdAt: new Date(u.createdAt) });
+const copyUser = (u: UserRecord): UserRecord => ({
+  ...u,
+  createdAt: new Date(u.createdAt),
+  permissions: [...u.permissions],
+});
 const copyAudit = (a: AuditRecord): AuditRecord => ({ ...a, createdAt: new Date(a.createdAt) });
 const copyLockout = (l: LockoutState): LockoutState => ({
   failedCount: l.failedCount,
@@ -57,6 +61,7 @@ export function createMemoryStore(): Store {
           displayName: input.displayName,
           role: input.role ?? "STAFF",
           isActive: true,
+          permissions: [...(input.permissions ?? [])],
           createdAt: new Date(),
         };
         users.set(record.id, record);
@@ -71,6 +76,18 @@ export function createMemoryStore(): Store {
       async findById(id) {
         const u = users.get(id);
         return u ? copyUser(u) : null;
+      },
+      async list() {
+        // Map keeps insertion order and sort is stable, so ties stay in creation order.
+        return [...users.values()]
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+          .map(copyUser);
+      },
+      async setPermissions(userId, permissions) {
+        const u = users.get(userId);
+        if (!u) return false;
+        u.permissions = [...permissions];
+        return true;
       },
       async hasSuperAdmin() {
         for (const u of users.values()) {

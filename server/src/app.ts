@@ -1,5 +1,6 @@
 import express from "express";
 import { createAuthRouter } from "./auth-routes.js";
+import { createStaffRouter } from "./staff-routes.js";
 import type { Store } from "./store.js";
 import { assertSecretAllowed } from "./tokens.js";
 
@@ -38,7 +39,7 @@ const errorHandler: express.ErrorRequestHandler = (err, _req, res, next) => {
 
 /**
  * Without `deps` only /health exists (the health test uses this).
- * With `deps` the /auth routes are mounted. A bad token secret throws at once, at start-up.
+ * With `deps` the /auth and /staff routes are mounted. A bad token secret throws at once, at start-up.
  */
 export function createApp(deps?: AppDeps): express.Express {
   const app = express();
@@ -48,11 +49,13 @@ export function createApp(deps?: AppDeps): express.Express {
   });
   if (deps !== undefined) {
     const tokenSecret = assertSecretAllowed(deps.tokenSecret);
+    const now = deps.now ?? (() => new Date());
     app.use(
       "/auth",
       express.json({ limit: "10kb" }),
-      createAuthRouter({ store: deps.store, tokenSecret, now: deps.now ?? (() => new Date()) }),
+      createAuthRouter({ store: deps.store, tokenSecret, now }),
     );
+    app.use("/staff", createStaffRouter({ store: deps.store, tokenSecret, now }));
   }
   app.use(errorHandler);
   return app;

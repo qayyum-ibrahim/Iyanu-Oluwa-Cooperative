@@ -1,5 +1,5 @@
 # Data model
-Last updated: step 2.3e. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
+Last updated: step 2.5b. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
 
 ## Conventions
 - Money columns: `BigInt`, whole kobo (D-15). None exist yet.
@@ -12,9 +12,9 @@ Last updated: step 2.3e. Schema file: `server/prisma/schema.prisma`. Database: S
 ## Tables
 | Table | Key fields | Notes |
 |---|---|---|
-| User | id, email (unique), passwordHash, displayName, role (SUPER_ADMIN or STAFF), isActive, failedLoginCount, lockedUntil | Lockout fields added in 2.3e (D-30). They are not part of `UserRecord`; read them with `getLockout`. The staff permission list arrives in a later Phase 2 step (OQ-13). |
+| User | id, email (unique), passwordHash, displayName, role (SUPER_ADMIN or STAFF), isActive, failedLoginCount, lockedUntil, permissions | Lockout fields added in 2.3e (D-30); read them with `getLockout`. `permissions` (2.5b, D-34) is JSON text of permission names, used by Staff only; it is part of `UserRecord`. |
 | AuditLog | id, createdAt, actorId (nullable), action, entityType, entityId, detail | Actor is empty for system or setup-script actions. A user with audit rows cannot be deleted (DR-15). |
 | RefreshToken | id, userId, familyId, tokenHash (unique), createdAt, expiresAt, usedAt, revokedAt | Only the SHA-256 hash is stored (A-33). One family per sign-in, shared by its rotations. Deleted with its user (D-28). |
 
 ## Not yet modelled
-Members, payments, loans, expenses, staff permission lists. See PHASE_PLAN.md.
+Members, payments, loans, expenses. See PHASE_PLAN.md.

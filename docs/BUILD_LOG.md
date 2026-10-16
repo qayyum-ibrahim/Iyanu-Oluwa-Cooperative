@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 2.5b (size M), 2026-10-16: staff accounts and stored permissions
+
+**Works (not verified anywhere yet; I ran nothing in this chat):** `User.permissions` column and migration `20261016120000_user_permissions` (hand-written, like A-36). `UserRecord.permissions`, `NewUser.permissions`, `list()` and `setPermissions()` in the Store and both adapters. `server/src/staff.ts` (`createStaff`, `listStaff`, `setStaffPermissions`), `server/src/staff-routes.ts` (`POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`), mounted in `app.ts`. `subjectOf` in `guards.ts` now reads the stored list. Expected `npm run check`: 18 test files, 532 tests. Expected live check: 33 passed.
+**Stubbed:** no deactivate or reactivate staff (A-30), no change-own-password or reset (A-55), no audit viewer. No data route uses a guard yet.
+**Tests:** 71 new by my count: `test/helpers/permissions-contract.ts` 9 cases x 2 adapters = 18, `test/staff.test.ts` 29 (createStaff 18, listStaff 3, setStaffPermissions 8), `test/staff-routes.test.ts` 24. Live check gains 14 checks.
+**Not verified:** everything. No break-on-purpose run (owed; security code). Whether unseen test files (`auth-routes.test.ts`, `lockout.test.ts`, `tokens.test.ts`) still typecheck with the new `UserRecord` and `Store` shapes.
+**Found along the way:**
+1. 2.5a is verified on the owner's machine: commit 9f5cc96, 16 files, 461 tests, live check 19 of 19.
+2. OQ-13 answered by the owner: the default list. Closed.
+3. NEXT_FILES miss: the pack for this chat did not show `auth.ts`, `tokens.ts`, `sessions.ts`, `db.ts` or `server.ts`, so the owner pasted them. Why `NEXT_FILES.txt` lacked them was not seen. The new list is written from the 2.5c brief.
+4. The STATUS note "mirror/DECISIONS.md must get D-33" is now out of date; D-34 must be added to the mirror by hand instead.
+
 ## Step 2.5a (size M), 2026-10-16: route guards and GET /auth/me
 
 **Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/guards.ts`: `requireAuth` (Bearer header, access token check, user loaded from the store on every request, inactive and unknown users refused, one 401 body), `requirePermission` (403, or 401 if no guard ran before it), `getAuth`, `subjectOf`. `GET /auth/me` returns the user (no hash) and the permissions held. `app.ts` unchanged. Expected `npm run check`: 16 test files, 461 tests. Expected live check: 19 passed.

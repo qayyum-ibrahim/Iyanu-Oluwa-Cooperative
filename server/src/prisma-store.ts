@@ -15,13 +15,30 @@ function hasCode(e: unknown, code: string): boolean {
   return typeof e === "object" && e !== null && "code" in e && e.code === code;
 }
 
-const toUser = (r: UserRecord): UserRecord => ({
+/** A User row as the database holds it: permissions are JSON text (D-34). */
+type UserRow = Omit<UserRecord, "permissions"> & { permissions: string };
+
+/** Reads the stored permission text. Anything that is not a JSON list of strings reads as empty (fail closed). */
+function parsePermissions(raw: string): string[] {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+const toUser = (r: UserRow): UserRecord => ({
   id: r.id,
   email: r.email,
   passwordHash: r.passwordHash,
   displayName: r.displayName,
   role: r.role,
   isActive: r.isActive,
+  permissions: parsePermissions(r.permissions),
   createdAt: r.createdAt,
 });
 
@@ -68,6 +85,7 @@ export function createPrismaStore(prisma: PrismaClient): Store {
               email: input.email,
               passwordHash: input.passwordHash,
               displayName: input.displayName,
+              permissions: JSON.stringify(input.permissions ?? []),
               ...(input.role ? { role: input.role } : {}),
             },
           });
@@ -84,6 +102,19 @@ export function createPrismaStore(prisma: PrismaClient): Store {
       async findById(id) {
         const row = await prisma.user.findUnique({ where: { id } });
         return row ? toUser(row) : null;
+      },
+      async list() {
+        const rows = await prisma.user.findMany({
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toUser);
+      },
+      async setPermissions(userId, permissions) {
+        const result = await prisma.user.updateMany({
+          where: { id: userId },
+          data: { permissions: JSON.stringify([...permissions]) },
+        });
+        return result.count === 1;
       },
       async hasSuperAdmin() {
         const row = await prisma.user.findFirst({

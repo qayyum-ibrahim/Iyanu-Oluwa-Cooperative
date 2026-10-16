@@ -1,4 +1,4 @@
-// Route guards (D-04, D-05, D-33). Deny by default.
+// Route guards (D-04, D-05, D-33, D-34). Deny by default.
 // requireAuth: who is calling? requirePermission: may they do this?
 // Never log a token or a header. Every refusal looks the same to the caller.
 
@@ -23,11 +23,12 @@ export interface AuthContext {
 const LOCALS_KEY = "auth";
 
 /**
- * The permission view of a user. Until staff permission lists are stored (step 2.5b, A-49),
- * Staff hold nothing. The Super Admin holds everything through hasPermission.
+ * The permission view of a user. Staff hold what is stored on their account (D-34); the names
+ * are checked against the table by hasPermission on every call (A-27). The Super Admin holds
+ * everything through hasPermission and ignores the list.
  */
 export function subjectOf(user: UserRecord): PermissionSubject {
-  return { role: user.role, isActive: user.isActive, permissions: [] };
+  return { role: user.role, isActive: user.isActive, permissions: user.permissions };
 }
 
 /** The caller set by requireAuth, or null if no guard ran on this request. */

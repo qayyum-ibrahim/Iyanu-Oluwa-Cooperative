@@ -16,5 +16,5 @@
 | OQ-10 | Can a pay-off be reversed or corrected? | Owner | Phase 6 | No. A correction is a new reversing entry. |
 | OQ-11 | Does Total Expenditures include Member Withdrawal outflows? Does Income include Loan Repaid and Loan Interest? | Owner | Phase 7 | Expenditure includes all non-deleted outflows. Income includes all payment lines. |
 | OQ-12 | Any real data in anyone's browser (`iyanu_oluwa_react_v2`)? | Owner | Phase 10 | No real data |
-| OQ-13 | Final staff permission list (the PDF list and the ZIP list differ) | Owner | Phase 2 | ZIP's 20 permissions plus `loans.disburse` and `payoff.process` |
+| OQ-13 | Final staff permission list. Answered 2026-10-16: the default (the 22 permissions in `permissions.ts`) | Owner | Closed | n/a |
 | OQ-14 | Are non-refundable balances (e.g. Development Levy) shown on the member profile? | Owner | Phase 3 | Shown under "Retained by cooperative", not counted in payout |

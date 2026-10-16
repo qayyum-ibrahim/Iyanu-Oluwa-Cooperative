@@ -11,6 +11,11 @@ export interface UserRecord {
   displayName: string;
   role: Role;
   isActive: boolean;
+  /**
+   * Permission names granted to a Staff user (D-34). Stored as given: the logic code cleans the
+   * list before saving, and hasPermission checks every name against the table on every call (A-27).
+   */
+  permissions: string[];
   createdAt: Date;
 }
 
@@ -19,6 +24,8 @@ export interface NewUser {
   passwordHash: string;
   displayName: string;
   role?: Role;
+  /** Defaults to an empty list. */
+  permissions?: readonly string[];
 }
 
 /** Sign-in lockout state of one user (D-30). Kept apart from UserRecord on purpose. */
@@ -104,6 +111,13 @@ export interface UserStore {
   create(input: NewUser): Promise<UserRecord>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
+  /** Every user (any role, active or not), oldest first. Ties are in no fixed order. */
+  list(): Promise<UserRecord[]>;
+  /**
+   * Replaces the stored permission list of a user. Returns false if there is no such user.
+   * The list is saved exactly as given (cleaning is the logic code's job).
+   */
+  setPermissions(userId: string, permissions: readonly string[]): Promise<boolean>;
   /** True if any user has role SUPER_ADMIN, active or not. Staff do not count. */
   hasSuperAdmin(): Promise<boolean>;
   /**

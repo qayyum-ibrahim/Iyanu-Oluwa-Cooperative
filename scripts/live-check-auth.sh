@@ -1,12 +1,15 @@
 #!/bin/sh
-# Live check of /auth against a running server. Run from anywhere: sh scripts/live-check-auth.sh
+# Live check of /auth and /staff against a running server. Run from anywhere: sh scripts/live-check-auth.sh
 # You type the owner email and password. The password is hidden, never printed, never in a command line.
 # Tokens are never printed and never put in a command line (the access token goes to curl on stdin).
 # The one wrong-password try counts as 1 failure and the next correct sign-in resets it (limit is 5).
+# The staff check creates one fictional staff account on the dev database each run (D-08).
 
+umask 077
 BASE="${BASE:-http://localhost:3000}"
 BODY=/tmp/iyanu-live-body.json
-trap 'stty echo 2>/dev/null; rm -f "$BODY"' EXIT INT TERM
+REQ=/tmp/iyanu-live-req.json
+trap 'stty echo 2>/dev/null; rm -f "$BODY" "$REQ"' EXIT INT TERM
 PASS=0
 FAIL=0
 
@@ -23,8 +26,17 @@ send() { # path; JSON comes in on stdin; prints the status code; body goes to $B
 get_me() { # access token; prints the status code; body goes to $BODY. The token goes in on stdin.
   printf 'header = "Authorization: Bearer %s"\n' "$1" | curl -s -o "$BODY" -w "%{http_code}" -K - "$BASE/auth/me"
 }
+authed_get() { # path, access token; prints the status code; body goes to $BODY
+  printf 'header = "Authorization: Bearer %s"\n' "$2" | curl -s -o "$BODY" -w "%{http_code}" -K - "$BASE$1"
+}
+authed_send() { # method, path, access token; the JSON body is in $REQ; prints the status code
+  printf 'header = "Authorization: Bearer %s"\nheader = "Content-Type: application/json"\n' "$3" | curl -s -o "$BODY" -w "%{http_code}" -K - -X "$1" "$BASE$2" --data @"$REQ"
+}
 field() { # name of a top-level field in the last body
   node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(b[process.argv[2]]??""))' "$BODY" "$1"
+}
+pick() { # dotted path in the last body, such as staff.permissions; lists print comma-separated
+  node -e 'const fs=require("fs");let v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const k of process.argv[2].split("."))v=v==null?undefined:v[k];process.stdout.write(Array.isArray(v)?v.join(","):v==null?"":String(v))' "$BODY" "$1"
 }
 keys() {
   node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(Object.keys(b).sort().join(","))' "$BODY"
@@ -64,6 +76,46 @@ code=$(get_me "not.a.token")
 expect "me with a bad token refused" "$code" 401
 code=$(get_me "$R1")
 expect "me with a refresh token refused" "$code" 401
+
+# --- staff accounts (step 2.5b) ---
+STAFF_EMAIL="live-check-$(date +%s)@example.test"
+STAFF_PW=$(node -e 'process.stdout.write(require("crypto").randomBytes(18).toString("base64url"))')
+write_staff_json() {
+  E="$STAFF_EMAIL" P="$STAFF_PW" node -e 'process.stdout.write(JSON.stringify({email:process.env.E,password:process.env.P,displayName:"Live Check Staff",permissions:["dashboard","members.view"]}))' > "$REQ"
+}
+write_staff_json
+code=$(authed_send POST /staff "$AT")
+expect "staff created" "$code" 201
+expect "staff permissions" "$(pick staff.permissions)" "dashboard,members.view"
+expect "staff body has no hash" "$(pick staff.passwordHash)" ""
+SID=$(pick staff.id)
+write_staff_json
+code=$(authed_send POST /staff "$AT")
+expect "duplicate staff email refused" "$code" 409
+
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "staff login" "$code" 200
+SAT=$(field accessToken)
+get_me "$SAT" > /dev/null
+expect "staff role" "$(me_value role)" STAFF
+expect "staff permission count" "$(me_value count)" 2
+code=$(authed_get /staff "$SAT")
+expect "staff cannot list staff" "$code" 403
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/staff")
+expect "list staff without a token refused" "$code" 401
+code=$(authed_get /staff "$AT")
+expect "owner lists staff" "$code" 200
+
+printf '%s' '{"permissions":["dashboard","members.view","payments.create"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "owner changes permissions" "$code" 200
+get_me "$SAT" > /dev/null
+expect "staff sees the change on the same token" "$(me_value count)" 3
+printf '%s' '{"permissions":["users.manage"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "users.manage cannot be granted" "$code" 400
+code=$(authed_send PUT "/staff/$SID/permissions" "$SAT")
+expect "staff cannot change permissions" "$code" 403
 
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200

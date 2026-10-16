@@ -1,4 +1,5 @@
-// Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e).
+// Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
+// stored staff permissions (step 2.5b).
 // Money tables arrive in Phase 3 and later. Money columns will be BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -28,6 +29,8 @@ model User {
   isActive         Boolean        @default(true)
   failedLoginCount Int            @default(0)
   lockedUntil      DateTime?
+  // JSON text of permission names, e.g. ["dashboard","members.view"] (D-34). Only Staff use it.
+  permissions      String         @default("[]")
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   auditLogs        AuditLog[]

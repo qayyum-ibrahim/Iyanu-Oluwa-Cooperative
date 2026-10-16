@@ -2,7 +2,7 @@
 
 ## Step 2.5b (size M), 2026-10-16: staff accounts and stored permissions
 
-**Works (not verified anywhere yet; I ran nothing in this chat):** `User.permissions` column and migration `20261016120000_user_permissions` (hand-written, like A-36). `UserRecord.permissions`, `NewUser.permissions`, `list()` and `setPermissions()` in the Store and both adapters. `server/src/staff.ts` (`createStaff`, `listStaff`, `setStaffPermissions`), `server/src/staff-routes.ts` (`POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`), mounted in `app.ts`. `subjectOf` in `guards.ts` now reads the stored list. Expected `npm run check`: 18 test files, 532 tests. Expected live check: 33 passed.
+**Works (verified on your machine: `db:deploy` applied the migration, `migrate dev` "Already in sync", `npm run check` clean, 18 files, 532 tests; live check "33 passed, 0 failed"; commit 5a1b368; I ran nothing in my sandbox):** `User.permissions` column and migration `20261016120000_user_permissions` (hand-written, like A-36). `UserRecord.permissions`, `NewUser.permissions`, `list()` and `setPermissions()` in the Store and both adapters. `server/src/staff.ts` (`createStaff`, `listStaff`, `setStaffPermissions`), `server/src/staff-routes.ts` (`POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`), mounted in `app.ts`. `subjectOf` in `guards.ts` now reads the stored list. Expected `npm run check`: 18 test files, 532 tests. Expected live check: 33 passed.
 **Stubbed:** no deactivate or reactivate staff (A-30), no change-own-password or reset (A-55), no audit viewer. No data route uses a guard yet.
 **Tests:** 71 new by my count: `test/helpers/permissions-contract.ts` 9 cases x 2 adapters = 18, `test/staff.test.ts` 29 (createStaff 18, listStaff 3, setStaffPermissions 8), `test/staff-routes.test.ts` 24. Live check gains 14 checks.
 **Not verified:** everything. No break-on-purpose run (owed; security code). Whether unseen test files (`auth-routes.test.ts`, `lockout.test.ts`, `tokens.test.ts`) still typecheck with the new `UserRecord` and `Store` shapes.
@@ -11,6 +11,9 @@
 2. OQ-13 answered by the owner: the default list. Closed.
 3. NEXT_FILES miss: the pack for this chat did not show `auth.ts`, `tokens.ts`, `sessions.ts`, `db.ts` or `server.ts`, so the owner pasted them. Why `NEXT_FILES.txt` lacked them was not seen. The new list is written from the 2.5c brief.
 4. The STATUS note "mirror/DECISIONS.md must get D-33" is now out of date; D-34 must be added to the mirror by hand instead.
+5. My bug: two tests used `const { permissions: _unused, ...rest }` to drop a key. The lint rule `no-unused-vars` flags it here (no underscore exception in `eslint.config.js`). Fixed by building the object without the key. Found by `npm run check` on the owner's machine (lint stage, 2 errors). Typecheck was clean, so the three unseen test files compile with the new `UserRecord` and `Store` shapes.
+6. The 2.5b docs were committed without item 5. Added in the break-on-purpose step.
+7. Break-on-purpose run for `staff.ts` and `guards.ts` (owner's machine, one mutation at a time, files restored with `git checkout`): 7 mutations, all caught. S1 mayManage always true (4 failed), S2 Super Admin not refused in setStaffPermissions (1), S3 listStaff includes Super Admin (3), S4 audit action renamed (1), G1 subjectOf ignores stored list (3), G2 permission check disabled (24), G3 inactive user allowed (2). A first run with all 7 applied at once (40 failed) could not show which test caught which, so it was redone one by one. Still owed: `parsePermissions` in `prisma-store.ts` (only the Prisma suite or live check can catch it).
 
 ## Step 2.5a (size M), 2026-10-16: route guards and GET /auth/me
 

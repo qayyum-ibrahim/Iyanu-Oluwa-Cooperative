@@ -1,11 +1,23 @@
 # Build log (newest first)
 
+## Step 2.5d (size M), 2026-10-16: change own password, reset a Staff password
+
+**Works (not verified yet; I ran nothing in my sandbox):** `UserStore.setPasswordHash` in the Store and both adapters. `changeOwnPassword` in `server/src/account.ts`. `resetStaffPassword` in `staff.ts`. `POST /auth/password` and `PUT /staff/:id/password`. A wrong current password counts toward the sign-in lockout. Success ends the account's refresh tokens and clears the lockout. Audit: `password.changed`, `password.change_failed`, `staff.password_reset`. Expected `npm run check`: 23 test files, 648 tests. Expected live check: 60 passed.
+**Stubbed:** no owner password reset by script (2.5e). No audit viewer. No manual unlock for a locked owner (A-43).
+**Tests:** 64 new by my count: `test/helpers/password-contract.ts` 4 cases x 2 adapters = 8, `test/account.test.ts` 22, `test/account-routes.test.ts` 10, `test/staff-password.test.ts` 24. Live check gains 16 checks.
+**Not verified:** everything. Break-on-purpose run owed for `account.ts` and `resetStaffPassword` (security code). The owner's own password is not changed by the live check.
+**Found along the way:**
+1. 2.5c is verified on the owner's machine (b1f6430, 20 files, 584 tests, live check 44, break-on-purpose set done). STATUS, ASSUMPTIONS A-30 and the 2.5c entry are corrected here.
+2. OQ-15 answered: the default. Closed.
+3. I did not see `vitest.config.ts`, so tests that hash set an explicit 30 s timeout.
+4. `/auth/password` sits behind the JSON parser of `/auth`, so malformed JSON gives 400 before the 401. The `/staff` routes run guards first. Harmless here; noted.
+
 ## Step 2.5c (size M), 2026-10-16: deactivate and reactivate staff, parsePermissions tests
 
-**Works (not verified yet; I ran nothing in my sandbox):** `UserStore.setActive` in the Store and both adapters. `deactivateStaff` and `reactivateStaff` in `staff.ts`. `POST /staff/:id/deactivate` and `/reactivate` in `staff-routes.ts`. Deactivating ends all of the account's refresh tokens and writes `staff.deactivated` (detail `tokens_revoked=N`); reactivating writes `staff.reactivated`. `parsePermissions` is exported and unit-tested. Expected `npm run check`: 20 test files, 584 tests. Expected live check: 44 passed.
+**Works (verified on your machine: `npm run check` clean, 20 files, 584 tests; live check "44 passed, 0 failed"; commit b1f6430, pushed; break-on-purpose P1 to P5 and S1 to S7 all caught except P4, the expected equivalent mutant; I ran nothing in my sandbox):** `UserStore.setActive` in the Store and both adapters. `deactivateStaff` and `reactivateStaff` in `staff.ts`. `POST /staff/:id/deactivate` and `/reactivate` in `staff-routes.ts`. Deactivating ends all of the account's refresh tokens and writes `staff.deactivated` (detail `tokens_revoked=N`); reactivating writes `staff.reactivated`. `parsePermissions` is exported and unit-tested. Expected `npm run check`: 20 test files, 584 tests. Expected live check: 44 passed.
 **Stubbed:** no change-password or reset (2.5d, 2.5e). No audit viewer. A deactivated Super Admin is not possible here (A-60).
 **Tests:** 52 new by my count: `test/helpers/active-contract.ts` 5 cases x 2 adapters = 10, `test/parse-permissions.test.ts` 12, `test/staff-active.test.ts` 30 (deactivate 12, reactivate 5, list 1, routes 12).
-**Not verified:** everything. Break-on-purpose runs P1 to P5 and S1 to S7 are listed in the 2.5c message and not yet run.
+**Not verified:** nothing outstanding from this step.
 **Found along the way:**
 1. 2.5b is verified on the owner's machine (5a1b368: 18 files, 532 tests, live check 33) and its break-on-purpose run is done (7 of 7 caught). STATUS and TRACEABILITY still said "not verified"; fixed here.
 2. The owner asked for a change-password or reset-password step. Added to the plan as 2.5d and 2.5e (OQ-15). Defaults recorded, details await the owner.

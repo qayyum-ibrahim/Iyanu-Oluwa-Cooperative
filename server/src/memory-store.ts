@@ -95,6 +95,12 @@ export function createMemoryStore(): Store {
         u.isActive = isActive;
         return true;
       },
+      async setPasswordHash(userId, passwordHash) {
+        const u = users.get(userId);
+        if (!u) return false;
+        u.passwordHash = passwordHash;
+        return true;
+      },
       async hasSuperAdmin() {
         for (const u of users.values()) {
           if (u.role === "SUPER_ADMIN") return true;

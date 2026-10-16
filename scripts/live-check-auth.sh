@@ -142,6 +142,54 @@ expect "login after reactivation" "$code" 200
 code=$(authed_send POST "/staff/no-such-id/deactivate" "$AT")
 expect "deactivate unknown id" "$code" 404
 
+# --- change and reset passwords (step 2.5d) ---
+# The owner's own password is not changed here (tests cover it). Only the fictional staff account is.
+new_pw() { node -e 'process.stdout.write(require("crypto").randomBytes(18).toString("base64url"))'; }
+NEW_PW=$(new_pw)
+NEWER_PW=$(new_pw)
+pw_json() { P="$1" node -e 'process.stdout.write(JSON.stringify({password:process.env.P}))' > "$REQ"; }
+change_json() { C="$1" N="$2" node -e 'process.stdout.write(JSON.stringify({currentPassword:process.env.C,newPassword:process.env.N}))' > "$REQ"; }
+
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "staff login before reset" "$code" 200
+SAT=$(field accessToken)
+SRT=$(field refreshToken)
+pw_json "$NEW_PW"
+code=$(authed_send PUT "/staff/$SID/password" "$SAT")
+expect "staff cannot reset a password" "$code" 403
+code=$(authed_send PUT "/staff/$SID/password" "$AT")
+expect "owner resets staff password" "$code" 200
+expect "reset body has no hash" "$(pick staff.passwordHash)" ""
+code=$(authed_send PUT "/staff/no-such-id/password" "$AT")
+expect "reset unknown id" "$code" 404
+code=$(token_json "$SRT" | send /auth/refresh)
+expect "refresh token ended by reset" "$code" 401
+code=$(login_json "$STAFF_EMAIL" "$STAFF_PW" | send /auth/login)
+expect "old staff password refused" "$code" 401
+code=$(login_json "$STAFF_EMAIL" "$NEW_PW" | send /auth/login)
+expect "new staff password works" "$code" 200
+SAT=$(field accessToken)
+SRT=$(field refreshToken)
+
+change_json "$STAFF_PW" "$NEWER_PW"
+code=$(authed_send POST /auth/password "$SAT")
+expect "change with wrong current refused" "$code" 403
+expect "wrong current error" "$(field error)" wrong_password
+change_json "$NEW_PW" "short"
+code=$(authed_send POST /auth/password "$SAT")
+expect "short new password refused" "$code" 400
+change_json "$NEW_PW" "$NEWER_PW"
+code=$(authed_send POST /auth/password "$SAT")
+expect "change own password" "$code" 204
+code=$(token_json "$SRT" | send /auth/refresh)
+expect "refresh token ended by change" "$code" 401
+code=$(login_json "$STAFF_EMAIL" "$NEW_PW" | send /auth/login)
+expect "old password refused after change" "$code" 401
+code=$(login_json "$STAFF_EMAIL" "$NEWER_PW" | send /auth/login)
+expect "new password works after change" "$code" 200
+code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/auth/password" -H "Content-Type: application/json" --data '{}')
+expect "change without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

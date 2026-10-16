@@ -8,6 +8,7 @@ import {
 } from "../../src/store.js";
 import { runLockoutContract } from "./lockout-contract.js";
 import { runActiveContract } from "./active-contract.js";
+import { runPasswordContract } from "./password-contract.js";
 import { runPermissionsContract } from "./permissions-contract.js";
 
 let counter = 0;
@@ -365,5 +366,6 @@ export function runStoreContract(
     runLockoutContract(makeStore);
     runPermissionsContract(makeStore);
     runActiveContract(makeStore);
+    runPasswordContract(makeStore);
   });
 }

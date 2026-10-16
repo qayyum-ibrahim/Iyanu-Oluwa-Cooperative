@@ -234,3 +234,41 @@ export function reactivateStaff(
 ): Promise<StaffResult<StaffView>> {
   return setStaffActive(store, actor, userId, true, now);
 }
+
+/**
+ * Sets a new password for a Staff account (D-36). The Super Admin types it (A-55).
+ * Order: permission check, id, target role, password rules, then hashing and saving.
+ * An unknown id, a non-text id or a Super Admin id is not_found. Works on an inactive account
+ * and leaves it inactive. Ends all of the account's refresh tokens, clears its lockout (A-65),
+ * and writes "staff.password_reset" (detail: how many tokens were revoked). No password or
+ * email goes in the audit entry. The calls are separate Store calls, not one transaction (A-62).
+ * An access token already issued works until it expires (A-63).
+ */
+export async function resetStaffPassword(
+  store: Store,
+  actor: StaffActor,
+  userId: unknown,
+  newPassword: unknown,
+  now: Date = new Date(),
+): Promise<StaffResult<StaffView>> {
+  if (!mayManage(actor)) return failure("forbidden");
+  if (typeof userId !== "string" || userId.length === 0) return failure("not_found");
+  const user = await store.users.findById(userId);
+  if (user === null || user.role !== "STAFF") return failure("not_found");
+  if (!isAllowedPassword(newPassword)) return failure("invalid_input");
+
+  const passwordHash = await hashPassword(newPassword);
+  if (!(await store.users.setPasswordHash(user.id, passwordHash))) return failure("not_found");
+  const revoked = await store.refreshTokens.revokeAllForUser(user.id, now);
+  await store.users.clearLockout(user.id);
+  await store.audit.append({
+    actorId: actor.id,
+    action: "staff.password_reset",
+    entityType: "User",
+    entityId: user.id,
+    detail: `tokens_revoked=${revoked}`,
+  });
+  const updated = await store.users.findById(user.id);
+  if (updated === null) return failure("not_found");
+  return { ok: true, value: toView(updated) };
+}

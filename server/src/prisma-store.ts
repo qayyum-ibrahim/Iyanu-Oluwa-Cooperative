@@ -123,6 +123,13 @@ export function createPrismaStore(prisma: PrismaClient): Store {
         });
         return result.count === 1;
       },
+      async setPasswordHash(userId, passwordHash) {
+        const result = await prisma.user.updateMany({
+          where: { id: userId },
+          data: { passwordHash },
+        });
+        return result.count === 1;
+      },
       async hasSuperAdmin() {
         const row = await prisma.user.findFirst({
           where: { role: "SUPER_ADMIN" },

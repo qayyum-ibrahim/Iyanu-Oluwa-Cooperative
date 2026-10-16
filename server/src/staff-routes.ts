@@ -15,6 +15,7 @@ import {
   deactivateStaff,
   listStaff,
   reactivateStaff,
+  resetStaffPassword,
   setStaffPermissions,
   type StaffActor,
   type StaffFailure,
@@ -127,6 +128,27 @@ export function createStaffRouter(deps: GuardDeps): Router {
     };
   router.post("/:id/deactivate", activeRoute(deactivateStaff));
   router.post("/:id/reactivate", activeRoute(reactivateStaff));
+
+  router.put("/:id/password", async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const body = bodyOf(req);
+    const result = await resetStaffPassword(
+      deps.store,
+      actor,
+      req.params["id"],
+      body["password"],
+      deps.now(),
+    );
+    if (!result.ok) {
+      sendFailure(res, result.reason);
+      return;
+    }
+    res.status(200).json({ staff: viewJson(result.value) });
+  });
 
   return router;
 }

@@ -1,25 +1,25 @@
 # Project status
-Last updated: after step 2.5c (written as if the checks pass; not verified yet)
+Last updated: after step 2.5d (written as if the checks pass; not verified yet)
 
 ## Where we stopped
-2.5b is verified and committed (5a1b368; 18 files, 532 tests; live check 33 of 33) and its break-on-purpose run is done (7 of 7 caught). Step 2.5c (D-35) is written, not verified: `UserStore.setActive` in the Store and both adapters, `deactivateStaff` and `reactivateStaff` in `server/src/staff.ts`, routes `POST /staff/:id/deactivate` and `/reactivate`, `parsePermissions` exported with its own tests, 52 new tests by my count, 11 new live checks. Expected `npm run check`: 20 test files, 584 tests. Expected live check: "44 passed, 0 failed". No schema change, so no `db:deploy`. Restart the server before the live check.
+2.5c is verified and committed (b1f6430, pushed; 20 files, 584 tests; live check 44 of 44; break-on-purpose P1 to P5 and S1 to S7 all caught, except P4, the expected equivalent mutant). Step 2.5d (D-36) is written, not verified: `UserStore.setPasswordHash` in the Store and both adapters, `changeOwnPassword` in `server/src/account.ts`, `resetStaffPassword` in `server/src/staff.ts`, routes `POST /auth/password` and `PUT /staff/:id/password`, 64 new tests by my count, 16 new live checks. Expected `npm run check`: 23 test files, 648 tests. Expected live check: "60 passed, 0 failed". No schema change, so no `db:deploy`. Restart the server before the live check.
 
 ## Next step brief
-Step 2.5d (M, proposed, OQ-15): change own password, and Super Admin resets a Staff password. Owner inputs needed:
-1. Run the 2.5c commands from that message: `npm run check` in `server/`, make sure port 3000 is free, `npm start`, then `sh scripts/live-check-auth.sh` from the repo root. Report the last lines of each. Commit only if all pass.
-2. Optional: the break-on-purpose runs P1 to P5 and S1 to S7 from the 2.5c message. Report which failed.
-3. Decide OQ-15 or accept the default: a signed-in user changes their own password with the current one, and all their sessions end; the Super Admin sets a new password for a Staff account, and their sessions end; no email links, no forced change. A forgotten owner password is reset by a terminal script in step 2.5e.
-4. Add D-35 to `mirror/DECISIONS.md` in Project knowledge by hand.
+Step 2.5e (S or M, proposed): a terminal script to reset a forgotten owner password. Owner inputs needed:
+1. Apply the 2.5d files. In `server/`: `npm run check`. Free port 3000, `npm start` (inside `server/`), then `sh scripts/live-check-auth.sh` from the repo root. Report the last lines of each. Commit only if all pass.
+2. Add D-36 to `mirror/DECISIONS.md` in Project knowledge by hand (and confirm D-35 is there).
+3. Optional: say "mutate 2.5d" and the next chat gives the break-on-purpose run for `account.ts` and `resetStaffPassword`.
+4. 2.5e needs no decision. Default: the script mirrors `setup:owner` (terminal only, no piped input, password typed twice with no echo), changes the existing Super Admin's password, ends all of that account's sessions, clears its lockout, and writes one audit entry. Say so if you want it different.
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic (create, list, change permissions, deactivate, reactivate), route guards, money, password and email modules, owner logic and setup script, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters, `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, and (once 2.5c is verified) `POST /staff/:id/deactivate` and `/reactivate`. An owner account exists on the owner's dev database. No data routes, no UI code yet.
+Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (including change own password), staff routes and logic (create, list, change permissions, deactivate, reactivate, reset password), route guards, money, password and email modules, `account.ts`, owner logic and setup script, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters, `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password` (2.5d), `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, and `PUT /staff/:id/password` (2.5d). An owner account exists on the owner's dev database. No data routes, no UI code yet.
 
 ## Settings (names only)
 `PORT` (optional), `DATABASE_URL` (see `server/.env.example`; default `file:./dev.db`), `TOKEN_SECRET` (at least 32 bytes; set on the owner's machine). Values never go in git.
 
 ## Commands
 Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run check`, `npm start` (run it from inside `server/`, A-48).
-Live check of sign-in, `/auth/me` and `/staff`: with the server running, `sh scripts/live-check-auth.sh` from the repo root.
+Live check of sign-in, `/auth/me`, `/staff` and passwords: with the server running, `sh scripts/live-check-auth.sh` from the repo root.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
 2. Attach `~/Desktop/resume-pack.txt` to a new chat in this Project.
@@ -32,13 +32,12 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.5d (M, proposed) Change own password; Super Admin resets a Staff password (OQ-15).
 - 2.5e (S or M, proposed) Terminal script to reset a forgotten owner password.
 - Then audit viewer (list entries, including those with no actor, A-28).
 - Phase 3: members and derived balances, with the "staff see only their own records" rule (DR-13) built into the data routes.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2 or 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. OQ-15 (change-password design) has a default. Owner may overrule D-19 to D-35. A-22 to A-60 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b), and the 2.5c set (P1 to P5, S1 to S7). A-42 (no per-IP limit) stays open. A forgotten owner password needs a dev database reset until 2.5e. A locked user, including the owner, has no manual unlock (A-43). An access token stays valid until it expires, even after sign-out (A-50); after deactivation it is refused at once. TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless). Commits ddf8f2b and 566cd6a have the same message (harmless). `mirror/DECISIONS.md` in Project knowledge must get D-35 by hand.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2 or 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. OQ-15 is closed (D-36). Owner may overrule D-19 to D-36. A-22 to A-65 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b), and 2.5d (`account.ts`, `resetStaffPassword`). A-42 (no per-IP limit) stays open. A forgotten owner password needs a dev database reset until 2.5e. A locked owner has no manual unlock (A-43); a Staff reset clears that account's lock (A-65). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63); after deactivation it is refused at once. TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless). Commits ddf8f2b and 566cd6a have the same message (harmless). `mirror/DECISIONS.md` in Project knowledge must get D-36 by hand.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

@@ -3,6 +3,7 @@
 // Never log a body, a token or a password.
 
 import { Router, type Request } from "express";
+import { changeOwnPassword } from "./account.js";
 import { authenticate } from "./auth.js";
 import { getAuth, requireAuth, sendUnauthorized } from "./guards.js";
 import { ALL_PERMISSIONS, hasPermission } from "./permissions.js";
@@ -84,6 +85,28 @@ export function createAuthRouter(deps: AuthRouteDeps): Router {
   router.post("/logout", async (req, res) => {
     const body = bodyOf(req);
     await signOut(deps.store, body["refreshToken"], deps.now());
+    res.status(204).end();
+  });
+
+  // Change your own password (D-36). 204 on success; the caller must sign in again.
+  router.post("/password", requireAuth(deps), async (req, res) => {
+    const auth = getAuth(res);
+    if (auth === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const body = bodyOf(req);
+    const result = await changeOwnPassword(
+      deps.store,
+      auth.user.id,
+      body["currentPassword"],
+      body["newPassword"],
+      deps.now(),
+    );
+    if (!result.ok) {
+      res.status(result.reason === "wrong_password" ? 403 : 400).json({ error: result.reason });
+      return;
+    }
     res.status(204).end();
   });
 

@@ -123,6 +123,13 @@ export interface UserStore {
    * lockout state: ending sessions is the logic code's job (staff.ts).
    */
   setActive(userId: string, isActive: boolean): Promise<boolean>;
+  /**
+   * Replaces the stored password hash of a user. Returns false if there is no such user.
+   * The caller passes a finished hash, never a password. It does not touch tokens or the
+   * lockout state: ending sessions and clearing the lockout are the logic code's job
+   * (account.ts, staff.ts).
+   */
+  setPasswordHash(userId: string, passwordHash: string): Promise<boolean>;
   /** True if any user has role SUPER_ADMIN, active or not. Staff do not count. */
   hasSuperAdmin(): Promise<boolean>;
   /**

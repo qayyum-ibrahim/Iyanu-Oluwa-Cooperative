@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 2.4a (size M), 2026-10-16: auth routes
+
+**Works (not verified anywhere yet; I ran nothing in this chat):** `server/src/auth-routes.ts` (`POST /auth/login`, `/auth/refresh`, `/auth/logout`), `createApp(deps?)` in `app.ts` with a JSON error handler, `TOKEN_SECRET` name in `.env.example`. Expected `npm run check`: 14 test files, 389 tests.
+**Stubbed:** `server.ts` is unchanged, so the running server does not serve `/auth` yet (step 2.4b). No route guard, no staff accounts, no per-IP limit (A-42 stays open).
+**Tests:** 25 new in `test/auth-routes.test.ts` by my count (login 14, refresh 6, logout 2, createApp 3).
+**Not verified:** everything. No break-on-purpose run (owed; security code). Express error behaviour (A-46). No live check this step.
+**Found along the way:**
+1. Plan change: 2.4a is routes plus tests on the memory store. The live check moves to 2.4b, because `db.ts`, `prisma-store.ts`, `setup-owner.ts` and `prisma.config.ts` had not been shown.
+2. NEXT_FILES miss: the list from 2.3e did not carry `auth.ts`, `store.ts`, `package.json`, `tsconfig.json` or `eslint.config.js`, so you had to paste them. `.env.example` was skipped by the resume script as "looks private" although it held a name only. NEXT_FILES for 2.4b lists what it needs.
+3. `TRACEABILITY.md` R-18 was garbled and lacked the 2.3e tests. Fixed. R-25 is still skipped; I do not know what it was.
+4. The files listed as "not seen" in STATUS (`sessions.ts`, `tokens.ts`, `email.ts`, `password.ts`, `app.ts`, `DEV_SETUP.md`) have now been seen.
+5. `TOKEN_SECRET` is set in your `server/.env` (length 64, reported by you).
+
 ## Step 2.3e (size M), 2026-10-15: sign-in lockout
 
 **Works (verified on your machine, output pasted: `migrate deploy` applied the migration, `migrate dev` "Already in sync", `npm run check` clean, 13 files, 364 tests; I ran nothing in my sandbox):** columns `User.failedLoginCount` and `User.lockedUntil`, migration `20261015130000_sign_in_lockout` (hand-written, like A-36). `getLockout`, `recordFailedLogin`, `clearLockout` on `UserStore` and in both adapters. `authenticate` takes an optional `now`, locks after 5 failures for 900 seconds, writes `account.locked`, refuses a locked user with reason `locked`, resets the count on success. Expected `npm run check`: 13 test files, 364 tests.

@@ -16,6 +16,9 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 | Health route | `curl -i http://localhost:3000/health` |
 | Reset the dev database | delete `server/dev.db`, then `npm run db:deploy` |
 
+## Routes
+`GET /health` is live. `POST /auth/login`, `/auth/refresh` and `/auth/logout` exist in `createApp(deps)` and are tested on the memory store (2.4a). The running server does not serve them until step 2.4b.
+
 ## Rules
 - Versions in `package.json` are exact. Change one only in a step that says so. Commit `package-lock.json`.
 - Never commit `.env` files or `*.db` files (see `.gitignore`).
@@ -23,4 +26,4 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 - `web/` has no setup yet. `legacy-prototype/` is reference only. Do not install or run it.
 
 ## Settings (names only)
-`PORT` (optional, default 3000). `DATABASE_URL` (optional for the setup script; default `file:./dev.db`). `TOKEN_SECRET` (at least 32 bytes; no code path reads it yet; its name goes in `server/.env.example` when a route needs it). More are added with the step that needs them.
+`PORT` (optional, default 3000). `DATABASE_URL` (optional for the setup script; default `file:./dev.db`). `TOKEN_SECRET` (at least 32 bytes; make your own value in `server/.env`; its name is in `server/.env.example`; the running server reads it from step 2.4b). More are added with the step that needs them.

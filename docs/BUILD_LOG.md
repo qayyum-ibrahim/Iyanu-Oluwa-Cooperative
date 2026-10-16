@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 2.4c (size S), 2026-10-16: fix NEXT_FILES for 2.5a
+
+**Works (not verified: docs only, nothing run):** `docs/NEXT_FILES.txt` replaced. It now lists the 18 paths that step 2.5a changes, imports, or needs to run `npm run check`. STATUS gains handoff rule 2 (write the list for the next step only).
+**Tests:** none. Last `npm run check` on the owner's machine: 14 files, 389 tests (2.4b).
+**Found along the way:**
+1. NEXT_FILES miss: the list was the 2.4b list. It held `server.ts`, `owner.ts`, `schema.prisma` and `store-contract.ts`, which 2.5a does not touch. It lacked `auth.ts`, `sessions.ts`, `tokens.ts`, `store.ts`, `email.ts`, `password.ts`, `package.json`, `tsconfig.json`, `eslint.config.js` and `live-check-auth.sh`. The owner had to paste them. Why it was not rewritten at the end of 2.4b is not known (that message was not seen).
+2. The 12 file sections in the 2.4b resume pack matched the old list exactly, so the pack script follows NEXT_FILES.txt.
+3. `mirror/DECISIONS.md` was stale (stopped at D-30). The owner updated it with D-31 and D-32. The repo still wins if they differ.
+4. Port 3000 was free (`lsof` printed nothing, verified on the owner's machine).
+5. `DEV_SETUP.md` still says `/auth` is served "from step 2.4b". Not changed here. It is in the 2.5a list and gets fixed there.
+
 ## Step 2.4b (size M), 2026-10-16: serve the auth routes, live check
 
 **Works (verified on your machine: `npm run check` clean, 14 files, 389 tests; `npm run typecheck` clean with the final `server.ts`; live check `sh scripts/live-check-auth.sh` printed "12 passed, 0 failed" against the real server and a real SQLite database; I ran nothing in my sandbox):** `server/src/server.ts` uses the Prisma store and `TOKEN_SECRET`, mounts `/auth`, reports a listen error, and stops cleanly on Ctrl+C. `scripts/live-check-auth.sh` runs 12 checks: health, wrong password, login, refresh, reuse, family revoke, second login, logout, refresh after logout.

@@ -1,13 +1,13 @@
 # Project status
-Last updated: after step 2.4b (verified on the owner's machine)
+Last updated: after step 2.4c (docs only)
 
 ## Where we stopped
-Step 2.4b is verified on the owner's machine: `npm run check` clean (14 files, 389 tests), and the live check `sh scripts/live-check-auth.sh` printed "12 passed, 0 failed" against the running server and the real SQLite database. `server/src/server.ts` serves `/auth/login`, `/auth/refresh` and `/auth/logout` with the Prisma store and `TOKEN_SECRET`, reports a busy port, and stops cleanly. The dev database was reset on 2026-10-16 (fictional data only) and a new owner was created. The code and docs are committed once you run the commit below.
+Step 2.4b is verified on the owner's machine: `npm run check` clean (14 files, 389 tests), and `sh scripts/live-check-auth.sh` printed "12 passed, 0 failed" against the running server and the real SQLite database. `server/src/server.ts` serves `/auth/login`, `/auth/refresh` and `/auth/logout` with the Prisma store and `TOKEN_SECRET`, reports a busy port, and stops cleanly. The dev database was reset on 2026-10-16 (fictional data only) and a new owner was created. Step 2.4c fixed `docs/NEXT_FILES.txt` so a fresh chat has what 2.5a needs. Port 3000 was free on 2026-10-16 (`lsof` printed nothing).
 
 ## Next step brief
 Step 2.5a (M): route guards and `GET /auth/me`. Owner inputs needed:
-1. Run the docs commands from the 2.4b-final message, check that the four `grep -c` lines each print 1, then commit from the repo root: `git add .`, commit, `git status --short` shows nothing.
-2. Make sure no old server is running before the next live check (`lsof -nP -iTCP:3000 -sTCP:LISTEN` prints nothing).
+1. Commit the 2.4c docs (commands in the 2.4c message), then `git status --short` shows nothing.
+2. Make sure no old server is running before the live check (`lsof -nP -iTCP:3000 -sTCP:LISTEN` prints nothing).
 3. Optional: answer OQ-13 (final staff permission list). The default stands if you do not.
 4. Optional: say whether you want a reset-password script. It is outside the plan and needs your decision.
 
@@ -37,13 +37,14 @@ Full plan: PHASE_PLAN.md.
 - Then audit writes for sensitive actions. A reset-password script if the owner wants one.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-32. A-22 to A-48 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a) and `server.ts` (2.4b). A-42 (no per-IP limit) stays open. No reset-password feature; a forgotten owner password needs a dev database reset. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). A locked user, including the owner, has no manual unlock (A-43). TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless).
+See OPEN_QUESTIONS.md. Nothing blocks Phase 2. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-32. A-22 to A-48 are Claude's choices or checks. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a) and `server.ts` (2.4b). A-42 (no per-IP limit) stays open. No reset-password feature; a forgotten owner password needs a dev database reset. The Store has no way to list audit entries with no actor, and no way to deactivate a user (A-28, A-30). A locked user, including the owner, has no manual unlock (A-43). TRACEABILITY.md skips R-25. `server/tsconfig.json` `include` lists `test` twice (harmless). `DEV_SETUP.md` still says `/auth` is not served until 2.4b; fix it in 2.5a. Commits ddf8f2b and 566cd6a have the same message (cause not seen, harmless).
 
 ## How we work
 Delivery: whole files pasted in chat. Mode: lean.
 Handoff rule (every step, no exceptions):
 1. End the step with the full new contents of docs/NEXT_FILES.txt: one repo path per line, every file the next step must read or change that a fresh chat has not been shown, ending with a newline.
-2. Give STATUS.md as a whole file, never as partial edits.
-3. Commit from the repo root: `git add .`, then `git status --short` must show nothing left.
-4. A fresh chat does not ask the owner to paste files that NEXT_FILES.txt should carry. If one is missing, ask once, fix NEXT_FILES.txt in the same step, and log the miss in BUILD_LOG.
-5. "Next step brief" lists only what only the owner can do: commands, secrets, decisions.
+2. Write NEXT_FILES for the next step only, from its brief: the files it will change, the files those import, the tests it must run, the config needed to run `npm run check`, and any script or doc it edits. Do not carry the old list over. Drop files the next step does not touch.
+3. Give STATUS.md as a whole file, never as partial edits.
+4. Commit from the repo root: `git add .`, then `git status --short` must show nothing left.
+5. A fresh chat does not ask the owner to paste files that NEXT_FILES.txt should carry. If one is missing, ask once, fix NEXT_FILES.txt in the same step, and log the miss in BUILD_LOG.
+6. "Next step brief" lists only what only the owner can do: commands, secrets, decisions.

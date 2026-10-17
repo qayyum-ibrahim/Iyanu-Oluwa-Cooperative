@@ -13,7 +13,7 @@ Status: confirmed / illustrative / verify.
 | A-08 | `exceljs` 4.4.0 is acceptable for .xlsx output. I did not check how actively it is maintained. | verify | Claude at step 8.1 |
 | A-09 | The `xlsx` npm package (latest on npm is 0.18.5) has known security advisories. I believe so but did not check. We will not use it. | verify | Claude at step 8.1 |
 | A-10 | `argon2` (native module) installs on the owner's machine. If not, use a pure-JS alternative. | confirmed (step 2.1a output) | Owner (output pasted at step 2.1a) |
-| A-11 | Staff see only members and records they created (as the ZIP does today). | illustrative | Owner (OQ-09) |
+| A-11 | Staff see only members and records they created (as the ZIP does today). | confirmed (owner answered OQ-09 on 2026-10-17: own members only) | Owner |
 | A-12 | Membership ID format `IO-001`, `IO-002` stays. | illustrative | Owner |
 | A-13 | The label "Building Funds" is used exactly as the owner wrote it. | verify | Owner |
 | A-14 | Names and amounts in the ZIP seed are fictional. | confirmed | Owner (D-08) |
@@ -81,3 +81,9 @@ Status: confirmed / illustrative / verify.
 | A-76 | No test sends an audit filter of exactly 100 characters, so the upper boundary of `MAX_FILTER_LENGTH` is not pinned (mutation V13 escaped at 2.6b). A wrong limit of 101 was caught (V6). Low risk. | illustrative | Claude, optional one-line test later |
 | A-77 | Mutation R26 (`requirePermission` removed from `audit-routes.ts`) escaped because `listAuditEntries` checks `users.manage` itself and the route turns that into 403. The check is duplicated on purpose. Read from the code shown at 2.6, not run. | confirmed (code read at 2.6b) | Owner |
 | A-78 | Mutation P44 (Prisma tie-break by `id` removed) escaped. Entries with equal creation times have no promised order (A-74), and the contract avoids ties. Not a gap in a stated rule. | verify | Claude at Phase 9 |
+| A-79 | The next Membership number is the highest stored `seq` plus 1. In the Prisma adapter the unique index on `seq` stops two parallel creates from taking the same number, and the loser tries again, up to 10 times (my choice). The parallel test (5 creates) passed on both adapters. It does not show whether a retry happened. The memory adapter cannot clash. The race ran only on SQLite with better-sqlite3 (see A-35). | verify | Claude when the production database is chosen (OQ-01) and at Phase 9 |
+| A-80 | Membership numbers are never reused because no member is ever deleted (no delete route is planned). If a delete feature is added, "highest plus 1" would reuse the number of a deleted last member. Decide first, then change the rule. | verify | Claude, if member deletion is ever requested |
+| A-81 | The format is `IO-` plus at least 3 digits (`IO-001`, `IO-1000`). Kept from the prototype (A-12). | illustrative | Owner |
+| A-82 | The members store saves text exactly as given. Trimming, length limits and phone format are logic code (3.2). My defaults for 3.2: full name required, 1 to 100 characters after trimming (same as A-56); phone, address and occupation optional, at most 200 characters; no phone number format check, because I have not checked Nigerian number rules. All my choices, not the owner's. | illustrative | Owner |
+| A-83 | The member record has no `dateJoined`. `createdAt` (UTC, D-16) stands in for it, and the Lagos date is worked out when shown. The prototype had `dateJoined`. | illustrative | Owner |
+| A-84 | `Member.createdById` cannot be removed while a user has members (`onDelete: Restrict`), like the audit log. A user is never deleted, only deactivated (D-35), so this does not block anything today. | illustrative | Owner |

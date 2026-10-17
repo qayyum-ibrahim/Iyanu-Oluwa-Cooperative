@@ -12,10 +12,10 @@
 | OQ-06 | Can a member be paid off while holding an active loan? | Owner | Phase 6 | No. Blocked (as in the ZIP). |
 | OQ-07 | Can an Inactive member be reactivated? By whom? | Owner | Phase 6 | No reactivation feature |
 | OQ-08 | Who may edit an expense, and must old values be kept? | Owner | Phase 5 | Edits allowed with permission; old values go in the audit log |
-| OQ-09 | Can staff pick members created by other staff when recording a payment? | Owner | Phase 3 | No (own members only) |
+| OQ-09 | Can staff pick members created by other staff when recording a payment? Answered 2026-10-17: no, own members only. | Owner | Closed | n/a |
 | OQ-10 | Can a pay-off be reversed or corrected? | Owner | Phase 6 | No. A correction is a new reversing entry. |
 | OQ-11 | Does Total Expenditures include Member Withdrawal outflows? Does Income include Loan Repaid and Loan Interest? | Owner | Phase 7 | Expenditure includes all non-deleted outflows. Income includes all payment lines. |
 | OQ-12 | Any real data in anyone's browser (`iyanu_oluwa_react_v2`)? | Owner | Phase 10 | No real data |
 | OQ-13 | Final staff permission list. Answered 2026-10-16: the default (the 22 permissions in `permissions.ts`) | Owner | Closed | n/a |
-| OQ-14 | Are non-refundable balances (e.g. Development Levy) shown on the member profile? | Owner | Phase 3 | Shown under "Retained by cooperative", not counted in payout |
+| OQ-14 | Are non-refundable balances (e.g. Development Levy) shown on the member profile? Answered 2026-10-17: yes, under "Retained by cooperative", not counted in payout. | Owner | Closed | n/a |
 | OQ-15 | Change-password design. Answered 2026-10-16: the default below (accepted by the owner). Built in 2.5d (D-36) and 2.5e (D-38). | Owner | Closed | Proposed default: a signed-in user changes their own password by giving the current one (all their sessions end); the Super Admin sets a new password for a Staff account (their sessions end); a forgotten owner password is reset by a terminal script (2.5e). No email links, no forced change on next sign-in. |

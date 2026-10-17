@@ -4,12 +4,32 @@ import {
   DuplicateTokenHashError,
   UnknownActorError,
   UnknownUserError,
+  formatMembershipId,
   type AuditRecord,
   type LockoutState,
+  type MemberRecord,
   type RefreshTokenRecord,
   type Store,
   type UserRecord,
 } from "./store.js";
+
+/** How often a member create tries again when another create took the same number. */
+const MEMBER_NUMBER_TRIES = 10;
+
+/** A Member row as the database holds it. The Membership ID is made from seq. */
+type MemberRow = Omit<MemberRecord, "membershipId"> & { seq: number };
+
+const toMember = (r: MemberRow): MemberRecord => ({
+  id: r.id,
+  membershipId: formatMembershipId(r.seq),
+  fullName: r.fullName,
+  phone: r.phone,
+  address: r.address,
+  occupation: r.occupation,
+  status: r.status,
+  createdById: r.createdById,
+  createdAt: r.createdAt,
+});
 
 function hasCode(e: unknown, code: string): boolean {
   return typeof e === "object" && e !== null && "code" in e && e.code === code;
@@ -206,6 +226,51 @@ export function createPrismaStore(prisma: PrismaClient): Store {
           take: query.limit,
         });
         return rows.map(toAudit);
+      },
+    },
+    members: {
+      async create(input) {
+        // The number is the highest one plus 1. The unique index on seq settles a race: the loser tries again.
+        for (let attempt = 0; attempt < MEMBER_NUMBER_TRIES; attempt += 1) {
+          const top = await prisma.member.aggregate({ _max: { seq: true } });
+          const seq = (top._max.seq ?? 0) + 1;
+          try {
+            const row = await prisma.member.create({
+              data: {
+                seq,
+                fullName: input.fullName,
+                phone: input.phone,
+                address: input.address,
+                occupation: input.occupation,
+                createdById: input.createdById,
+              },
+            });
+            return toMember(row);
+          } catch (e) {
+            if (hasCode(e, "P2003")) throw new UnknownActorError(input.createdById);
+            if (hasCode(e, "P2002")) continue;
+            throw e;
+          }
+        }
+        throw new Error("Could not assign a membership number");
+      },
+      async findById(id) {
+        const row = await prisma.member.findUnique({ where: { id } });
+        return row ? toMember(row) : null;
+      },
+      async list(query) {
+        const rows = await prisma.member.findMany({
+          where: {
+            ...(query.createdById !== undefined ? { createdById: query.createdById } : {}),
+            ...(query.status !== undefined ? { status: query.status } : {}),
+          },
+          orderBy: { seq: "asc" },
+        });
+        return rows.map(toMember);
+      },
+      async setStatus(id, status) {
+        const result = await prisma.member.updateMany({ where: { id }, data: { status } });
+        return result.count === 1;
       },
     },
     refreshTokens: {

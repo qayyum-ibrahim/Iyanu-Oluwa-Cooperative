@@ -1,5 +1,5 @@
 # Data model
-Last updated: step 2.5b. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
+Last updated: step 3.1. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
 
 ## Conventions
 - Money columns: `BigInt`, whole kobo (D-15). None exist yet.
@@ -15,6 +15,7 @@ Last updated: step 2.5b. Schema file: `server/prisma/schema.prisma`. Database: S
 | User | id, email (unique), passwordHash, displayName, role (SUPER_ADMIN or STAFF), isActive, failedLoginCount, lockedUntil, permissions | Lockout fields added in 2.3e (D-30); read them with `getLockout`. `permissions` (2.5b, D-34) is JSON text of permission names, used by Staff only; it is part of `UserRecord`. |
 | AuditLog | id, createdAt, actorId (nullable), action, entityType, entityId, detail | Actor is empty for system or setup-script actions. A user with audit rows cannot be deleted (DR-15). |
 | RefreshToken | id, userId, familyId, tokenHash (unique), createdAt, expiresAt, usedAt, revokedAt | Only the SHA-256 hash is stored (A-33). One family per sign-in, shared by its rotations. Deleted with its user (D-28). |
+| Member | id, seq (unique), fullName, phone, address, occupation, status (ACTIVE or INACTIVE), createdById, createdAt | Step 3.1, D-40. The Membership ID (`IO-001`) is made from `seq` and is not stored as text. `createdById` is the user who recorded the member (DR-13, DR-15); a user with members cannot be deleted. Personal data (A-05): fictional data only (D-08). Phone, address and occupation are empty text when not given. |
 
 ## Not yet modelled
-Members, payments, loans, expenses. See PHASE_PLAN.md.
+Payments, loans, expenses, balances. See PHASE_PLAN.md.

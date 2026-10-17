@@ -29,7 +29,7 @@ beforeAll(async () => {
 function withBrokenAudit(base: Store): Store {
   return {
     users: base.users,
-    refreshTokens: base.refreshTokens,
+    refreshTokens: base.refreshTokens, members: base.members,
     audit: {
       append: async () => {
         throw new Error("audit down");

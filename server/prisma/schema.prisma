@@ -1,6 +1,6 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
-// stored staff permissions (step 2.5b).
-// Money tables arrive in Phase 3 and later. Money columns will be BigInt kobo (D-15).
+// stored staff permissions (step 2.5b), members (step 3.1).
+// Money tables arrive in Phase 4 and later. Money columns will be BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
 generator client {
@@ -20,6 +20,11 @@ enum Role {
   STAFF
 }
 
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id               String         @id @default(uuid())
   email            String         @unique
@@ -35,6 +40,7 @@ model User {
   updatedAt        DateTime       @updatedAt
   auditLogs        AuditLog[]
   refreshTokens    RefreshToken[]
+  members          Member[]
 }
 
 model AuditLog {
@@ -64,4 +70,21 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+model Member {
+  id          String       @id @default(uuid())
+  // The number behind the Membership ID: 1 is IO-001. Never reused.
+  seq         Int          @unique
+  fullName    String
+  phone       String       @default("")
+  address     String       @default("")
+  occupation  String       @default("")
+  status      MemberStatus @default(ACTIVE)
+  // The user who recorded the member (DR-13, DR-15). A user with members cannot be deleted.
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime     @default(now())
+
+  @@index([createdById])
 }

@@ -4,12 +4,17 @@ import {
   DuplicateTokenHashError,
   UnknownActorError,
   UnknownUserError,
+  formatMembershipId,
   type AuditRecord,
   type LockoutState,
+  type MemberRecord,
+  type MemberStore,
   type RefreshTokenRecord,
   type Store,
   type UserRecord,
 } from "./store.js";
+
+const copyMember = (m: MemberRecord): MemberRecord => ({ ...m, createdAt: new Date(m.createdAt) });
 
 const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
 const copyUser = (u: UserRecord): UserRecord => ({
@@ -165,6 +170,47 @@ export function createMemoryStore(): Store {
         return matched.slice(query.offset, query.offset + query.limit).map(({ entry }) => copyAudit(entry));
       },
     },
+    members: ((): MemberStore => {
+      const rows: MemberRecord[] = [];
+      return {
+        async create(input) {
+          // No await in this method, so two calls cannot get the same number.
+          if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          const record: MemberRecord = {
+            id: randomUUID(),
+            membershipId: formatMembershipId(rows.length + 1),
+            fullName: input.fullName,
+            phone: input.phone,
+            address: input.address,
+            occupation: input.occupation,
+            status: "ACTIVE",
+            createdById: input.createdById,
+            createdAt: new Date(),
+          };
+          rows.push(record);
+          return copyMember(record);
+        },
+        async findById(id) {
+          const found = rows.find((m) => m.id === id);
+          return found ? copyMember(found) : null;
+        },
+        async list(query) {
+          return rows
+            .filter(
+              (m) =>
+                (query.createdById === undefined || m.createdById === query.createdById) &&
+                (query.status === undefined || m.status === query.status),
+            )
+            .map(copyMember);
+        },
+        async setStatus(id, status) {
+          const found = rows.find((m) => m.id === id);
+          if (!found) return false;
+          found.status = status;
+          return true;
+        },
+      };
+    })(),
     refreshTokens: {
       async create(input) {
         if (!users.has(input.userId)) throw new UnknownUserError(input.userId);

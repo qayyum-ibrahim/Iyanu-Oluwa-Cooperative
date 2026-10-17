@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 3.1 (size M), 2026-10-18: members table and store
+
+**Works (verified on your machine, output pasted: `migrate dev` created and applied `20261017231516_members`; `npm run check` clean, 27 files, 758 tests; `.tables` lists `Member`; `git status --short` showed the 11 expected lines; I ran nothing in my sandbox):** model `Member` and enum `MemberStatus` in `schema.prisma`. `MemberRecord`, `NewMember`, `MemberListQuery`, `MemberStore` and `formatMembershipId` in `store.ts`; `members` added to `Store`. Both adapters implement `create`, `findById`, `list` and `setStatus`. The Membership ID is made from a stored number `seq` (1 gives `IO-001`, 1000 gives `IO-1000`). `createdById` records who recorded the member (DR-13, DR-15). Decision D-40.
+**Stubbed:** no routes, no input checks (trimming, length), no audit entry for member creation, no pay-off or automatic Inactive rule (Phase 6). No Building Funds category yet. No balances.
+**Tests:** 32 new. `test/helpers/members-contract.ts` 12 cases x 2 adapters = 24, `test/membership-id.test.ts` 8. Total 758 (was 726). The Prisma half ran on a real SQLite file built from the real migrations.
+**Not verified:** the break-on-purpose run for the members store (owed, not run). Whether the "try again on a number clash" path in the Prisma `create` was ever used: the parallel test passed, but it does not show whether a retry happened (A-79). Behaviour on a server database (A-35).
+**Found along the way:**
+1. NEXT_FILES miss: the list lacked `auth-routes.test.ts`, `owner-reset.test.ts` and `staff-routes.test.ts`, which the grep in STATUS found. You pasted them. The new list is written for 3.2 only.
+2. I predicted that three test files build a full `Store` literal (`auth.test.ts`, `sessions.test.ts`, `auth-routes.test.ts`). Typecheck was clean after I added `members` to those three only, so the prediction was right (verified on your machine).
+3. The step 3.1 count prediction was right: 758 tests in 27 files, migration applied, no reset asked.
+4. `prisma-store.test.ts` took about 43 s. The fresh-database tests took 21.6 s and 4.1 s. All are inside the 120 s limit. Vitest suggested `isolate: false`. I did not change anything.
+5. `mirror/DECISIONS.md` needs D-40 by hand.
+
 ## Step 2.6b (size S), 2026-10-17: break-on-purpose for the audit viewer
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-2.6b.mjs`, on your Desktop (not in git). It changes `audit-view.ts`, `audit-routes.ts` and the `audit.list` code in both adapters one mutation at a time, runs the matching test files, and restores the files. Baseline: view, routes, mem, prisma all PASS. Result: 48 mutations, 45 caught, 3 escaped, 0 error, 0 timeout, 0 not applied. All four files "restored: yes". No source or test file changed, so the totals stay at 26 files, 726 tests (verified at 2.6).

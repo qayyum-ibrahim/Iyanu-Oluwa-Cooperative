@@ -196,8 +196,61 @@ export interface RefreshTokenStore {
   revokeAllForUser(userId: string, now: Date): Promise<number>;
 }
 
+export type MemberStatus = "ACTIVE" | "INACTIVE";
+
+/** A cooperative member. Balances are not stored here: they are derived later (D-17). */
+export interface MemberRecord {
+  id: string;
+  /** IO-001, IO-002 and so on. Made from the member's number and never reused. */
+  membershipId: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  occupation: string;
+  status: MemberStatus;
+  /** The user who recorded the member. DR-13 uses it to decide who sees the member (DR-15: the actor). */
+  createdById: string;
+  createdAt: Date;
+}
+
+export interface NewMember {
+  fullName: string;
+  phone: string;
+  address: string;
+  occupation: string;
+  createdById: string;
+}
+
+/** What to list. Filters match exactly. No filter means all members. */
+export interface MemberListQuery {
+  createdById?: string;
+  status?: MemberStatus;
+}
+
+/** 1 gives "IO-001", 1000 gives "IO-1000". Throws RangeError unless n is a whole number of at least 1. */
+export function formatMembershipId(n: number): string {
+  if (!Number.isInteger(n) || n < 1) {
+    throw new RangeError("A membership number must be a whole number of at least 1.");
+  }
+  return `IO-${String(n).padStart(3, "0")}`;
+}
+
+export interface MemberStore {
+  /**
+   * Saves a new ACTIVE member with the next Membership ID. Throws UnknownActorError if createdById
+   * is not a user. Text is saved exactly as given (cleaning is the logic code's job).
+   */
+  create(input: NewMember): Promise<MemberRecord>;
+  findById(id: string): Promise<MemberRecord | null>;
+  /** Members in Membership ID order, oldest first, narrowed by the exact filters. Returns copies. */
+  list(query: MemberListQuery): Promise<MemberRecord[]>;
+  /** Sets the status. Returns false if there is no such member. */
+  setStatus(id: string, status: MemberStatus): Promise<boolean>;
+}
+
 export interface Store {
   users: UserStore;
   audit: AuditStore;
   refreshTokens: RefreshTokenStore;
+  members: MemberStore;
 }

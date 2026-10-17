@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 2.6 (size M), 2026-10-17: audit viewer
+
+**Works (verified on your machine, output pasted: `npm run check` clean, 26 files, 726 tests; live check "73 passed, 0 failed"; I ran nothing in my sandbox):** `GET /audit` for the Super Admin only (`users.manage`, D-39). Newest first, `limit` (default 50, max 200), `offset`, exact filters `actorId` and `action`. Entries with no actor are included (A-28). New `AuditStore.list` in the interface and both adapters. New files: `audit-view.ts`, `audit-routes.ts`, `test/helpers/audit-list-contract.ts`, `test/audit-view.test.ts`, `test/audit-routes.test.ts`. Mounted in `app.ts`.
+**Stubbed:** no date filter, no search, no export. Reading the log is not audited (A-75).
+**Tests:** 62 new: contract 7 cases x 2 adapters = 14, `audit-view.test.ts` 34, `audit-routes.test.ts` 14. Total 726 (was 664). The live check gains 13 checks (60 to 73).
+**Not verified:** the break-on-purpose run (owed, step 2.6b). Ordering of entries made in the same millisecond on Prisma (A-74).
+**Found along the way:**
+1. My count error: I predicted 74 live checks. The audit section has 13, so 73 is right.
+2. My step message gave a risk I had already named: nine test files build an `AuditStore` by hand, so the first `npm run check` failed at typecheck with 12 errors ("Property 'list' is missing"). I had not seen those files. I did not ask for them before giving the step. Fixed by adding `list` to each hand-built store. NEXT_FILES should have carried the test files that build stores by hand.
+3. A-70 is settled by reading `password.ts`: `hashPassword` calls `assertPasswordAllowed` first, so mutation O1 from 2.5f is equivalent (the check is duplicated). I did not run anything for this.
+4. `mirror/DECISIONS.md` needs D-39 by hand.
+
 ## Step 2.5f (size S), 2026-10-17: break-on-purpose for owner-reset.ts
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-2.5f.mjs`, on your Desktop (not in git). It changes `server/src/owner-reset.ts` one mutation at a time, runs `test/owner-reset.test.ts`, and restores the file. Baseline 15 of 15 passed. Result: 22 mutations, 18 caught, 4 escaped, 0 timeouts, 0 not applied. "file restored: yes". No source or test file changed, so the totals stay at 24 files, 664 tests (verified at 2.5e).

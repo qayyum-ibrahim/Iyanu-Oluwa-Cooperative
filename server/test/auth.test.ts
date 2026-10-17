@@ -33,6 +33,7 @@ function withSpy(base: Store) {
         return base.audit.append(entry);
       },
       listByActor: (id) => base.audit.listByActor(id),
+      list: (q) => base.audit.list(q),
     },
     refreshTokens: base.refreshTokens,
   };
@@ -227,6 +228,7 @@ describe("authenticate: audit rules", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
       refreshTokens: store.refreshTokens,
     };
@@ -242,6 +244,7 @@ describe("authenticate: audit rules", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
       refreshTokens: store.refreshTokens,
     };

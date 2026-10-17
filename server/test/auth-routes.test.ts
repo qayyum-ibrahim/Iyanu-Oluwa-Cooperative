@@ -35,6 +35,7 @@ function withBrokenAudit(base: Store): Store {
         throw new Error("audit down");
       },
       listByActor: base.audit.listByActor,
+      list: base.audit.list,
     },
   };
 }

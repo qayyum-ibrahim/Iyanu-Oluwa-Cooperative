@@ -195,6 +195,18 @@ export function createPrismaStore(prisma: PrismaClient): Store {
         const rows = await prisma.auditLog.findMany({ where: { actorId } });
         return rows.map(toAudit);
       },
+      async list(query) {
+        const rows = await prisma.auditLog.findMany({
+          where: {
+            ...(query.actorId !== undefined ? { actorId: query.actorId } : {}),
+            ...(query.action !== undefined ? { action: query.action } : {}),
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: query.offset,
+          take: query.limit,
+        });
+        return rows.map(toAudit);
+      },
     },
     refreshTokens: {
       async create(input) {

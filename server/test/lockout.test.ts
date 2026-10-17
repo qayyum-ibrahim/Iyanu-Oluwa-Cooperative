@@ -40,6 +40,7 @@ async function setup() {
         return base.audit.append(entry);
       },
       listByActor: (id) => base.audit.listByActor(id),
+      list: (q) => base.audit.list(q),
     },
   };
   return { base, store, appended, user };

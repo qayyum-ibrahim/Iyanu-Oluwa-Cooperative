@@ -8,6 +8,7 @@ import {
 } from "../../src/store.js";
 import { runLockoutContract } from "./lockout-contract.js";
 import { runActiveContract } from "./active-contract.js";
+import { runAuditListContract } from "./audit-list-contract.js";
 import { runPasswordContract } from "./password-contract.js";
 import { runPermissionsContract } from "./permissions-contract.js";
 
@@ -367,5 +368,6 @@ export function runStoreContract(
     runPermissionsContract(makeStore);
     runActiveContract(makeStore);
     runPasswordContract(makeStore);
+    runAuditListContract(makeStore);
   });
 }

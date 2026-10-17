@@ -125,6 +125,7 @@ describe("resetOwnerPassword: success", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
     };
     await expect(resetOwnerPassword(broken, NEW_PASSWORD, T0)).rejects.toThrow("audit down");

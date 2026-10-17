@@ -1,24 +1,24 @@
 # Project status
-Last updated: after step 2.5f (all results from the owner's pasted output)
+Last updated: after step 2.6 (all results from the owner's pasted output)
 
 ## Where we stopped
-2.5f is verified on the owner's machine: the break-on-purpose run for `owner-reset.ts` gave 22 mutations, 18 caught, 4 escaped (O20 and O21 equivalent, O22 a low-risk gap, O1 not yet explained). The file was restored. No code changed, so the last full check stays 24 test files, 664 tests (2.5e). Not shown: the final `git status --short` (empty in the paste). `reset-owner-password.ts` has live-run coverage only.
+2.6 is verified on the owner's machine: the audit viewer (`GET /audit`, Super Admin only, newest first, paging and filters). `npm run check` clean: 26 test files, 726 tests. Live check "73 passed, 0 failed". Not yet done: the break-on-purpose run for `audit-view.ts`, `audit-routes.ts` and the store `list` methods (step 2.6b). Not shown: the commit hash for 2.6.
 
 ## Next step brief
-Step 2.6 (M, proposed): audit viewer. A read-only list of audit entries, including entries with no actor (A-28), for holders of the audit permission. Settles O1 (A-70) first by reading `password.ts`. Owner inputs needed:
-1. Commit this docs step (commands in the message), then run `sh scripts/resume-pack.sh` and start a new chat.
-2. No mirror change needed: `mirror/DECISIONS.md` already has D-38.
-3. No decision needed. Defaults: newest first, a fixed page size, filter by actor and by action. The permission name comes from `permissions.ts` (I have not seen it yet).
+Step 2.6b (S, proposed): break-on-purpose run for the audit viewer, using a throwaway script on your Desktop (not in git), as in 2.5f. After that, Phase 3 (members and derived balances). Owner inputs needed:
+1. Add D-39 to `mirror/DECISIONS.md` (text is in the docs message of 2.6).
+2. Commit this docs step (commands in the message), then run `sh scripts/resume-pack.sh` and start a new chat.
+3. Before Phase 3 starts, OQ-09 (can staff pick members created by other staff?) needs your answer or the default stands (own members only).
 
 ## What exists
-Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes (including change own password), staff routes and logic (create, list, change permissions, deactivate, reactivate, reset password), route guards, money, password and email modules, `account.ts`, owner logic, owner setup script and owner reset script (`owner-reset.ts`, `reset-owner-password.ts`), permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters, `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, and `PUT /staff/:id/password`. An owner account exists on the owner's dev database. No data routes, no UI code yet.
+Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic, audit viewer (`audit-view.ts`, `audit-routes.ts`), route guards, money, password and email modules, `account.ts`, owner logic, owner setup and reset scripts, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters (with `audit.list`), `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`, and `GET /audit`. An owner account exists on the owner's dev database. No data routes, no UI code yet.
 
 ## Settings (names only)
 `PORT` (optional), `DATABASE_URL` (see `server/.env.example`; default `file:./dev.db`), `TOKEN_SECRET` (at least 32 bytes; set on the owner's machine). Values never go in git.
 
 ## Commands
 Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run reset:owner`, `npm run check`, `npm start` (run it from inside `server/`, A-48).
-Live check of sign-in, `/auth/me`, `/staff` and passwords: with the server running, `sh scripts/live-check-auth.sh` from the repo root. Use a temporary database (`DATABASE_URL=file:./name.db`) for scripts that change the owner.
+Live check of sign-in, `/auth/me`, `/staff`, passwords and `/audit`: with the server running, `sh scripts/live-check-auth.sh` from the repo root. Use a temporary database (`DATABASE_URL=file:./name.db`) for scripts that change the owner.
 Git commands run from the repo root, not from `server/`.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
@@ -32,11 +32,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.6 (M, proposed) Audit viewer (list entries, including those with no actor, A-28).
+- 2.6b (S, proposed) Break-on-purpose for the audit viewer.
 - Phase 3: members and derived balances, with the "staff see only their own records" rule (DR-13) built into the data routes.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 2 or 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-38. A-22 to A-71 are Claude's choices or checks. A-70 (why mutation O1 escaped) is settled first in the next step. Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). `owner-reset.ts` is done (2.5f). A-42 (no per-IP limit) stays open. A locked owner is unlocked by `npm run reset:owner` (A-67); anyone with server shell and database access can reset the owner (A-68). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. Commits ddf8f2b and 566cd6a, and c9a6480 and 52a50c0, have the same message (harmless). The mutation scripts live on the owner's Desktop, not in git.
+See OPEN_QUESTIONS.md. Nothing blocks Phase 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-39. A-22 to A-75 are Claude's choices or checks. A-70 is settled (mutation O1 is equivalent). Owed break-on-purpose runs: audit viewer (2.6b), step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. Reading the audit log is not itself audited (A-75). A locked owner is unlocked by `npm run reset:owner` (A-67); anyone with server shell and database access can reset the owner (A-68). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. Commits ddf8f2b and 566cd6a, and c9a6480 and 52a50c0, have the same message (harmless). The mutation scripts live on the owner's Desktop, not in git.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

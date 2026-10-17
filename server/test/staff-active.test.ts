@@ -179,6 +179,7 @@ describe("deactivateStaff", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
     };
     await expect(deactivateStaff(broken, adminActor, staff.id, T0)).rejects.toThrow("audit down");

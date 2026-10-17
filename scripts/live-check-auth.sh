@@ -188,7 +188,31 @@ expect "old password refused after change" "$code" 401
 code=$(login_json "$STAFF_EMAIL" "$NEWER_PW" | send /auth/login)
 expect "new password works after change" "$code" 200
 code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/auth/password" -H "Content-Type: application/json" --data '{}')
-expect "change without a token refused" "$code" 401
+
+# --- audit viewer (step 2.6) ---
+UNKNOWN_EMAIL="nobody-$(date +%s)@example.test"
+code=$(login_json "$UNKNOWN_EMAIL" "wrong-password-for-live-check" | send /auth/login)
+expect "unknown email refused" "$code" 401
+code=$(authed_get /audit "$AT")
+expect "owner reads audit log" "$code" 200
+expect "audit body fields" "$(keys)" "entries,hasMore,limit,offset"
+expect "audit default limit" "$(pick limit)" 50
+code=$(authed_get "/audit?action=login.failure&limit=5" "$AT")
+expect "audit filter by action" "$code" 200
+expect "newest failed sign-in has no actor" "$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(b.entries[0]&&b.entries[0].actorId===null?"yes":"no")' "$BODY")" yes
+expect "typed email not in audit log" "$(U="$UNKNOWN_EMAIL" node -e 'const fs=require("fs");process.stdout.write(fs.readFileSync(process.argv[1],"utf8").includes(process.env.U)?"leaked":"clean")' "$BODY")" clean
+code=$(authed_get "/audit?actorId=$SID&limit=200" "$AT")
+expect "audit filter by actor" "$code" 200
+expect "all entries are by that actor" "$(V="$SID" node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(b.entries.length>0&&b.entries.every(e=>e.actorId===process.env.V)?"yes":"no")' "$BODY")" yes
+code=$(authed_get "/audit?limit=1" "$AT")
+expect "audit limit 1 gives one entry" "$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(b.entries.length))' "$BODY")" 1
+expect "audit says there is more" "$(pick hasMore)" true
+code=$(authed_get "/audit?limit=0" "$AT")
+expect "audit bad limit refused" "$code" 400
+code=$(authed_get /audit "$SAT")
+expect "staff cannot read audit log" "$code" 403
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/audit")
+expect "audit without a token refused" "$code" 401
 
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200

@@ -125,6 +125,7 @@ describe("changeOwnPassword: success", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
     };
     await expect(changeOwnPassword(broken, user.id, PASSWORD, NEW_PASSWORD, T0)).rejects.toThrow(

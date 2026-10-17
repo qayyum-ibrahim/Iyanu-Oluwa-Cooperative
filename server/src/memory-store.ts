@@ -150,6 +150,20 @@ export function createMemoryStore(): Store {
       async listByActor(actorId) {
         return audit.filter((a) => a.actorId === actorId).map(copyAudit);
       },
+      async list(query) {
+        // Equal times: the later entry counts as newer, so the order is the same on every run.
+        const matched = audit
+          .map((entry, index) => ({ entry, index }))
+          .filter(
+            ({ entry }) =>
+              (query.actorId === undefined || entry.actorId === query.actorId) &&
+              (query.action === undefined || entry.action === query.action),
+          );
+        matched.sort(
+          (x, y) => y.entry.createdAt.getTime() - x.entry.createdAt.getTime() || y.index - x.index,
+        );
+        return matched.slice(query.offset, query.offset + query.limit).map(({ entry }) => copyAudit(entry));
+      },
     },
     refreshTokens: {
       async create(input) {

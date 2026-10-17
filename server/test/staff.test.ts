@@ -184,6 +184,7 @@ describe("createStaff", () => {
           throw new Error("audit down");
         },
         listByActor: store.audit.listByActor,
+        list: store.audit.list,
       },
     };
     await expect(createStaff(broken, adminActor, input())).rejects.toThrow("audit down");

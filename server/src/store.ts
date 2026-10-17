@@ -153,11 +153,27 @@ export interface UserStore {
   clearLockout(userId: string): Promise<void>;
 }
 
+/** What to list from the audit log. Filters match exactly (letter case counts). */
+export interface AuditListQuery {
+  actorId?: string;
+  action?: string;
+  /** At most this many entries. A whole number, at least 1. The logic code checks it. */
+  limit: number;
+  /** Skip this many of the newest matching entries. A whole number, at least 0. */
+  offset: number;
+}
+
 export interface AuditStore {
   /** Throws UnknownActorError if actorId is given but no such user exists. */
   append(entry: NewAuditEntry): Promise<AuditRecord>;
   /** Entries by one actor. Order is not guaranteed yet. */
   listByActor(actorId: string): Promise<AuditRecord[]>;
+  /**
+   * Entries newest first (by createdAt; entries with equal times are in no fixed order),
+   * narrowed by the exact filters in the query. Entries with no actor are included unless
+   * actorId is given. Returns copies.
+   */
+  list(query: AuditListQuery): Promise<AuditRecord[]>;
 }
 
 export interface RefreshTokenStore {

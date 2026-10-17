@@ -51,6 +51,7 @@ function spied(base: Store) {
         return base.audit.append(entry);
       },
       listByActor: (id) => base.audit.listByActor(id),
+      list: (q) => base.audit.list(q),
     },
     refreshTokens: { ...base.refreshTokens, create },
   };
@@ -74,6 +75,7 @@ function withBrokenAudit(base: Store): Store {
         throw new Error("audit down");
       },
       listByActor: base.audit.listByActor,
+      list: base.audit.list,
     },
   };
 }

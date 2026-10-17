@@ -1,5 +1,22 @@
 # Build log (newest first)
 
+## Step 2.5f (size S), 2026-10-17: break-on-purpose for owner-reset.ts
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-2.5f.mjs`, on your Desktop (not in git). It changes `server/src/owner-reset.ts` one mutation at a time, runs `test/owner-reset.test.ts`, and restores the file. Baseline 15 of 15 passed. Result: 22 mutations, 18 caught, 4 escaped, 0 timeouts, 0 not applied. "file restored: yes". No source or test file changed, so the totals stay at 24 files, 664 tests (verified at 2.5e).
+- Caught: O2 to O19 (owner filter, two-owners and no-owner checks, hash not saved, plain password saved, tokens not revoked, lockout not cleared, five audit field changes, password leaked into audit detail, result email, active flag and token count, owner reactivated, inactive owner ignored).
+- Escaped: O1, O20, O21, O22.
+  - O20 (owner lookup before the password rules): equivalent, every bad-password test has an owner.
+  - O21 (failed `setPasswordHash` no longer throws): equivalent on the memory store, where the user always exists.
+  - O22 (revoke time ignores `now`): a test gap. No test reads the revoke time. Low risk.
+  - O1 (password rules check removed in `resetOwnerPassword`): cause not confirmed. The bad-password tests still threw `PasswordPolicyError` and changed nothing. Likely cause: `hashPassword` checks the rules itself. I have not seen `password.ts` (A-70).
+**Stubbed:** no audit viewer. `reset-owner-password.ts` (the terminal script) has live-run coverage only, no unit tests.
+**Tests:** none new. Total 664 (verified at 2.5e).
+**Not verified:** why O1 escaped. Whether `hashPassword` validates its input. The server was not run in this step. The last `git status --short` printed no lines in your paste, but an empty result looks the same as a cut-off paste. The script's own check says the file was restored.
+**Found along the way:**
+1. Port 3000 was free before the run (`lsof -i :3000` printed nothing, your paste).
+2. `mirror/DECISIONS.md` already had D-38 when I read it, so no mirror change is needed this time. No new decision in this step.
+3. NEXT_FILES for the audit viewer includes `server/src/password.ts` so O1 can be settled.
+
 ## Step 2.5e (size M), 2026-10-17: reset the owner password from the terminal
 
 **Works (verified on your machine, output pasted: `npm run check` clean, 24 files, 664 tests; script run on a temporary database; live check "60 passed, 0 failed"; I ran nothing in my sandbox):** `server/src/owner-reset.ts` (`findOnlyOwner`, `resetOwnerPassword`, `NoOwnerError`, `MultipleOwnersError`), `server/src/reset-owner-password.ts` and `npm run reset:owner`. It refuses piped input, asks twice with no echo, and changes the only Super Admin's password. It ends that account's refresh tokens, clears its lockout and writes one `owner.password_reset` entry (actor = the owner, detail `tokens_revoked=N`). It does not reactivate an inactive owner and prints a note instead.

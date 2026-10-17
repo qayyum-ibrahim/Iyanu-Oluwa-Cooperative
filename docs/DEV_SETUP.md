@@ -10,7 +10,7 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 | Generate the Prisma client | `npm run db:generate` |
 | Create or update the dev database after a schema change | `npx prisma migrate dev` (or `npm run db:migrate`) |
 | Apply existing migrations to a database | `npm run db:deploy` |
-| Create the owner (Super Admin) | `npm run setup:owner` (needs a terminal; password typed, never in git or chat) |
+| Reset the owner password | `npm run reset:owner` (needs a terminal; password typed twice, never in git or chat; ends the owner's sessions and clears the lock) |
 | Run | `npm start` (port 3000, or `PORT=3456 npm start`) |
 | Run and reload on change | `npm run dev` |
 | Health route | `curl -i http://localhost:3000/health` |

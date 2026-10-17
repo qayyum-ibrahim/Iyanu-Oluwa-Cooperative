@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 2.5e (size M), 2026-10-17: reset the owner password from the terminal
+
+**Works (verified on your machine, output pasted: `npm run check` clean, 24 files, 664 tests; script run on a temporary database; live check "60 passed, 0 failed"; I ran nothing in my sandbox):** `server/src/owner-reset.ts` (`findOnlyOwner`, `resetOwnerPassword`, `NoOwnerError`, `MultipleOwnersError`), `server/src/reset-owner-password.ts` and `npm run reset:owner`. It refuses piped input, asks twice with no echo, and changes the only Super Admin's password. It ends that account's refresh tokens, clears its lockout and writes one `owner.password_reset` entry (actor = the owner, detail `tokens_revoked=N`). It does not reactivate an inactive owner and prints a note instead.
+**Stubbed:** no audit viewer. No unlock or reset for a second owner (the script refuses if two Super Admins exist).
+**Tests:** 15 new in `test/owner-reset.test.ts` (success 8, refusals 7). Total 664 (was 649).
+**Live runs (your machine, temporary database `reset-test.db`, then deleted):** pipe refused; mismatch refused; reset printed "Password changed for owner@example.test. Sessions ended: 0."; `live-check-auth.sh` 60 passed; empty database printed "No Super Admin exists...". 
+**Not verified:** the break-on-purpose run for `owner-reset.ts` (owed). Ending sessions through the real script (the live run had none to end; covered by unit tests and the Prisma contract). That the server was stopped and port 3000 freed after the live check (not shown). That the live check login used the new password (not visible in the paste).
+**Found along the way:**
+1. My mistake in the resume reply: I said `mirror/DECISIONS.md` stopped at D-36. The copy I was shown already had D-37. The mirror must now get D-38.
+2. My resume reply also listed two non-problems (the pack sections, the open break-on-purpose list) as possible inconsistencies. They were not. Ignore them.
+3. `.env.example` was skipped by the pack script again ("looks private", names only). It was not needed.
+4. A locked owner can now be unlocked by this script (A-43, A-65 updated).
+
 ## Step 2.5d-mutate (size S), 2026-10-16: break-on-purpose for 2.5d, verify-before-docs rule
 
 **Works (verified on your machine, output pasted: `npm run check` clean, 23 files, 649 tests):** one new test in `test/account.test.ts` ("refuses 1 ms before the lock ends and accepts at the end instant"). Two throwaway scripts on your Desktop (`mutate-2.5d.mjs`, `mutate-2.5d-part2.mjs`), not in git.

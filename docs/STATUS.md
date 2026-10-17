@@ -1,14 +1,15 @@
 # Project status
-Last updated: after step 2.6 (all results from the owner's pasted output)
+Last updated: after step 2.6b (all results from the owner's pasted output)
 
 ## Where we stopped
-2.6 is verified on the owner's machine: the audit viewer (`GET /audit`, Super Admin only, newest first, paging and filters). `npm run check` clean: 26 test files, 726 tests. Live check "73 passed, 0 failed". Not yet done: the break-on-purpose run for `audit-view.ts`, `audit-routes.ts` and the store `list` methods (step 2.6b). Not shown: the commit hash for 2.6.
+2.6b is verified on the owner's machine: the break-on-purpose run for the audit viewer. 48 mutations, 45 caught, 3 escaped (V13 a boundary gap, R26 and P44 equivalent, A-76 to A-78). No source or test file changed: 26 test files, 726 tests (verified at 2.6). 2.6 is commit 35f6026. The audit viewer (`GET /audit`, Super Admin only) is finished. Phase 2 is complete. Next is Phase 3.
 
 ## Next step brief
-Step 2.6b (S, proposed): break-on-purpose run for the audit viewer, using a throwaway script on your Desktop (not in git), as in 2.5f. After that, Phase 3 (members and derived balances). Owner inputs needed:
-1. Add D-39 to `mirror/DECISIONS.md` (text is in the docs message of 2.6).
+Phase 3 (members and derived balances) starts next. The first step is sized in the next chat. Owner inputs needed:
+1. Add D-39 to `mirror/DECISIONS.md` if you have not yet (text is in the docs message of 2.6).
 2. Commit this docs step (commands in the message), then run `sh scripts/resume-pack.sh` and start a new chat.
-3. Before Phase 3 starts, OQ-09 (can staff pick members created by other staff?) needs your answer or the default stands (own members only).
+3. OQ-09 (can staff pick members created by other staff?): answer, or the default stands (own members only).
+4. Run this from the repo root and tell the next chat only if it prints a path that is not in `docs/NEXT_FILES.txt`: `grep -l "listByActor" server/test/*.ts`
 
 ## What exists
 Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic, audit viewer (`audit-view.ts`, `audit-routes.ts`), route guards, money, password and email modules, `account.ts`, owner logic, owner setup and reset scripts, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters (with `audit.list`), `prisma/schema.prisma`, four migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`, and `GET /audit`. An owner account exists on the owner's dev database. No data routes, no UI code yet.
@@ -32,11 +33,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 2.6b (S, proposed) Break-on-purpose for the audit viewer.
-- Phase 3: members and derived balances, with the "staff see only their own records" rule (DR-13) built into the data routes.
+- Phase 3: members and derived balances, with the "staff see only their own records" rule (DR-13) built into the data routes. The first step is sized in the next chat.
+- Phase 4: payments, breakdown check, Loan Repaid, fake SMS, first-payment flow.
 
 ## Open items
-See OPEN_QUESTIONS.md. Nothing blocks Phase 3. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-39. A-22 to A-75 are Claude's choices or checks. A-70 is settled (mutation O1 is equivalent). Owed break-on-purpose runs: audit viewer (2.6b), step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. Reading the audit log is not itself audited (A-75). A locked owner is unlocked by `npm run reset:owner` (A-67); anyone with server shell and database access can reset the owner (A-68). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. Commits ddf8f2b and 566cd6a, and c9a6480 and 52a50c0, have the same message (harmless). The mutation scripts live on the owner's Desktop, not in git.
+See OPEN_QUESTIONS.md. OQ-09 needs an answer before Phase 3 routes (default: own members only). Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-39. A-22 to A-78 are Claude's choices or checks. A-70 and A-77 are settled (equivalent mutants, duplicated checks). A-76 is a small test gap (optional). Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. Reading the audit log is not itself audited (A-75). A locked owner is unlocked by `npm run reset:owner` (A-67); anyone with server shell and database access can reset the owner (A-68). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. Commits ddf8f2b and 566cd6a, and c9a6480 and 52a50c0, have the same message (harmless). The mutation scripts live on the owner's Desktop, not in git.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

@@ -1,5 +1,23 @@
 # Build log (newest first)
 
+## Step 2.6b (size S), 2026-10-17: break-on-purpose for the audit viewer
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-2.6b.mjs`, on your Desktop (not in git). It changes `audit-view.ts`, `audit-routes.ts` and the `audit.list` code in both adapters one mutation at a time, runs the matching test files, and restores the files. Baseline: view, routes, mem, prisma all PASS. Result: 48 mutations, 45 caught, 3 escaped, 0 error, 0 timeout, 0 not applied. All four files "restored: yes". No source or test file changed, so the totals stay at 26 files, 726 tests (verified at 2.6).
+- Caught: V1 to V12, V14 to V25 (permission check removed and inverted, every limit, offset and filter bound, filter checks, paging, extra row and `hasMore`, filters passed on, ISO time, detail), R27 to R34 (auth guard removed, status codes, 201, each query field, GET to POST), M35 to M42 (order, ties, offset, page size, both filters, no-actor entries, copies), P43, P45 to P48 (order, offset, limit, both filters). P43 and P45 to P48 show the audit-list contract runs on the Prisma adapter.
+- Escaped: V13, R26, P44.
+  - V13 (filter of exactly 100 characters refused): a test gap, A-76. Low risk.
+  - R26 (`requirePermission` removed from the route): equivalent, the logic check is duplicated, A-77.
+  - P44 (Prisma tie-break by id removed): equivalent for the tests, A-74, A-78.
+**Stubbed:** no date filter, no search, no export. Reading the log is not audited (A-75).
+**Tests:** none new. Total 726.
+**Not verified:** the last `git status --short` printed no lines in your paste, which looks the same as a cut-off paste. The script's own check says all four files were restored. Equal-time ordering on Prisma (A-74).
+**Found along the way:**
+1. My count error: I wrote 47 mutations in the step message. The script had 48.
+2. My prediction was half right: I expected R1 (permission check removed in `audit-view.ts`) to escape. It was caught (3 failed), because `audit-view.test.ts` calls the logic directly. R26, V13 and P44 escaped as predicted.
+3. My resume reply listed a second "inconsistency" about DOMAIN_RULES that was muddled. There was none. Ignore it.
+4. The audit viewer's owed break-on-purpose run is now closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+5. NEXT_FILES for Phase 3 is a guess for the test files that build a `Store` by hand. I have not seen all of them. The command in STATUS finds the rest.
+
 ## Step 2.6 (size M), 2026-10-17: audit viewer
 
 **Works (verified on your machine, output pasted: `npm run check` clean, 26 files, 726 tests; live check "73 passed, 0 failed"; I ran nothing in my sandbox):** `GET /audit` for the Super Admin only (`users.manage`, D-39). Newest first, `limit` (default 50, max 200), `offset`, exact filters `actorId` and `action`. Entries with no actor are included (A-28). New `AuditStore.list` in the interface and both adapters. New files: `audit-view.ts`, `audit-routes.ts`, `test/helpers/audit-list-contract.ts`, `test/audit-view.test.ts`, `test/audit-routes.test.ts`. Mounted in `app.ts`.

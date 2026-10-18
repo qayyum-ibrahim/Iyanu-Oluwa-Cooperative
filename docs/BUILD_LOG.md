@@ -1,5 +1,26 @@
 # Build log (newest first)
 
+## Step 3.2b (size S), 2026-10-18: break-on-purpose for the members code
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-3.2b.mjs`, on your Desktop (not in git). It changes `members.ts`, `members-routes.ts` and the members code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, runs the matching test files, and restores the files. Baseline: logic 70, routes 25, mem 119, prisma 74 tests, all PASS. Result: 76 mutations, 68 caught, 8 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". No source or test file changed, so the totals stay at 29 files, 828 tests (verified at 3.2).
+- Caught: L1 to L25, L27 to L36 (permission checks, every name and text limit and boundary, trimming, null text, type checks, audit action, entity type and detail, status filter and default, letter case, scope rule and its inversion, Staff filter ignored, ISO date, field mix-ups), R1, R3 to R7, R9, R11 to R13, R16, R17 (auth guard, 201, empty list, body limit, status codes, body field, query fields, id param, POST to PUT), M1 to M4, M7 to M11 (unknown creator, numbering, new member Inactive, create copy, both filters, setStatus, date copy), P1 to P12 (Membership ID, number skip, error mapping, retry, one try, both filters, order, setStatus, status, phone, findById).
+- Escaped: L26, R2, R8, R10, R14, R15, M5, M6.
+  - L26, R14, R15: duplicated checks, equivalent in tests (A-91, A-92).
+  - R8: unreachable through the routes (A-92).
+  - R2: duplicated, but the "guard before body" order is not pinned (A-92).
+  - R10: a test gap, no route test checks phone, address or occupation values (A-93).
+  - M5, M6: a test gap in the test-only memory adapter (A-94).
+- P4 and P5 were caught. With only one try allowed, a test failed, so I believe the retry path runs on SQLite (A-79 updated). That is an inference from the result.
+**Stubbed:** nothing new. Still no edit, delete or status route, no screen.
+**Tests:** none new. Total 828.
+**Not verified:** that L26 would behave differently on Prisma (A-91). How long the run took (not in the paste). Behaviour on a server database (A-35).
+**Found along the way:**
+1. Predictions: L26, R2, R14, R15 and M6 escaped as I said. P4 and P5 I said might escape, and they were caught. R8, R10 and M5 I did not predict.
+2. My step message said that if all memory or Prisma mutations escaped, the members contract might not be wired into `store-contract.ts`. It is wired: M1 to M4 and P1 to P12 were caught. I never needed to see `store-contract.ts`.
+3. My resume reply asked about `app.ts`. The script did not need it. It was in the resume pack only as a precaution, not a NEXT_FILES miss. My reply also listed two non-inconsistencies (the mirror note and the adapter test files). `mirror/DECISIONS.md` already holds D-41, as shown in this chat. STATUS no longer asks for it.
+4. The owed break-on-purpose runs for step 3.1 and step 3.2 are closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+5. Port 3000 was free and `git status --short` was empty after the run (your paste).
+
 ## Step 3.2 (size M), 2026-10-18: member logic and routes
 
 **Works (verified on your machine, output pasted: `npm run check` clean, 29 files, 828 tests; live check "87 passed, 0 failed" against the real server and SQLite database; I ran nothing in my sandbox):** `server/src/members.ts` (`createMember`, `listMembers`, `getMember`) and `server/src/members-routes.ts` (`POST /members`, `GET /members`, `GET /members/:id`), mounted in `app.ts`. Staff see only members they recorded; the Super Admin sees all and can filter with `createdById` (DR-13, OQ-09). Status filter defaults to Active (`active`, `inactive`, `all`). A member a Staff user may not see answers 404. Text is trimmed; name 1 to 100 characters, other fields at most 200 (A-82, A-90). `member.created` audit entry with the Membership ID only. Decision D-41.

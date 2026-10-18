@@ -3,8 +3,5 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/src/permissions.ts
-server/test/permissions.test.ts
-server/eslint.config.js
-server/tsconfig.json
-server/package.json
+server/src/categories.ts
+server/test/categories.test.ts

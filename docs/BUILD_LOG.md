@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 3.3 (size S), 2026-10-18: payment categories, pure logic
+
+**Works (verified on your machine, output pasted: `npm run check` clean, typecheck and lint without errors, 30 files, 847 tests; I ran nothing in my sandbox):** `server/src/categories.ts` (`PAYMENT_CATEGORY_TABLE`, `PAYMENT_CATEGORIES`, `REFUNDABLE_CATEGORIES`, `SYSTEM_ONLY_CATEGORY`, `isPaymentCategory`, `isRefundable`, `parsePaymentCategory`, `CategoryError` with codes `unknown` and `system_only`). 14 categories in DR-04 order, Building Funds last. Five refundable (DR-03): Shares, Savings, Special Savings, Special Deposit, Building Funds. "Membership Withdrawal" is not in the table and `parsePaymentCategory` refuses it with `system_only`. Names match exactly (case and spaces count). The error message never repeats the input. Decision D-42.
+**Stubbed:** nothing uses categories yet: no route, table, balance or screen. No expense category list (DR-11, Phase 5).
+**Tests:** 13 new in `test/categories.test.ts`. Total 847 (was 834).
+**Not verified:** break-on-purpose for `categories.ts` (owed, step 3.3b). DR-04 itself is "proposed", so the list awaits Mr. Aro (OQ-00, A-96). Whether the repo `DOMAIN_RULES.md` equals the mirror (you reported no difference).
+**Found along the way:**
+1. All predictions matched: 30 files, 847 tests (13 new).
+2. NEXT_FILES at resume held `permissions.ts` and config files that 3.3 did not need. It was a precaution, not a miss. The new list is written for 3.3b only.
+3. `mirror/DECISIONS.md` needs D-42 by hand.
+
 ## Step 3.2c (size S), 2026-10-18: close the test gaps from 3.2b
 
 **Works (verified on your machine, output pasted: `npm run check` clean, 29 files, 834 tests; mutation rerun 76 mutations, 72 caught, 4 escaped, 0 error, 0 timeout, 0 not applied, "files restored: yes"; `git status --short` showed only the two edited test files; I ran nothing in my sandbox):** tests only, no source change. Two route tests in `test/members-routes.test.ts`: phone, address and occupation come back trimmed in their own fields (R10); a caller without `members.create` who sends malformed JSON gets 403, not 400 (R2). Two cases in `test/helpers/members-contract.ts`, run on both adapters: a returned member from `findById` and from `list` cannot change stored data (M5, M6).

@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+
+## Step 4.1 (size S), 2026-10-18: payment breakdown check, pure logic
+
+**Works (verified on your machine, output pasted: `npm run check` clean, typecheck and lint without errors, 31 files, 875 tests; I ran nothing in my sandbox):** `server/src/breakdown.ts` (`checkBreakdown`, `BreakdownError` with 10 codes, `BreakdownLine`, `CheckedBreakdown`). It takes `{ total, lines: [{ category, amount }] }` with amounts as strings (A-18). It returns exact kobo, or throws. Checks in this order: input is an object; total is a valid amount and above zero; lines is a non-empty list; each line (first bad one wins) is an object, has a valid category (Membership Withdrawal gives `system_only`), has a valid amount above zero; the lines add up to the total with no tolerance (DR-02). Line errors carry `lineIndex`. Messages never repeat the input. The result is frozen. Own keys only are read. Decision D-43.
+**Stubbed:** nothing uses `checkBreakdown`: no route, table, store, balance or screen. Loan Repaid effects on loans (DR-09) are not here.
+**Tests:** 28 new in `test/breakdown.test.ts` (accepts 8, mismatch 3, input shape 4, total 2, lines 6, order of checks 3, error type 2). Total 875 (was 847).
+**Not verified:** break-on-purpose for `breakdown.ts` (owed, step 4.1b). DR-02 itself is "requested", and the category list is "proposed", so both await Mr. Aro (OQ-00, A-96). Whether the repo `DOMAIN_RULES.md` equals the mirror beyond DR-02 and DR-04 (you pasted only those two lines, and they matched).
+**Found along the way:**
+1. All predictions matched: 31 files, 875 tests, 28 new.
+2. NEXT_FILES miss: the list carried `money.ts`, `money.test.ts`, `eslint.config.js` and `tsconfig.json` but not `categories.ts` or `categories.test.ts`, which 4.1 builds on. You pasted them. The new list is written for 4.1b only.
+3. `mirror/DECISIONS.md` needs D-43 by hand.
+4. Vitest again suggests `isolate: false` (about 4 s faster). I changed nothing.
+
 ## Step 3.3b (size S), 2026-10-18: break-on-purpose for categories.ts
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-3.3b.mjs`, on your Desktop (not in git). It changes `server/src/categories.ts` one mutation at a time, runs `test/categories.test.ts`, and restores the file. Baseline 13 of 13 passed. Result: 20 mutations, 19 caught, 1 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". No source or test file changed, so the totals stay at 30 files, 847 tests (verified at 3.3).

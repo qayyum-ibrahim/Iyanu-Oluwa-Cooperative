@@ -3,7 +3,5 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/src/money.ts
-server/test/money.test.ts
-server/eslint.config.js
-server/tsconfig.json
+server/src/breakdown.ts
+server/test/breakdown.test.ts

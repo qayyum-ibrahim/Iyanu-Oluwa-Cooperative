@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 3.2 (size M), 2026-10-18: member logic and routes
+
+**Works (verified on your machine, output pasted: `npm run check` clean, 29 files, 828 tests; live check "87 passed, 0 failed" against the real server and SQLite database; I ran nothing in my sandbox):** `server/src/members.ts` (`createMember`, `listMembers`, `getMember`) and `server/src/members-routes.ts` (`POST /members`, `GET /members`, `GET /members/:id`), mounted in `app.ts`. Staff see only members they recorded; the Super Admin sees all and can filter with `createdById` (DR-13, OQ-09). Status filter defaults to Active (`active`, `inactive`, `all`). A member a Staff user may not see answers 404. Text is trimmed; name 1 to 100 characters, other fields at most 200 (A-82, A-90). `member.created` audit entry with the Membership ID only. Decision D-41.
+**Stubbed:** no edit, delete or status route (the `members.edit` and `members.delete` permissions exist but nothing uses them). No automatic Inactive rule (Phase 6). No balances, no Building Funds category. No duplicate-name check. No paging. No screen.
+**Tests:** 70 new: `test/members.test.ts` 45, `test/members-routes.test.ts` 25. Total 828 (was 758). The live check gains 14 checks (73 to 87). The members store ran on the real Prisma adapter through the live check.
+**Not verified:** break-on-purpose for `members.ts`, `members-routes.ts` and the members store (owed, step 3.2b). That the server was stopped and port 3000 freed (the paste ends with the server running). `git status --short` (not pasted).
+**Found along the way:**
+1. My count error: I wrote 71 new tests and 829 in total. The real numbers are 70 and 828, because `members-routes.test.ts` has 25 tests, not 26. The live-check prediction of 87 was right.
+2. My doubt about the `request(app)[method](...)` form was unfounded. Typecheck and lint were clean.
+3. No test file that builds a `Store` by hand broke, as predicted: `Store` did not change.
+4. At resume I listed the mirror as an inconsistency. It was not one: the mirror already held D-40. STATUS no longer says it needs D-40.
+5. `mirror/DECISIONS.md` needs D-41 by hand.
+
 ## Step 3.1 (size M), 2026-10-18: members table and store
 
 **Works (verified on your machine, output pasted: `migrate dev` created and applied `20261017231516_members`; `npm run check` clean, 27 files, 758 tests; `.tables` lists `Member`; `git status --short` showed the 11 expected lines; I ran nothing in my sandbox):** model `Member` and enum `MemberStatus` in `schema.prisma`. `MemberRecord`, `NewMember`, `MemberListQuery`, `MemberStore` and `formatMembershipId` in `store.ts`; `members` added to `Store`. Both adapters implement `create`, `findById`, `list` and `setStatus`. The Membership ID is made from a stored number `seq` (1 gives `IO-001`, 1000 gives `IO-1000`). `createdById` records who recorded the member (DR-13, DR-15). Decision D-40.

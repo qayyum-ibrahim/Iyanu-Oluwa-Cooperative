@@ -1,6 +1,7 @@
 import express from "express";
 import { createAuditRouter } from "./audit-routes.js";
 import { createAuthRouter } from "./auth-routes.js";
+import { createMembersRouter } from "./members-routes.js";
 import { createStaffRouter } from "./staff-routes.js";
 import type { Store } from "./store.js";
 import { assertSecretAllowed } from "./tokens.js";
@@ -58,6 +59,7 @@ export function createApp(deps?: AppDeps): express.Express {
     );
     app.use("/staff", createStaffRouter({ store: deps.store, tokenSecret, now }));
     app.use("/audit", createAuditRouter({ store: deps.store, tokenSecret, now }));
+    app.use("/members", createMembersRouter({ store: deps.store, tokenSecret, now }));
   }
   app.use(errorHandler);
   return app;

@@ -214,6 +214,41 @@ expect "staff cannot read audit log" "$code" 403
 code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/audit")
 expect "audit without a token refused" "$code" 401
 
+# --- members (step 3.2) ---
+# Two fictional members are added to the dev database on each run (D-08).
+printf '%s' '{"permissions":["members.create","members.view"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given member permissions" "$code" 200
+member_json() { N="$1" node -e 'process.stdout.write(JSON.stringify({fullName:process.env.N,phone:"08000000001",address:"1 Test Street",occupation:"Trader"}))' > "$REQ"; }
+member_json "  Live Check Member  "
+code=$(authed_send POST /members "$SAT")
+expect "staff adds a member" "$code" 201
+expect "member name trimmed" "$(pick member.fullName)" "Live Check Member"
+expect "member status" "$(pick member.status)" ACTIVE
+SMID=$(pick member.id)
+member_json "Owner Live Member"
+code=$(authed_send POST /members "$AT")
+expect "owner adds a member" "$code" 201
+OMID=$(pick member.id)
+code=$(authed_get /members "$SAT")
+expect "staff lists members" "$code" 200
+expect "staff list holds only own members" "$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(b.members.length>0&&b.members.every(m=>m.createdById===process.argv[2])?"yes":"no")' "$BODY" "$SID")" yes
+code=$(authed_get "/members/$OMID" "$SAT")
+expect "staff cannot read the owner's member" "$code" 404
+code=$(authed_get "/members/$SMID" "$SAT")
+expect "staff reads own member" "$code" 200
+code=$(authed_get /members "$AT")
+expect "owner list holds both members" "$(node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(b.members.some(m=>m.id===process.argv[2])&&b.members.some(m=>m.id===process.argv[3])?"yes":"no")' "$BODY" "$SMID" "$OMID")" yes
+code=$(authed_get "/members/$SMID" "$AT")
+expect "owner reads staff's member" "$code" 200
+code=$(authed_get "/members?status=everyone" "$AT")
+expect "bad status refused" "$code" 400
+member_json "   "
+code=$(authed_send POST /members "$AT")
+expect "blank name refused" "$code" 400
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/members")
+expect "members without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 3.2c (size S), 2026-10-18: close the test gaps from 3.2b
+
+**Works (verified on your machine, output pasted: `npm run check` clean, 29 files, 834 tests; mutation rerun 76 mutations, 72 caught, 4 escaped, 0 error, 0 timeout, 0 not applied, "files restored: yes"; `git status --short` showed only the two edited test files; I ran nothing in my sandbox):** tests only, no source change. Two route tests in `test/members-routes.test.ts`: phone, address and occupation come back trimmed in their own fields (R10); a caller without `members.create` who sends malformed JSON gets 403, not 400 (R2). Two cases in `test/helpers/members-contract.ts`, run on both adapters: a returned member from `findById` and from `list` cannot change stored data (M5, M6).
+- Newly caught: R2, R10, M5, M6 (1 failed each).
+- Still escaped, all expected: L26 (A-91), R8, R14, R15 (A-92). Duplicated or unreachable checks.
+**Stubbed:** nothing new. Still no edit, delete or status route, no screen.
+**Tests:** 6 new (2 route, 2 contract cases x 2 adapters). Total 834 (was 828). Baselines: routes 27, mem 121, prisma 76.
+**Not verified:** how L26 behaves on Prisma (A-91). How long the mutation run took. Behaviour on a server database (A-35). Why the "logic" baseline rose from 70 to 72 (not seen in the script).
+**Found along the way:**
+1. All predictions matched: 834 tests, 72 caught, 4 escaped, baselines 27, 121 and 76.
+2. I wrote the memory-adapter tests without seeing `memory-store.ts`. They caught M5 and M6 on the first run, so no adapter fix was needed.
+3. The owed break-on-purpose runs for the members code are closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+
 ## Step 3.2b (size S), 2026-10-18: break-on-purpose for the members code
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-3.2b.mjs`, on your Desktop (not in git). It changes `members.ts`, `members-routes.ts` and the members code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, runs the matching test files, and restores the files. Baseline: logic 70, routes 25, mem 119, prisma 74 tests, all PASS. Result: 76 mutations, 68 caught, 8 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". No source or test file changed, so the totals stay at 29 files, 828 tests (verified at 3.2).

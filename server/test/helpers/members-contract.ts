@@ -170,6 +170,40 @@ export function runMembersContract(
       expect(again?.createdAt.getFullYear()).not.toBe(2000);
     });
 
+    it("does not let a caller change stored data through a member returned by findById", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "m-copy-find");
+      const m = await store.members.create(details(u.id));
+      const time = m.createdAt.getTime();
+      const found = await store.members.findById(m.id);
+      expect(found).not.toBeNull();
+      if (found === null) return;
+      found.fullName = "Changed";
+      found.status = "INACTIVE";
+      found.createdAt.setFullYear(2000);
+      const again = await store.members.findById(m.id);
+      expect(again?.fullName).toBe("Test Member");
+      expect(again?.status).toBe("ACTIVE");
+      expect(again?.createdAt.getTime()).toBe(time);
+    });
+
+    it("does not let a caller change stored data through a member returned by list", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "m-copy-list");
+      const m = await store.members.create(details(u.id));
+      const time = m.createdAt.getTime();
+      const [first] = await store.members.list({ createdById: u.id });
+      expect(first).toBeDefined();
+      if (first === undefined) return;
+      first.fullName = "Changed";
+      first.status = "INACTIVE";
+      first.createdAt.setFullYear(2000);
+      const [again] = await store.members.list({ createdById: u.id });
+      expect(again?.fullName).toBe("Test Member");
+      expect(again?.status).toBe("ACTIVE");
+      expect(again?.createdAt.getTime()).toBe(time);
+    });
+
     it("lists every member when there is no filter, in creation order", async () => {
       const store = await makeStore();
       const a = await newUser(store, "m-all-a");

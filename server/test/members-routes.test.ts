@@ -58,6 +58,18 @@ describe("POST /members", () => {
     expect(await store.members.list({})).toEqual([]);
   });
 
+  it("answers 403, not 400, to a caller without members.create who sends malformed JSON (guard runs before the body is read)", async () => {
+    const { app, viewOnly, bearer, store } = await build();
+    const res = await request(app)
+      .post("/members")
+      .set("Authorization", bearer(viewOnly))
+      .set("Content-Type", "application/json")
+      .send("{bad");
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+    expect(await store.members.list({})).toEqual([]);
+  });
+
   it("answers 201 for Staff with the permission: trimmed, Active, no-store, exact fields", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
@@ -82,6 +94,25 @@ describe("POST /members", () => {
       fullName: "Test Member",
       status: "ACTIVE",
       createdById: a.id,
+    });
+  });
+
+  it("returns phone, address and occupation trimmed, each in its own field", async () => {
+    const { app, a, bearer } = await build();
+    const res = await request(app)
+      .post("/members")
+      .set("Authorization", bearer(a))
+      .send({
+        fullName: "Field Check",
+        phone: "  08011112222 ",
+        address: " 7 Alpha Road ",
+        occupation: " Tailor ",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.member).toMatchObject({
+      phone: "08011112222",
+      address: "7 Alpha Road",
+      occupation: "Tailor",
     });
   });
 

@@ -3,7 +3,8 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/src/app.ts
-server/src/members-routes.ts
-server/test/members-routes.test.ts
-server/test/helpers/members-contract.ts
+server/src/permissions.ts
+server/test/permissions.test.ts
+server/eslint.config.js
+server/tsconfig.json
+server/package.json

@@ -1,15 +1,16 @@
 # Project status
-Last updated: after step 4.1 (all results from the owner's pasted output)
+Last updated: after step 4.1b (all results from the owner's pasted output)
 
 ## Where we stopped
-4.1 is verified on the owner's machine: `npm run check` clean, 31 test files, 875 tests. `server/src/breakdown.ts` (`checkBreakdown`, `BreakdownError`) checks a payment's total and lines (DR-02) and returns exact kobo. It is pure logic and nothing uses it yet. Next is 4.1b (break-on-purpose for `breakdown.ts`), then Phase 4 continues (D-17: balances come from append-only lines).
+4.1b is verified on the owner's machine: break-on-purpose for `breakdown.ts`, 35 mutations, 35 caught, 0 escaped, file restored. No source or test file changed: 31 test files, 875 tests (verified at 4.1). The breakdown check (`checkBreakdown`) is pure logic and nothing uses it yet. Next is 4.2: payment tables and store (D-17: balances come from append-only lines).
 
 ## Next step brief
 Owner inputs needed:
-1. Commit this step (commands in the docs message of 4.1), then run `sh scripts/resume-pack.sh` and start a new chat.
-2. No blocking questions. Two optional ones (my defaults apply, A-90): may two members share the same name? Should phone numbers be checked for a format?
-3. New optional one (A-99): may one payment use the same category on two lines? My default is yes.
-4. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror, say so at the start of 4.1b. The repo wins.
+1. Commit this step (commands in the docs message of 4.1b), then run `sh scripts/resume-pack.sh` and start a new chat.
+2. Before the resume pack, run this from the repo root and keep the output ready in case I ask: `grep -rl "members:" server/test` (it finds test files that build a `Store` by hand; the new payments store will need a line in each).
+3. Keep `mutate-4.1b.mjs` on your Desktop. Rerun it only if `breakdown.ts` changes.
+4. No blocking questions. Optional ones (my defaults apply): may two members share a name (A-90)? Should phone numbers have a format check (A-90)? May one payment use the same category on two lines (A-99)?
+5. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror, say so at the start of 4.2. The repo wins.
 
 ## What exists
 Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic, audit viewer, member logic (`members.ts`) and routes (`members-routes.ts`), payment categories (`categories.ts`), payment breakdown check (`breakdown.ts`), route guards, money, password and email modules, `account.ts`, owner logic, owner setup and reset scripts, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters (users, audit, refresh tokens, members), `prisma/schema.prisma`, five migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`, `GET /audit`, `POST /members`, `GET /members` (query `status` active, inactive or all, default active; `createdById` for the Super Admin only), `GET /members/:id`. Staff see only members they recorded; a member they may not see answers 404. No member edit, delete or status route. No category route. No payment route, table or store. No UI code yet. An owner account exists on the owner's dev database.
@@ -22,7 +23,7 @@ Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change
 Live check of sign-in, `/auth/me`, `/staff`, passwords, `/audit` and `/members`: with the server running, `sh scripts/live-check-auth.sh` from the repo root. Each run adds one fictional staff account and two fictional members. Use a temporary database (`DATABASE_URL=file:./name.db`) for scripts that change the owner.
 Break-on-purpose for the members code: `node ~/Desktop/mutate-3.2b.mjs 2>&1 | tail -100` from the repo root (script is not in git). Expected now: 76 mutations, 72 caught, 4 escaped (L26, R8, R14, R15).
 Break-on-purpose for the categories code: `node ~/Desktop/mutate-3.3b.mjs 2>&1 | tail -60` from the repo root (script is not in git). Expected now: 20 mutations, 19 caught, 1 escaped (C14).
-Break-on-purpose for `breakdown.ts`: owed (step 4.1b).
+Break-on-purpose for the breakdown code: `node ~/Desktop/mutate-4.1b.mjs 2>&1 | tail -60` from the repo root (script is not in git). Expected now: 35 mutations, 35 caught, 0 escaped.
 Git commands run from the repo root, not from `server/`.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
@@ -36,11 +37,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 4.1b (S): break-on-purpose for `breakdown.ts`. A throwaway script on your Desktop, not in git.
-- Phase 4 after that (sizes to be set when each step starts): payment tables and store with append-only lines (D-17), the payment route that uses `checkBreakdown`, Loan Repaid (DR-09), fake SMS, first-payment flow.
+- 4.2 (M, may be split when it starts): payment tables and store. Append-only payment and line records with whole-kobo `BigInt` amounts (D-15, D-17), actor on every record (DR-15), a store interface with both adapters and a shared contract. This step must also settle how several writes become one transaction (A-25, A-39, A-54, A-58, A-62, A-88 all wait for it).
+- Phase 4 after that (sizes set when each step starts): the payment route that uses `checkBreakdown`, Loan Repaid (DR-09), fake SMS (D-07), first-payment flow.
 
 ## Open items
-See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-43. A-22 to A-101 are Claude's choices or checks. DR-02 and DR-04 stay "requested" and "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: `breakdown.ts` (4.1b), step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91, A-92 and A-98 are equivalent escapes (read from code). Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 46 s on this machine; timeouts are 120 s.
+See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-43. A-22 to A-101 are Claude's choices or checks. DR-02 and DR-04 stay "requested" and "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91, A-92 and A-98 are equivalent escapes (read from code). Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 46 s on this machine; timeouts are 120 s.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

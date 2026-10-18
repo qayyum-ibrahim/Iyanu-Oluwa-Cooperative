@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.1b (size S), 2026-10-18: break-on-purpose for breakdown.ts
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.1b.mjs`, on your Desktop (not in git). It changes `server/src/breakdown.ts` one mutation at a time, runs `test/breakdown.test.ts`, and restores the file. Baseline 28 of 28 passed. Result: 35 mutations, 35 caught, 0 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` and `lsof -i :3000` printed nothing. No source or test file changed, so the totals stay at 31 files, 875 tests (verified at 4.1).
+- Caught: M1 to M35 (payment object check, zero total and zero line allowed, empty lines and not-a-list checks, sum check inverted, removed, with a 1 kobo tolerance, or missing the last line, system_only and unknown mixed up, `lineIndex` lost on all four line errors, six error codes renamed, input echoed in three messages, inherited keys read, three freezes removed, amount read from the wrong key, array and null accepted as objects, category check bypassed, loop starting at line 1, line object check removed).
+**Stubbed:** nothing new. No route, table or screen uses `checkBreakdown`.
+**Tests:** none new. Total 875.
+**Not verified:** how long the run took. DR-02 and DR-04 still await Mr. Aro (OQ-00, A-96).
+**Found along the way:**
+1. My prediction (35 caught, escapes possible) was half right: none escaped.
+2. `docs/TRACEABILITY.md` had two R-05 rows, both with the old text, and lacked the 4.1 text. I do not know why: my message said the new row was applied as an append, which was a guess. Fixed by a whole-file replacement in this step.
+3. The owed break-on-purpose run for `breakdown.ts` is closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+4. NEXT_FILES for 4.2 is a guess for the test files that build a `Store` by hand: I have seen none of them this chat. STATUS asks you to run a grep so the list can be completed.
 
 ## Step 4.1 (size S), 2026-10-18: payment breakdown check, pure logic
 

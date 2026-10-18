@@ -1,14 +1,15 @@
 # Project status
-Last updated: after step 3.3 (all results from the owner's pasted output)
+Last updated: after step 3.3b (all results from the owner's pasted output)
 
 ## Where we stopped
-3.3 is verified on the owner's machine: `server/src/categories.ts` and `server/test/categories.test.ts` added, no existing file changed. `npm run check` clean, 30 test files, 847 tests. The module holds the 14 payment categories of DR-04 (with Building Funds), the five refundable ones of DR-03, and refuses "Membership Withdrawal" as system-only. No break-on-purpose run yet (3.3b). Nothing uses categories yet: no route, table or screen. Phase 3 is done apart from 3.3b. Balances come in Phase 4 (D-17).
+3.3b is verified on the owner's machine: break-on-purpose for `categories.ts`, 20 mutations, 19 caught, 1 escaped (C14, equivalent, A-98), file restored. No source or test file changed: 30 test files, 847 tests (verified at 3.3). Phase 3 is done. Next is 4.1 (payment breakdown check, pure logic). Balances come in Phase 4 (D-17).
 
 ## Next step brief
 Owner inputs needed:
-1. Commit this step (commands in the docs message of 3.3), then run `sh scripts/resume-pack.sh` and start a new chat.
-2. No blocking questions. Two optional ones (my defaults apply, A-90): may two members share the same name? Should phone numbers be checked for a format?
-3. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror (DR-03, DR-04, DR-11), say so at the start of 3.3b. The repo wins.
+1. Commit this step (commands in the docs message of 3.3b), then run `sh scripts/resume-pack.sh` and start a new chat.
+2. Keep `mutate-3.3b.mjs` on your Desktop. Rerun it only if `categories.ts` changes.
+3. No blocking questions. Two optional ones (my defaults apply, A-90): may two members share the same name? Should phone numbers be checked for a format?
+4. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror (DR-02, DR-04), say so at the start of 4.1. The repo wins.
 
 ## What exists
 Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic, audit viewer, member logic (`members.ts`) and routes (`members-routes.ts`), payment categories (`categories.ts`), route guards, money, password and email modules, `account.ts`, owner logic, owner setup and reset scripts, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters (users, audit, refresh tokens, members), `prisma/schema.prisma`, five migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`, `GET /audit`, `POST /members`, `GET /members` (query `status` active, inactive or all, default active; `createdById` for the Super Admin only), `GET /members/:id`. Staff see only members they recorded; a member they may not see answers 404. No member edit, delete or status route. No category route. No UI code yet. An owner account exists on the owner's dev database.
@@ -20,6 +21,7 @@ Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `leg
 Inside `server/`: `npm install`, `npx prisma migrate dev` (after a schema change; answer no if it asks to reset), `npm run db:generate`, `npm run db:deploy`, `npm run setup:owner`, `npm run reset:owner`, `npm run check`, `npm start` (run it from inside `server/`, A-48).
 Live check of sign-in, `/auth/me`, `/staff`, passwords, `/audit` and `/members`: with the server running, `sh scripts/live-check-auth.sh` from the repo root. Each run adds one fictional staff account and two fictional members. Use a temporary database (`DATABASE_URL=file:./name.db`) for scripts that change the owner.
 Break-on-purpose for the members code: `node ~/Desktop/mutate-3.2b.mjs 2>&1 | tail -100` from the repo root (script is not in git). Expected now: 76 mutations, 72 caught, 4 escaped (L26, R8, R14, R15).
+Break-on-purpose for the categories code: `node ~/Desktop/mutate-3.3b.mjs 2>&1 | tail -60` from the repo root (script is not in git). Expected now: 20 mutations, 19 caught, 1 escaped (C14).
 Git commands run from the repo root, not from `server/`.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
@@ -33,12 +35,11 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 3.3b (S): break-on-purpose for `categories.ts` (owed). Throwaway script on the Desktop, as before.
-- 4.1 (S or M): payment breakdown check (DR-02) as pure logic, built on `money.ts` and `categories.ts`. No table yet.
+- 4.1 (S or M): payment breakdown check (DR-02) as pure logic, built on `money.ts` and `categories.ts`. The lines must add up to the total exactly; each line has a valid category and an amount above zero. No table yet.
 - Phase 4 after that: payment tables and store, routes, Loan Repaid (DR-09), fake SMS, first-payment flow.
 
 ## Open items
-See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-42. A-22 to A-97 are Claude's choices or checks. DR-04 (category list) is still "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: `categories.ts` (3.3b), step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91 and A-92 are equivalent escapes (read from code, not run on Prisma). Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 48 s on this machine; timeouts are 120 s.
+See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-42. A-22 to A-98 are Claude's choices or checks. DR-04 (category list) is still "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91, A-92 and A-98 are equivalent escapes (read from code). Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 48 s on this machine; timeouts are 120 s.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

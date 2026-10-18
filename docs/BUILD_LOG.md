@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 3.3b (size S), 2026-10-18: break-on-purpose for categories.ts
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-3.3b.mjs`, on your Desktop (not in git). It changes `server/src/categories.ts` one mutation at a time, runs `test/categories.test.ts`, and restores the file. Baseline 13 of 13 passed. Result: 20 mutations, 19 caught, 1 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". No source or test file changed, so the totals stay at 30 files, 847 tests (verified at 3.3).
+- Caught: C1 to C13, C15 to C20 (every refundable flag flipped, Building Funds removed and moved, a name typo, Membership Withdrawal added to the table, the system-only constant changed, `isRefundable` always true, the `system_only` path removed, the error code renamed, the input echoed in the message, both lists unfrozen).
+- Escaped: C14 (the `typeof` check removed from `isPaymentCategory`). Equivalent: `Map.has` of a non-string is false anyway (A-98).
+**Stubbed:** nothing new. No route, table or screen uses categories.
+**Tests:** none new. Total 847.
+**Not verified:** how long the run took. The first run's raw output (see below).
+**Found along the way:**
+1. My first script run was unusable: baseline "0 passed" and 19 ERROR results. My script could not read the vitest summary. I believe colour codes were the cause. The rerun with colour switched off gave the right counts, which fits that guess.
+2. Predictions matched: 19 caught, C14 escaped.
+3. The owed break-on-purpose run for `categories.ts` is closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+
 ## Step 3.3 (size S), 2026-10-18: payment categories, pure logic
 
 **Works (verified on your machine, output pasted: `npm run check` clean, typecheck and lint without errors, 30 files, 847 tests; I ran nothing in my sandbox):** `server/src/categories.ts` (`PAYMENT_CATEGORY_TABLE`, `PAYMENT_CATEGORIES`, `REFUNDABLE_CATEGORIES`, `SYSTEM_ONLY_CATEGORY`, `isPaymentCategory`, `isRefundable`, `parsePaymentCategory`, `CategoryError` with codes `unknown` and `system_only`). 14 categories in DR-04 order, Building Funds last. Five refundable (DR-03): Shares, Savings, Special Savings, Special Deposit, Building Funds. "Membership Withdrawal" is not in the table and `parsePaymentCategory` refuses it with `system_only`. Names match exactly (case and spaces count). The error message never repeats the input. Decision D-42.

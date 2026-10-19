@@ -248,9 +248,60 @@ export interface MemberStore {
   setStatus(id: string, status: MemberStatus): Promise<boolean>;
 }
 
+export type PaymentMethod = "CASH" | "BANK_TRANSFER";
+
+/** One category and amount inside a payment. The amount is whole kobo. */
+export interface PaymentLineRecord {
+  id: string;
+  category: string;
+  amount: bigint;
+}
+
+/** A saved payment. Append-only: nothing changes it after it is saved (D-17). */
+export interface PaymentRecord {
+  id: string;
+  memberId: string;
+  method: PaymentMethod;
+  /** Whole kobo. */
+  total: bigint;
+  /** In the order given when the payment was saved. */
+  lines: PaymentLineRecord[];
+  /** The user who recorded the payment (DR-15). */
+  createdById: string;
+  createdAt: Date;
+}
+
+export interface NewPayment {
+  memberId: string;
+  method: PaymentMethod;
+  total: bigint;
+  lines: { category: string; amount: bigint }[];
+  createdById: string;
+}
+
+export class UnknownMemberError extends Error {
+  constructor(memberId: string) {
+    super(`No member with id ${memberId}`);
+    this.name = "UnknownMemberError";
+  }
+}
+
+export interface PaymentStore {
+  /**
+   * Saves a payment and all its lines together, or nothing. Throws UnknownMemberError if the
+   * member does not exist, then UnknownActorError if createdById is not a user. It saves the
+   * values as given: checking the breakdown (checkBreakdown) is the logic code's job.
+   */
+  create(input: NewPayment): Promise<PaymentRecord>;
+  findById(id: string): Promise<PaymentRecord | null>;
+  /** Payments of one member, oldest first. Payments with equal times are in no fixed order. Returns copies. */
+  listByMember(memberId: string): Promise<PaymentRecord[]>;
+}
+
 export interface Store {
   users: UserStore;
   audit: AuditStore;
   refreshTokens: RefreshTokenStore;
   members: MemberStore;
+  payments: PaymentStore;
 }

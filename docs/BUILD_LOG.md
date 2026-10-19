@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.2 (size M), 2026-10-19: payments tables and store
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 895 tests; `.tables` lists `Payment` and `PaymentLine`; `git status --short` showed the 10 expected lines; I ran nothing in my sandbox):** tables `Payment` and `PaymentLine` (migration `20261019064920_payments`), enum `PaymentMethod` (CASH, BANK_TRANSFER). `PaymentStore` (`create`, `findById`, `listByMember`) on `Store`, in both adapters. Amounts are `BigInt` kobo, the creator is recorded (DR-15), and the store has no update or delete (D-17). The Prisma `create` saves a payment and its lines in one nested create. Decision D-44.
+**Stubbed:** no route, no payment logic. Nothing calls `checkBreakdown` together with the store. No balances. No Loan Repaid effect. No SMS. No general store transaction (moved to 4.3). The audit entry for a payment will be a separate call.
+**Tests:** 20 new: `test/helpers/payments-contract.ts` 10 cases x 2 adapters. Total 895 (was 875). The Prisma half ran on a real SQLite file built from the real migrations, with a value above 2^53.
+**Not verified:** break-on-purpose for the payments store (owed, step 4.2b). Rollback of a payment when a line fails (no test can force it). Whether Prisma runs a nested create as one transaction (I believe so, no source checked; A-102). Behaviour on a server database (A-35). The `migrate dev` output. Typecheck and lint output (inferred from `check` stopping at the first failure).
+**Found along the way:**
+1. Prediction matched: 31 files, 895 tests.
+2. Roadmap change: STATUS said 4.2 must settle general transactions. I split that out as 4.3.
+3. The `sed` edit and all five memory-store edits applied, since the check passed. No find string failed.
+4. NEXT_FILES for 4.2 was right: the grep found only the three files already listed.
+5. `mirror/DECISIONS.md` needs D-44 by hand.
+
 ## Step 4.1b (size S), 2026-10-18: break-on-purpose for breakdown.ts
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.1b.mjs`, on your Desktop (not in git). It changes `server/src/breakdown.ts` one mutation at a time, runs `test/breakdown.test.ts`, and restores the file. Baseline 28 of 28 passed. Result: 35 mutations, 35 caught, 0 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` and `lsof -i :3000` printed nothing. No source or test file changed, so the totals stay at 31 files, 875 tests (verified at 4.1).

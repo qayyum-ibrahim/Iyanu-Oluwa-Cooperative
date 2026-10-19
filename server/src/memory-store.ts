@@ -4,8 +4,11 @@ import {
   DuplicateTokenHashError,
   UnknownActorError,
   UnknownUserError,
+  UnknownMemberError,
   formatMembershipId,
   type AuditRecord,
+  type PaymentRecord,
+  type PaymentStore,
   type LockoutState,
   type MemberRecord,
   type MemberStore,
@@ -15,6 +18,12 @@ import {
 } from "./store.js";
 
 const copyMember = (m: MemberRecord): MemberRecord => ({ ...m, createdAt: new Date(m.createdAt) });
+
+const copyPayment = (p: PaymentRecord): PaymentRecord => ({
+  ...p,
+  createdAt: new Date(p.createdAt),
+  lines: p.lines.map((l) => ({ ...l })),
+});
 
 const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
 const copyUser = (u: UserRecord): UserRecord => ({
@@ -40,6 +49,7 @@ export function createMemoryStore(): Store {
   const users = new Map<string, UserRecord>();
   const lockouts = new Map<string, LockoutState>();
   const audit: AuditRecord[] = [];
+  const memberRows: MemberRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
   function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
@@ -171,7 +181,7 @@ export function createMemoryStore(): Store {
       },
     },
     members: ((): MemberStore => {
-      const rows: MemberRecord[] = [];
+      const rows = memberRows;
       return {
         async create(input) {
           // No await in this method, so two calls cannot get the same number.
@@ -208,6 +218,40 @@ export function createMemoryStore(): Store {
           if (!found) return false;
           found.status = status;
           return true;
+        },
+      };
+    })(),
+    payments: ((): PaymentStore => {
+      const rows: PaymentRecord[] = [];
+      return {
+        async create(input) {
+          // No await in this method, so the checks and the save cannot be interleaved.
+          if (!memberRows.some((m) => m.id === input.memberId)) {
+            throw new UnknownMemberError(input.memberId);
+          }
+          if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          const record: PaymentRecord = {
+            id: randomUUID(),
+            memberId: input.memberId,
+            method: input.method,
+            total: input.total,
+            lines: input.lines.map((l) => ({
+              id: randomUUID(),
+              category: l.category,
+              amount: l.amount,
+            })),
+            createdById: input.createdById,
+            createdAt: new Date(),
+          };
+          rows.push(record);
+          return copyPayment(record);
+        },
+        async findById(id) {
+          const found = rows.find((p) => p.id === id);
+          return found ? copyPayment(found) : null;
+        },
+        async listByMember(memberId) {
+          return rows.filter((p) => p.memberId === memberId).map(copyPayment);
         },
       };
     })(),

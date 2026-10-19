@@ -1,6 +1,6 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
-// stored staff permissions (step 2.5b), members (step 3.1).
-// Money tables arrive in Phase 4 and later. Money columns will be BigInt kobo (D-15).
+// stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2).
+// Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
 generator client {
@@ -25,6 +25,11 @@ enum MemberStatus {
   INACTIVE
 }
 
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+}
+
 model User {
   id               String         @id @default(uuid())
   email            String         @unique
@@ -41,6 +46,7 @@ model User {
   auditLogs        AuditLog[]
   refreshTokens    RefreshToken[]
   members          Member[]
+  payments         Payment[]
 }
 
 model AuditLog {
@@ -85,6 +91,37 @@ model Member {
   createdById String
   createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt   DateTime     @default(now())
+  payments    Payment[]
 
   @@index([createdById])
+}
+
+// Append-only (D-17): no update or delete exists in the store. A correction is a new reversing entry.
+model Payment {
+  id          String        @id @default(uuid())
+  memberId    String
+  member      Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  method      PaymentMethod
+  // Whole kobo (D-15). The lines add up to this; the logic code checks it (DR-02).
+  totalKobo   BigInt
+  // The user who recorded the payment (DR-15).
+  createdById String
+  createdBy   User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now())
+  lines       PaymentLine[]
+
+  @@index([memberId])
+  @@index([createdById])
+}
+
+model PaymentLine {
+  id         String  @id @default(uuid())
+  paymentId  String
+  payment    Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  // Order of the line inside the payment, first line is 0.
+  position   Int
+  category   String
+  amountKobo BigInt
+
+  @@unique([paymentId, position])
 }

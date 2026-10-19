@@ -53,7 +53,7 @@ function spied(base: Store) {
       listByActor: (id) => base.audit.listByActor(id),
       list: (q) => base.audit.list(q),
     },
-    refreshTokens: { ...base.refreshTokens, create }, members: base.members,
+    refreshTokens: { ...base.refreshTokens, create }, members: base.members, payments: base.payments,
   };
   return { store, appended, create };
 }
@@ -61,7 +61,7 @@ function spied(base: Store) {
 function withUser(base: Store, override: (u: UserRecord | null) => UserRecord | null): Store {
   return {
     audit: base.audit,
-    refreshTokens: base.refreshTokens, members: base.members,
+    refreshTokens: base.refreshTokens, members: base.members, payments: base.payments,
     users: { ...base.users, findById: async (id) => override(await base.users.findById(id)) },
   };
 }
@@ -69,7 +69,7 @@ function withUser(base: Store, override: (u: UserRecord | null) => UserRecord | 
 function withBrokenAudit(base: Store): Store {
   return {
     users: base.users,
-    refreshTokens: base.refreshTokens, members: base.members,
+    refreshTokens: base.refreshTokens, members: base.members, payments: base.payments,
     audit: {
       append: async () => {
         throw new Error("audit down");

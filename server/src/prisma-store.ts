@@ -4,8 +4,11 @@ import {
   DuplicateTokenHashError,
   UnknownActorError,
   UnknownUserError,
+  UnknownMemberError,
   formatMembershipId,
   type AuditRecord,
+  type PaymentMethod,
+  type PaymentRecord,
   type LockoutState,
   type MemberRecord,
   type RefreshTokenRecord,
@@ -27,6 +30,29 @@ const toMember = (r: MemberRow): MemberRecord => ({
   address: r.address,
   occupation: r.occupation,
   status: r.status,
+  createdById: r.createdById,
+  createdAt: r.createdAt,
+});
+
+/** A Payment row with its lines, as the database holds it. */
+interface PaymentRow {
+  id: string;
+  memberId: string;
+  method: PaymentMethod;
+  totalKobo: bigint;
+  createdById: string;
+  createdAt: Date;
+  lines: { id: string; position: number; category: string; amountKobo: bigint }[];
+}
+
+const toPayment = (r: PaymentRow): PaymentRecord => ({
+  id: r.id,
+  memberId: r.memberId,
+  method: r.method,
+  total: r.totalKobo,
+  lines: [...r.lines]
+    .sort((a, b) => a.position - b.position)
+    .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo })),
   createdById: r.createdById,
   createdAt: r.createdAt,
 });
@@ -271,6 +297,50 @@ export function createPrismaStore(prisma: PrismaClient): Store {
       async setStatus(id, status) {
         const result = await prisma.member.updateMany({ where: { id }, data: { status } });
         return result.count === 1;
+      },
+    },
+    payments: {
+      async create(input) {
+        const member = await prisma.member.findUnique({
+          where: { id: input.memberId },
+          select: { id: true },
+        });
+        if (member === null) throw new UnknownMemberError(input.memberId);
+        const actor = await prisma.user.findUnique({
+          where: { id: input.createdById },
+          select: { id: true },
+        });
+        if (actor === null) throw new UnknownActorError(input.createdById);
+        // One nested create: the payment and its lines are saved together or not at all.
+        const row = await prisma.payment.create({
+          data: {
+            memberId: input.memberId,
+            method: input.method,
+            totalKobo: input.total,
+            createdById: input.createdById,
+            lines: {
+              create: input.lines.map((l, position) => ({
+                position,
+                category: l.category,
+                amountKobo: l.amount,
+              })),
+            },
+          },
+          include: { lines: true },
+        });
+        return toPayment(row);
+      },
+      async findById(id) {
+        const row = await prisma.payment.findUnique({ where: { id }, include: { lines: true } });
+        return row ? toPayment(row) : null;
+      },
+      async listByMember(memberId) {
+        const rows = await prisma.payment.findMany({
+          where: { memberId },
+          include: { lines: true },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toPayment);
       },
     },
     refreshTokens: {

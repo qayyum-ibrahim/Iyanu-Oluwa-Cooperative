@@ -11,6 +11,7 @@ import { runActiveContract } from "./active-contract.js";
 import { runAuditListContract } from "./audit-list-contract.js";
 import { runMembersContract } from "./members-contract.js";
 import { runPasswordContract } from "./password-contract.js";
+import { runPaymentsContract } from "./payments-contract.js";
 import { runPermissionsContract } from "./permissions-contract.js";
 
 let counter = 0;
@@ -371,5 +372,6 @@ export function runStoreContract(
     runPasswordContract(makeStore);
     runAuditListContract(makeStore);
     runMembersContract(makeStore, makeEmptyStore);
+    runPaymentsContract(makeStore);
   });
 }

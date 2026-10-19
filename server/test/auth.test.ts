@@ -35,7 +35,7 @@ function withSpy(base: Store) {
       listByActor: (id) => base.audit.listByActor(id),
       list: (q) => base.audit.list(q),
     },
-    refreshTokens: base.refreshTokens, members: base.members,
+    refreshTokens: base.refreshTokens, members: base.members, payments: base.payments,
   };
   return { store, appended };
 }
@@ -56,7 +56,7 @@ async function setup(over: { role?: "STAFF" | "SUPER_ADMIN" } = {}) {
 function asInactive(store: Store): Store {
   return {
     audit: store.audit,
-    refreshTokens: store.refreshTokens, members: store.members,
+    refreshTokens: store.refreshTokens, members: store.members, payments: store.payments,
     users: {
       ...store.users,
       findByEmail: async (email) => {
@@ -230,7 +230,7 @@ describe("authenticate: audit rules", () => {
         listByActor: store.audit.listByActor,
         list: store.audit.list,
       },
-      refreshTokens: store.refreshTokens, members: store.members,
+      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments,
     };
     await expect(authenticate(broken, EMAIL, PASSWORD)).rejects.toThrow("audit down");
   });
@@ -246,7 +246,7 @@ describe("authenticate: audit rules", () => {
         listByActor: store.audit.listByActor,
         list: store.audit.list,
       },
-      refreshTokens: store.refreshTokens, members: store.members,
+      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments,
     };
     await expect(authenticate(broken, EMAIL, "wrong-password-123")).rejects.toThrow("audit down");
   });

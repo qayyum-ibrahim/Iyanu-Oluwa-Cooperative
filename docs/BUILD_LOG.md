@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.3b (size S), 2026-10-19: break-on-purpose for the transaction code
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.3b.mjs`, on your Desktop (not in git). It changes the transaction code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, runs the transaction cases of the matching adapter test file (`-t transactions`), and restores the files. Baselines: memory 10 of 10, Prisma 10 of 10. Result: 19 mutations, 15 caught, 4 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". `git status --short` printed nothing before and after the run, and `lsof -i :3000` printed nothing. No source or test file changed, so the totals stay at 31 files, 915 tests (verified at 4.3).
+- Caught: M1 to M11 (rollback skipped, error swallowed after rollback, users, tokens and members snapshots not copied, payments, audit, members, tokens, lockouts and users not restored) and P3 to P6 (nested failure swallowed, function run on the outer client, function error swallowed, root transaction not transactional).
+- Escaped: M12 (queue removed), M13 (queue poisoned by a failed transaction), P1 (options dropped), P2 (timeout set to 1 ms). See A-111 and A-112. M12 and M13 are test gaps in the test-only memory adapter. P1 and P2 are untested configuration.
+**Stubbed:** nothing new. Nothing uses `transaction` yet.
+**Tests:** none new. Total 915.
+**Not verified:** whether the Prisma `maxWait` and `timeout` options are enforced with the better-sqlite3 adapter (P2 passed with 1 ms; A-112). How long the run took (not in the paste). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Predictions: I expected P2 to be caught and it escaped. M12, M13 and P1 escaped, as I said they might. P4 did not time out.
+2. I read your "gp" as "go".
+3. NEXT_FILES for 4.3b was right: the pack held every file the script needed.
+4. `mirror/DECISIONS.md` still needs D-45 by hand (STATUS item 2).
+5. The owed break-on-purpose run for the transaction code is closed, except the gaps above. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+
 ## Step 4.3 (size M), 2026-10-19: Store.transaction
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 915 tests, 0 failed, duration 53 s; the sed edits applied, grep counts 3, 1, 4; `git status --short` showed the 8 expected paths; I ran nothing in my sandbox):** `Store.transaction(fn)` in the interface and both adapters. If `fn` returns, its writes are saved. If it throws, they are undone and the same error is thrown again. Memory adapter: it copies all data first and puts the copy back on a throw; transactions run one at a time. Prisma adapter: `prisma.$transaction` (interactive form) with `maxWait` 10 s and `timeout` 30 s. A nested call on the store given to `fn` joins the outer transaction. New contract `test/helpers/transaction-contract.ts`, 10 cases, wired into `store-contract.ts`. Decision D-45.

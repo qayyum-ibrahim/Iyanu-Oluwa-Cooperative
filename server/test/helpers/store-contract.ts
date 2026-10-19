@@ -13,6 +13,7 @@ import { runMembersContract } from "./members-contract.js";
 import { runPasswordContract } from "./password-contract.js";
 import { runPaymentsContract } from "./payments-contract.js";
 import { runPermissionsContract } from "./permissions-contract.js";
+import { runTransactionContract } from "./transaction-contract.js";
 
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
@@ -373,5 +374,6 @@ export function runStoreContract(
     runAuditListContract(makeStore);
     runMembersContract(makeStore, makeEmptyStore);
     runPaymentsContract(makeStore);
+    runTransactionContract(makeStore);
   });
 }

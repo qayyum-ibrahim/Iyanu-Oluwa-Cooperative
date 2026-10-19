@@ -304,4 +304,11 @@ export interface Store {
   refreshTokens: RefreshTokenStore;
   members: MemberStore;
   payments: PaymentStore;
+  /**
+   * Runs fn with a store bound to one transaction. If fn returns, every write inside it is saved.
+   * If fn throws, every write inside it is undone and the same error is thrown again.
+   * Use only the store passed to fn inside fn. A nested call on that store joins the same
+   * transaction (no savepoint), so a nested failure that fn catches does NOT undo the nested writes.
+   */
+  transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T>;
 }

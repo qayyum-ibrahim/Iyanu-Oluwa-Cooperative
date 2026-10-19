@@ -114,8 +114,28 @@ const toLockout = (r: { failedLoginCount: number; lockedUntil: Date | null }): L
   lockedUntil: r.lockedUntil,
 });
 
+/** What a query needs: the client, or the client Prisma hands to a transaction. */
+type Db = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends" | "$use">;
+
+/** Prisma's defaults (2 s wait, 5 s run) are short for a slow machine. My choice (A-108). */
+const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
+
 /** Real adapter: stores data through Prisma. */
 export function createPrismaStore(prisma: PrismaClient): Store {
+  return buildStore(
+    prisma,
+    <T>(fn: (tx: Store) => Promise<T>): Promise<T> =>
+      prisma.$transaction(async (tx) => {
+        // A nested call joins this transaction.
+        const txStore: Store = buildStore(tx, <U>(inner: (t: Store) => Promise<U>): Promise<U> =>
+          inner(txStore),
+        );
+        return fn(txStore);
+      }, TRANSACTION_OPTIONS),
+  );
+}
+
+function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
   const readLockout = (userId: string) =>
     prisma.user.findUnique({
       where: { id: userId },
@@ -123,6 +143,7 @@ export function createPrismaStore(prisma: PrismaClient): Store {
     });
 
   return {
+    transaction: runTransaction,
     users: {
       async create(input) {
         try {

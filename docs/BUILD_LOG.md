@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 4.3 (size M), 2026-10-19: Store.transaction
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 915 tests, 0 failed, duration 53 s; the sed edits applied, grep counts 3, 1, 4; `git status --short` showed the 8 expected paths; I ran nothing in my sandbox):** `Store.transaction(fn)` in the interface and both adapters. If `fn` returns, its writes are saved. If it throws, they are undone and the same error is thrown again. Memory adapter: it copies all data first and puts the copy back on a throw; transactions run one at a time. Prisma adapter: `prisma.$transaction` (interactive form) with `maxWait` 10 s and `timeout` 30 s. A nested call on the store given to `fn` joins the outer transaction. New contract `test/helpers/transaction-contract.ts`, 10 cases, wired into `store-contract.ts`. Decision D-45.
+**Stubbed:** nothing uses `transaction` yet. A-25, A-39, A-54, A-58, A-62 and A-88 are not retrofitted. The payment route (4.4) is the first planned user.
+**Tests:** 20 new (10 cases x 2 adapters). Total 915 (was 895). Cases: value and writes kept; reads its own writes; undo of a create with the same error rethrown; undo across member, payment and audit; undo of updates (status, permissions, token use and revoke, lockout); `DuplicateEmailError` passes through and earlier writes are undone; nested commit; nested throw undoes the outer writes; a failed transaction does not undo a successful parallel one; two parallel transactions get different Membership IDs. The Prisma half ran on a real SQLite file built from the real migrations, so interactive transactions work with the better-sqlite3 adapter on SQLite.
+**Not verified:** break-on-purpose for the transaction code (owed, step 4.3b). Whether the Prisma nested create in `payments.create` is atomic by itself (A-102, still believed, no source checked). Which of the 10 cases took how long (the paste was cut to the last 30 lines, so I saw only the totals). Typecheck and lint output (inferred from `check` stopping at the first failure). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Prediction matched: 31 files, 915 tests.
+2. My slip: the step message said "7 modified or new paths" and then "8 paths in all". The real count is 8, as you pasted.
+3. NEXT_FILES miss: the 4.3 list lacked `auth.test.ts`, `auth-routes.test.ts` and `sessions.test.ts`, which build a `Store` by hand. The grep found them and you pasted them. All three were edited. Typecheck passed, so no other test file builds a `Store` by hand.
+4. `mirror/DECISIONS.md` needs D-45 by hand.
+5. You said you updated DOMAIN_RULES in Project knowledge. The copy you pasted looked the same as the mirror to me. I did not diff it.
+6. Vitest again suggests `isolate: false` (about 4.5 s faster). I changed nothing.
+
 ## Step 4.2b (size S), 2026-10-19: break-on-purpose for the payments store
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** two throwaway scripts on your Desktop (not in git): `mutate-4.2b.mjs` and `mutate-4.2b-pp8.mjs`. They change the payments code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, run the payments cases of the matching adapter test file (`-t payments`), and restore the files. Baselines: memory 10 of 10, Prisma 10 of 10. Main run: 44 mutations, 42 caught, 1 escaped, 0 error, 0 timeout, 1 not applied. "files restored: yes". PP8, run alone: 2 failed, 8 passed, so caught, "file restored: yes". Both `git status --short` outputs were empty. Net: 44 mutations, 43 caught, 1 escaped. No source or test file changed, so the totals stay at 31 files, 895 tests (verified at 4.2).

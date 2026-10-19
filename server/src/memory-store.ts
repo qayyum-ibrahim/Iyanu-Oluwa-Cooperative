@@ -44,12 +44,16 @@ const copyToken = (t: RefreshTokenRecord): RefreshTokenRecord => ({
   revokedAt: copyDate(t.revokedAt),
 });
 
-/** In-memory adapter for tests. Nothing is saved to disk. */
+/**
+ * In-memory adapter for tests. Nothing is saved to disk.
+ * transaction() keeps a copy of all data and puts it back if the function throws (A-107).
+ */
 export function createMemoryStore(): Store {
   const users = new Map<string, UserRecord>();
   const lockouts = new Map<string, LockoutState>();
   const audit: AuditRecord[] = [];
   const memberRows: MemberRecord[] = [];
+  const paymentRows: PaymentRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
   function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
@@ -63,7 +67,34 @@ export function createMemoryStore(): Store {
     return changed;
   }
 
-  return {
+  function takeSnapshot() {
+    return {
+      users: [...users.entries()].map(([id, u]) => [id, copyUser(u)] as const),
+      lockouts: [...lockouts.entries()].map(([id, l]) => [id, copyLockout(l)] as const),
+      audit: audit.map((a) => copyAudit(a)),
+      members: memberRows.map((m) => copyMember(m)),
+      payments: paymentRows.map((p) => copyPayment(p)),
+      tokens: [...tokens.entries()].map(([id, t]) => [id, copyToken(t)] as const),
+    };
+  }
+  type Snapshot = ReturnType<typeof takeSnapshot>;
+
+  function restore(s: Snapshot): void {
+    users.clear();
+    for (const [id, u] of s.users) users.set(id, u);
+    lockouts.clear();
+    for (const [id, l] of s.lockouts) lockouts.set(id, l);
+    audit.length = 0;
+    audit.push(...s.audit);
+    memberRows.length = 0;
+    memberRows.push(...s.members);
+    paymentRows.length = 0;
+    paymentRows.push(...s.payments);
+    tokens.clear();
+    for (const [id, t] of s.tokens) tokens.set(id, t);
+  }
+
+  const parts: Omit<Store, "transaction"> = {
     users: {
       async create(input) {
         for (const u of users.values()) {
@@ -222,7 +253,7 @@ export function createMemoryStore(): Store {
       };
     })(),
     payments: ((): PaymentStore => {
-      const rows: PaymentRecord[] = [];
+      const rows = paymentRows;
       return {
         async create(input) {
           // No await in this method, so the checks and the save cannot be interleaved.
@@ -297,4 +328,30 @@ export function createMemoryStore(): Store {
       },
     },
   };
+
+  // Transactions run one at a time. A call made outside a transaction while one is running is
+  // not held back, and a rollback would undo its writes too (A-107).
+  let queue: Promise<unknown> = Promise.resolve();
+
+  function transaction<T>(fn: (tx: Store) => Promise<T>): Promise<T> {
+    const run = async (): Promise<T> => {
+      const snapshot = takeSnapshot();
+      const tx: Store = {
+        ...parts,
+        // A nested call joins this transaction.
+        transaction: <U>(inner: (t: Store) => Promise<U>): Promise<U> => inner(tx),
+      };
+      try {
+        return await fn(tx);
+      } catch (e) {
+        restore(snapshot);
+        throw e;
+      }
+    };
+    const result = queue.then(run);
+    queue = result.catch(() => undefined);
+    return result;
+  }
+
+  return { ...parts, transaction };
 }

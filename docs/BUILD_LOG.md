@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.2b (size S), 2026-10-19: break-on-purpose for the payments store
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** two throwaway scripts on your Desktop (not in git): `mutate-4.2b.mjs` and `mutate-4.2b-pp8.mjs`. They change the payments code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, run the payments cases of the matching adapter test file (`-t payments`), and restore the files. Baselines: memory 10 of 10, Prisma 10 of 10. Main run: 44 mutations, 42 caught, 1 escaped, 0 error, 0 timeout, 1 not applied. "files restored: yes". PP8, run alone: 2 failed, 8 passed, so caught, "file restored: yes". Both `git status --short` outputs were empty. Net: 44 mutations, 43 caught, 1 escaped. No source or test file changed, so the totals stay at 31 files, 895 tests (verified at 4.2).
+- Caught: PM1 to PM24 (member and creator checks removed, inverted or mistyped; total, method, member id, creator id, category and amount saved wrongly; line order, line ids and payment id; every copy rule in the memory adapter; both lookups and the list filter and order), PP1 to PP7, PP9, PP11 to PP20 and PP8 (Prisma: both existence checks, member lookup, method, total, creator, line order, category and amount on write; line sort reversed, total, amount, method, member id and creator id on read; `findById` ignoring the id; list filter, order and length).
+- Escaped: PP10 (the line sort removed in `toPayment`). I believe it is equivalent on SQLite: rows come back in insertion order, which is already the position order, and the store cannot insert lines out of order. Read from the code, not run (A-106).
+**Stubbed:** nothing new. No route, logic or screen uses the payments store.
+**Tests:** none new. Total 895.
+**Not verified:** behaviour of PP10 on a server database (A-35, A-106). Rollback of a payment when a line fails (still untestable, A-102). The run time (not shown in the paste).
+**Found along the way:**
+1. My mistake: the find text for PP8 (`category: l.category,`) appears twice in `prisma-store.ts`. The script refused it ("found 2 times"), so the Prisma write path for line categories was not tested in the main run. I fixed it with a one-mutation script with a longer find text. It was caught.
+2. Predictions: the memory adapter and most Prisma mutations were caught, as I expected. PP10 escaped, as I said it might. PP8 not applying was not predicted.
+3. My time guess (15 to 20 minutes) looks too high: your messages are 12 minutes apart at most. This is an inference, not a measured time.
+4. The owed break-on-purpose run for the payments store is closed. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+5. `-t payments` selected exactly the 10 payments cases on each adapter (baseline 10 passed), so the filter works.
+
 ## Step 4.2 (size M), 2026-10-19: payments tables and store
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 895 tests; `.tables` lists `Payment` and `PaymentLine`; `git status --short` showed the 10 expected lines; I ran nothing in my sandbox):** tables `Payment` and `PaymentLine` (migration `20261019064920_payments`), enum `PaymentMethod` (CASH, BANK_TRANSFER). `PaymentStore` (`create`, `findById`, `listByMember`) on `Store`, in both adapters. Amounts are `BigInt` kobo, the creator is recorded (DR-15), and the store has no update or delete (D-17). The Prisma `create` saves a payment and its lines in one nested create. Decision D-44.

@@ -3,8 +3,13 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
+server/src/sms.ts
+server/src/store.ts
 server/src/payments.ts
 server/src/payments-routes.ts
 server/src/app.ts
-server/eslint.config.js
-server/tsconfig.json
+server/src/server.ts
+server/test/payments.test.ts
+server/test/payments-routes.test.ts
+server/test/payments-idempotency.test.ts
+scripts/live-check-auth.sh

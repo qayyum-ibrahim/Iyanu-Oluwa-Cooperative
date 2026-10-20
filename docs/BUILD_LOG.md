@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 4.6 (size S), 2026-10-20: SMS provider interface and fake provider
+
+**Works (verified on your machine, output pasted: `npm run check` ran typecheck and lint without errors and ended with 35 files, 1035 tests, 0 failed, duration 51.49 s; `git status --short` showed only `?? src/sms.ts` and `?? test/sms.test.ts`; I ran nothing in my sandbox):** `server/src/sms.ts`: `SmsProvider` (one method, `send`), `SmsMessage`, `SmsResult`, `SmsFailure` (`invalid_number`, `invalid_message`, `provider_error`) and `FakeSmsProvider`. The fake sends nothing: it keeps accepted messages in memory, gives ids `fake-1`, `fake-2`, and can fail the next valid send (`failNext`). Expected failures come back as `{ ok: false }`. Decision D-49.
+**Stubbed:** nothing calls the module. No message text. No toggle on the payment form. No real provider (Twilio is chosen, the adapter is a later step).
+**Tests:** 16 new in `test/sms.test.ts`. Total 1035 (was 1019).
+**Not verified:** break-on-purpose (not run: no money, security or data-loss code). Everything about Twilio (A-125). Phone number format and message length rules (A-124).
+**Found along the way:**
+1. Your request for Twilio conflicted with D-07, D-08 and "Not now" in PROJECT_BRIEF. You chose option A: interface and fake now, real adapter later. Twilio is recorded as the chosen provider in D-49. OQ-05 is half answered: the provider is known, the message text is not.
+2. Predictions matched: 35 files, 1035 tests, 16 new, two untracked files.
+3. Typecheck and lint output was pasted in full this time, so they are now verified, not inferred.
+4. Vitest again suggests `isolate: false` (about 5.2 s faster). I changed nothing.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+6. `mirror/DECISIONS.md` needs D-49 by hand.
+
 ## Step 4.5c (size S), 2026-10-20: close the K15 and M8 test gaps
 
 **Works (verified on your machine, output pasted: grep counts 1 and 1; `npm run check` ended with 34 files, 1019 tests, 0 failed, duration 38.73 s; mutation rerun K15 baseline 32 passed then caught (1 failed, 31 passed), M8 baseline 7 passed then caught (1 failed, 6 passed), "file restored: yes" for both; `git status --short` showed only the two edited test files before and after; I ran nothing in my sandbox):** two additions, no source change. (1) `payments-idempotency.test.ts`: the same key with the same total and categories but another split of the amounts (10000, 5000, 5000 instead of 5000, 10000, 5000) gives `idempotency_conflict`, with one payment and one audit entry left (K15). (2) `payments-key-contract.ts`: a record from `findByKey` is changed (hash, total, lines, date) and the stored payment is read again unchanged (M8). The contract case runs on both adapters. A throwaway script, `mutate-4.5c.mjs`, on your Desktop (not in git), reruns K15 and M8 only.

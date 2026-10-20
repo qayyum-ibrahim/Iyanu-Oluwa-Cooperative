@@ -8,7 +8,7 @@
 | OQ-02 | Owner's email for the Super Admin account | Owner | Phase 2 | Entered when the setup script runs. Never in git. |
 | OQ-03 | Owner's OS and Node version. Answered 2026-10-13: macOS, Node v22.14.0, npm 11.21.0 | Owner | Closed | n/a |
 | OQ-04 | Deadline, definition of done, credit situation | Owner | Phase 1 | Lean mode, no deadline |
-| OQ-05 | SMS provider and message text | Owner | Phase 4 | Fake adapter, placeholder text |
+| OQ-05 | SMS message text. Provider answered 2026-10-20: Twilio, real adapter after the fake is wired (D-49). | Owner | Phase 4 | Fake adapter, placeholder text |
 | OQ-06 | Can a member be paid off while holding an active loan? | Owner | Phase 6 | No. Blocked (as in the ZIP). |
 | OQ-07 | Can an Inactive member be reactivated? By whom? | Owner | Phase 6 | No reactivation feature |
 | OQ-08 | Who may edit an expense, and must old values be kept? | Owner | Phase 5 | Edits allowed with permission; old values go in the audit log |

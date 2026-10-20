@@ -2,7 +2,7 @@ import type { Express } from "express";
 import request from "supertest";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
-import { LOCKOUT_MAX_FAILURES } from "../src/auth.js";
+import { LOCKOUT_MAX_FAILURES, LOCKOUT_SECONDS } from "../src/auth.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { hashPassword } from "../src/password.js";
 
@@ -140,5 +140,20 @@ describe("POST /auth/password", () => {
     }
     expect((await change(app, accessToken, goodBody)).status).toBe(403);
     expect((await login(app, PASSWORD)).status).toBe(401);
+  });
+
+  it("ends that lock after 15 minutes of app time", slow, async () => {
+    const store = createMemoryStore();
+    await store.users.create({ email: EMAIL, passwordHash: HASH, displayName: "Test Staff" });
+    const clock = { now: T0 };
+    const app = createApp({ store, tokenSecret: SECRET, now: () => clock.now });
+    const { accessToken } = await signIn(app);
+    for (let i = 0; i < LOCKOUT_MAX_FAILURES; i += 1) {
+      const res = await change(app, accessToken, { currentPassword: WRONG, newPassword: NEW_PASSWORD });
+      expect(res.status).toBe(403);
+    }
+    expect((await login(app, PASSWORD)).status).toBe(401);
+    clock.now = new Date(T0.getTime() + (LOCKOUT_SECONDS + 1) * 1000);
+    expect((await login(app, PASSWORD)).status).toBe(200);
   });
 });

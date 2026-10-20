@@ -148,6 +148,23 @@ describe("POST /auth/login", () => {
     expect((await login(app)).status).toBe(200);
   });
 
+  it("answers 401 invalid_credentials when the user is deactivated during sign-in", async () => {
+    // authenticate reads the user by email; issueSession reads it by id. Inactive only by id.
+    const { app } = await build((s) => ({
+      ...s,
+      users: {
+        ...s.users,
+        findById: async (id) => {
+          const u = await s.users.findById(id);
+          return u ? { ...u, isActive: false } : null;
+        },
+      },
+    }));
+    const res = await login(app);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "invalid_credentials" });
+  });
+
   it("writes a login.success audit entry for the user", async () => {
     const { app, store, user } = await build();
     await login(app);

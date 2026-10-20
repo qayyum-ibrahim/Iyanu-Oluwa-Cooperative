@@ -4,7 +4,4 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/src/server.ts
-server/src/app.ts
-server/src/db.ts
-server/src/tokens.ts
-server/package.json
+server/test/server-start.test.ts

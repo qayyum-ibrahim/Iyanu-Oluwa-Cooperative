@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.12 (size M), 2026-10-20: start-up tests for server.ts
+
+**Works (verified in this session):** new `server/test/server-start.test.ts` with 3 tests that start `src/server.ts` as a child process with a fake secret, a temporary database file and a free port: (1) an empty `TOKEN_SECRET` prints the "Set TOKEN_SECRET in server/.env." message, exits with code 1 and never listens; (2) a good start prints "server listening on port N", answers 200 `{ status: "ok" }` on `/health`, and SIGTERM stops it with exit code 0; (3) a port already in use prints "Could not listen on port N" and exits with code 1. The file alone: 3 passed in 3.49 s. `npm run check`: typecheck and lint clean, 38 files, 1097 passed, 0 failed, 52.14 s. No source file changed. `dev.db` kept its 20:46 time; no temporary folder was left behind.
+**Stubbed:** nothing new.
+**Tests:** 3 new (1097 - 1094).
+**Not verified:** the stop test on Windows (A-141). The live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. The usual break-on-purpose method could not work for `server.ts` because no test started it; this step adds that test first (method approved by the owner). The mutation run is 4.12b.
+2. My estimate of 5 to 10 seconds extra was high: the new file takes about 3.5 s, and the full run was 52.14 s.
+3. No decision in this step (A-141 records the method), so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.11b (size S), 2026-10-20: tests close the auth route gaps (A-140)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** one new test in `server/test/auth-routes.test.ts` (a user who is inactive when read by id, but not by email, gets 401 `invalid_credentials`, not 500) and one in `server/test/account-routes.test.ts` (a lock from wrong current passwords ends after 15 minutes of app time). No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1094 passed, 0 failed, 61.13 s. Tests committed first (`6b5f063`, owner approved). Rerun of `node ~/Desktop/mutate-4.11.mjs`: baseline 45 passed; 22 mutations, 22 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.

@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.6c-setup (size S), 2026-10-20: Claude Code setup, D-51
+
+**Works (verified on your machine, output pasted: `git status --short` showed ` M docs/DECISIONS.md` and `?? CLAUDE.md`; `tail` showed the end of D-51; Claude Code read `CLAUDE.md` and the docs and replied with the four required lines; I ran nothing in my sandbox):** `CLAUDE.md` in the repo root (working rules, step shape, what Claude Code may do alone and what it must ask first, commands, handoff). Decision D-51: work moves to Claude Code. It replaces D-09 (whole files pasted in chat) and the "owner pastes the output" part of D-37.
+**Stubbed:** nothing. No code or test changed.
+**Tests:** none new. Total 1061 (verified at 4.7).
+**Not verified:** the Claude Code install command and version (A-132). Whether Claude Code keeps to the "ask first" rules in later steps. The first reply was not a test of that, because it only read files.
+**Found along the way:**
+1. Claude Code read `payments.ts` and `payment-sms.test.ts` and confirmed why S13 escaped. Without the early return in `recordPayment`, a refused payment goes on to `trySend`. `result.value` is undefined there, a TypeError is caught, and the reply gains `sms: failed, provider_error`. The old tests check only `r.ok`. This is a reading of the code, not a run. A-131 loses its "not seen" note at 4.7c.
+2. My earlier BUILD_LOG entries say "I ran nothing in my sandbox". Under D-51 the label becomes "verified in this session" when Claude Code runs a command itself.
+3. Claude Code printed "Allowed by auto mode classifier" beside a `cat` command. I do not know what that setting does. Check that auto mode does not let it commit or touch the database without asking.
+4. `mirror/DECISIONS.md` needs D-51 by hand.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+
 ## Step 4.7b (size S), 2026-10-20: break-on-purpose for payment-sms.ts
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.7b.mjs`, on your Desktop (not in git). It changes `payment-sms.ts` one mutation at a time, runs `payment-sms.test.ts`, `payments-routes.test.ts` and `payments-idempotency.test.ts`, and restores the file. Baseline 79 passed, 0 failed. Result: 27 mutations, 22 caught, 5 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` printed nothing before and after. No source or test file changed, so the totals stay at 36 files, 1061 tests (verified at 4.7).

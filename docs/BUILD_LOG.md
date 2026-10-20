@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 4.11b (size S), 2026-10-20: tests close the auth route gaps (A-140)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** one new test in `server/test/auth-routes.test.ts` (a user who is inactive when read by id, but not by email, gets 401 `invalid_credentials`, not 500) and one in `server/test/account-routes.test.ts` (a lock from wrong current passwords ends after 15 minutes of app time). No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1094 passed, 0 failed, 61.13 s. Tests committed first (`6b5f063`, owner approved). Rerun of `node ~/Desktop/mutate-4.11.mjs`: baseline 45 passed; 22 mutations, 22 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.
+**Stubbed:** nothing new.
+**Tests:** 2 new (1094 - 1092).
+**Not verified:** the live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. Prediction held: 22 of 22 caught.
+2. No decision in this step, so DECISIONS and the mirror are unchanged.
+3. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.11 (size S), 2026-10-20: break-on-purpose for auth-routes.ts (owed from 2.4a)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.11.mjs` (not in git). It changes `server/src/auth-routes.ts` one mutation at a time, runs `auth-routes.test.ts`, `account-routes.test.ts` and `auth-me.test.ts`, and restores the file. Baseline 43 passed. Result: 22 mutations, 20 caught, 2 escaped (R5, R19), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.

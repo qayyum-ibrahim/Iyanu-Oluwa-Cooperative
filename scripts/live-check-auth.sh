@@ -302,6 +302,28 @@ expect "newest entry is payment.created" "$(pick entries.0.action)" payment.crea
 code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/payments" -H "Content-Type: application/json" --data '{}')
 expect "payment without a token refused" "$code" 401
 
+# --- payment list (step 4.8) ---
+# The staff member has two payments from this run (the first and the keyed one); the owner's member has one.
+code=$(authed_get "/payments?memberId=$SMID" "$SAT")
+expect "payment list without payments.view refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given payments.view" "$code" 200
+code=$(authed_get "/payments?memberId=$SMID" "$SAT")
+expect "staff lists own member's payments" "$code" 200
+expect "staff member has two payments" "$(pick payments.length)" 2
+expect "listed payment total" "$(pick payments.0.total)" "20000.00"
+code=$(authed_get "/payments?memberId=$OMID" "$SAT")
+expect "staff cannot list the owner's member" "$code" 404
+code=$(authed_get "/payments?memberId=$OMID" "$AT")
+expect "owner lists a member's payments" "$code" 200
+expect "owner's member has one payment" "$(pick payments.length)" 1
+code=$(authed_get "/payments" "$AT")
+expect "payment list without memberId refused" "$code" 400
+expect "missing member id code" "$(pick code)" missing_member_id
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/payments?memberId=x")
+expect "payment list without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

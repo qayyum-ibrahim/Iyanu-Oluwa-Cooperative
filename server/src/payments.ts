@@ -1,4 +1,5 @@
-// Payment logic (step 4.4, idempotency key added in 4.5; D-43 to D-47, DR-02, DR-13, DR-15).
+// Payment logic (step 4.4, idempotency key added in 4.5, list in 4.8; D-43 to D-47, DR-02,
+// DR-13, DR-15).
 // Rules over the Store: no HTTP here.
 // The breakdown is checked first. The key lookup, the member check, the payment and the audit
 // entry then run inside one store transaction, so all of them are saved or none (D-45).
@@ -208,4 +209,41 @@ export async function createPayment(
     if (e instanceof DuplicateIdempotencyKeyError) return attempt();
     throw e;
   }
+}
+
+/** Raw values as they arrive from a query string. Anything may be wrong; this code checks it. */
+export interface PaymentListInput {
+  memberId?: unknown;
+}
+
+export type PaymentListResult = { ok: true; value: PaymentView[] } | PaymentFailureResult;
+
+/**
+ * The payments of one member, oldest first (step 4.8). Read only: nothing is written, not even
+ * an audit entry (A-134).
+ * Order: permission, member id, find the member, check who may see it.
+ * Staff see the payments of members they recorded, whoever recorded the payment (A-133). An
+ * unknown member and a member Staff may not see both answer not_found (A-86).
+ * An Inactive member's payments are listed too.
+ */
+export async function listPayments(
+  store: Store,
+  actor: PaymentActor,
+  input: PaymentListInput,
+): Promise<PaymentListResult> {
+  if (!hasPermission(actor.subject, "payments.view")) return failure("forbidden");
+
+  const memberId = input.memberId;
+  if (memberId === undefined) return failure("invalid_input", "missing_member_id");
+  if (typeof memberId !== "string" || memberId.length === 0) {
+    return failure("invalid_input", "invalid_member_id");
+  }
+
+  const member = await store.members.findById(memberId);
+  if (member === null) return failure("not_found");
+  if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
+    return failure("not_found");
+  }
+  const rows = await store.payments.listByMember(member.id);
+  return { ok: true, value: rows.map((p) => toView(p, member.membershipId)) };
 }

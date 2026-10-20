@@ -1,5 +1,5 @@
-// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7). Thin: all rules live in
-// payments.ts and payment-sms.ts.
+// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7, list in 4.8). Thin: all rules
+// live in payments.ts and payment-sms.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -12,7 +12,12 @@ import {
   type GuardDeps,
 } from "./guards.js";
 import { recordPayment } from "./payment-sms.js";
-import type { PaymentActor, PaymentFailure, PaymentFailureResult } from "./payments.js";
+import {
+  listPayments,
+  type PaymentActor,
+  type PaymentFailure,
+  type PaymentFailureResult,
+} from "./payments.js";
 import type { SmsProvider } from "./sms.js";
 
 export interface PaymentsRouterDeps extends GuardDeps {
@@ -79,6 +84,20 @@ export function createPaymentsRouter(deps: PaymentsRouterDeps): Router {
       res.status(201).json({ payment: result.value, sms: result.sms });
     },
   );
+
+  router.get("/", requirePermission("payments.view"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const result = await listPayments(deps.store, actor, { memberId: req.query["memberId"] });
+    if (!result.ok) {
+      sendFailure(res, result);
+      return;
+    }
+    res.status(200).json({ payments: result.value });
+  });
 
   return router;
 }

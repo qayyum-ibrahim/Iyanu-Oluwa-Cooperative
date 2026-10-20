@@ -256,11 +256,10 @@ describe("POST /payments", () => {
 
 describe("routes that do not exist", () => {
   it.each([
-    { method: "get" as const, path: "/payments" },
     { method: "get" as const, path: "/payments/x" },
     { method: "put" as const, path: "/payments/x" },
     { method: "delete" as const, path: "/payments/x" },
-  ])("answers 404 to $method $path: payments cannot be listed, changed or deleted here", async ({ method, path }) => {
+  ])("answers 404 to $method $path: payments cannot be read one by one, changed or deleted here", async ({ method, path }) => {
     const { app, admin, bearer } = await build();
     const res = await request(app)[method](path).set("Authorization", bearer(admin));
     expect(res.status).toBe(404);

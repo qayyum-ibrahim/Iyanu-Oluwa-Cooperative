@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.8 (size M), 2026-10-20: GET /payments lists one member's payments
+
+**Works (`npm run check` verified in this session: typecheck and lint clean, 37 files, 1088 passed, 0 failed, 50.53 s. Live check verified on your machine, output pasted: "120 passed, 0 failed"):** `listPayments` in `server/src/payments.ts` and `GET /payments?memberId=<id>` in `payments-routes.ts`. It needs `payments.view` and answers 200 `{ payments: [...] }`, oldest first, in the same shape as a recorded payment. 400 `missing_member_id` or `invalid_member_id` (empty, not text, or repeated). 404 for an unknown member or one Staff may not see. Staff see every payment of a member they recorded (A-133). Inactive members' payments are listed. No audit entry, no paging (A-134). Decision D-52.
+**Stubbed:** no screen. No single-payment read, edit or delete route. No paging.
+**Tests:** 21 new in `test/payments-list.test.ts` (15 logic, 6 route). One removed: the `get /payments` case of "routes that do not exist" in `payments-routes.test.ts`. 1068 + 21 - 1 = 1088. Live check gains 11 checks (109 to 120).
+**Not verified:** break-on-purpose for `listPayments` and the route (owed, step 4.8b). The Prisma path through `listPayments` (live check only).
+**Found along the way:**
+1. The first `npm run check` failed: 1 failed, 1088 passed. The old 4.4 test pinned that `GET /payments` does not exist; the new route answered 400 instead of 404. You approved removing that one case and renaming the test; the rerun passed.
+2. Your server paste shows the shell prompt after "server listening", so the server was stopped before the paste. The live check had already passed with it running.
+3. `mirror/DECISIONS.md` needs D-52 by hand.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+
 ## Step 4.7c (size S), 2026-10-20: tests close the payment-sms gaps (A-131)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** 7 new tests in `server/test/payment-sms.test.ts`. No source file changed. `npm run check`: typecheck and lint clean, 36 files, 1068 passed, 0 failed, duration 54.18 s. Tests committed first (`2be3ed5`) because `mutate-4.7b.mjs` needs a clean tree (owner approved). Rerun of `node ~/Desktop/mutate-4.7b.mjs` from the repo root: baseline 86 passed; 27 mutations, 26 caught, 1 escaped (S15), 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.

@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.12c (size S), 2026-10-20: server-start tests: process clean-up, SIGINT and dotenv (A-142)
+
+**Works (verified in this session):** `server/test/server-start.test.ts` changed. Each child is started `detached`, so it leads its own process group, and after each test the whole group is killed (before, only the `tsx` wrapper was killed and the real server kept running). Two new tests: SIGINT (Ctrl+C) stops the server with exit code 0; the server loads `TOKEN_SECRET`, `DATABASE_URL` and `PORT` from a temporary dotenv file named in `DOTENV_PATH` (those three are removed from the child's environment; `DOTENV_PATH` is the name in the dotenv 18.0.7 README, `DOTENV_CONFIG_PATH` is its older fallback). No source file changed. The file alone: 5 passed, 6.52 s. `npm run check`: 38 files, 1099 passed, 0 failed, 54.83 s; no typecheck or lint error in the output. `pgrep -fl src/server.ts` found nothing after either run. Tests committed first (`c5fdc98`, owner approved). Rerun of `node ~/Desktop/mutate-4.12b.mjs`: baseline 5 passed; 15 mutations, 12 caught, 3 escaped (V3, V12, V14, equivalent); "file restored: yes"; `git status --short` empty; no `server.ts` process and no temporary folder left.
+**Stubbed:** nothing new.
+**Tests:** 2 new (1099 - 1097).
+**Not verified:** the tests on Windows (process groups work differently there; A-141). The live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. Predictions held: 12 caught, V3, V12, V14 escaped, nothing left running.
+2. All owed break-on-purpose runs from Phase 2 are now done except step 1.4 (the database schema). The real Prisma engine runs on this machine now, so 1.4 can be done.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.12b (size S), 2026-10-20: break-on-purpose for server.ts (owed from 2.4b)
 
 **Works (verified in this session):** new throwaway script `~/Desktop/mutate-4.12b.mjs` (not in git). It changes `server/src/server.ts` one mutation at a time, runs `server-start.test.ts`, and restores the file. No mutation made the server ignore `DATABASE_URL`. Baseline 3 passed. Result: 15 mutations, 10 caught, 5 escaped (V3, V12, V13, V14, V15), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.

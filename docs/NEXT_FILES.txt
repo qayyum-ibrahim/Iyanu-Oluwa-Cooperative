@@ -3,5 +3,8 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/src/server.ts
-server/test/server-start.test.ts
+server/prisma/schema.prisma
+server/prisma.config.ts
+server/src/db.ts
+server/test/db.test.ts
+server/test/prisma-store.test.ts

@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.8b (size S), 2026-10-20: break-on-purpose for listPayments and GET /payments
+
+**Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.8b.mjs` (not in git). It changes `payments.ts` or `payments-routes.ts` one mutation at a time, runs `payments-list.test.ts` and `payments-routes.test.ts`, and restores the file. Baseline 41 passed. Result: 23 mutations, 22 caught, 1 escaped (R1), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.
+- Caught: L1 to L18 (permission removed or changed, memberId checks and codes, unknown member, visibility removed, `||`, Super Admin as Staff, wrong owner field, forbidden instead of not_found, newest first, wrong Membership ID, own payments only (A-133 reversed), empty list, first payment only), R2 to R5 (query field, reply key, 201, failure answered 200).
+- Escaped: R1 (route guard removed): equivalent, the logic gives the same 403 (A-135).
+- Thin: L6, L8, L11, L14, L15, L18, R3 and R4 are each caught by one test only.
+**Stubbed:** nothing new.
+**Tests:** none new. Total 1088 (from 4.8). `npm run check` not rerun: no repo file changed.
+**Not verified:** the Prisma path through `listPayments` (live check only, 120 at 4.8).
+**Found along the way:**
+1. First run: L5, L6 and L7 were "not applied" because their find text is also in `createPayment`. I anchored them on the line before and fixed the failed count (it added failed files to failed tests). The second run is the result above. No repo file changed either time.
+2. The earlier break-on-purpose scripts are gone from the Desktop (A-136). `mirror/` there was updated at 20:47 (DECISIONS.md).
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.8 (size M), 2026-10-20: GET /payments lists one member's payments
 
 **Works (`npm run check` verified in this session: typecheck and lint clean, 37 files, 1088 passed, 0 failed, 50.53 s. Live check verified on your machine, output pasted: "120 passed, 0 failed"):** `listPayments` in `server/src/payments.ts` and `GET /payments?memberId=<id>` in `payments-routes.ts`. It needs `payments.view` and answers 200 `{ payments: [...] }`, oldest first, in the same shape as a recorded payment. 400 `missing_member_id` or `invalid_member_id` (empty, not text, or repeated). 404 for an unknown member or one Staff may not see. Staff see every payment of a member they recorded (A-133). Inactive members' payments are listed. No audit entry, no paging (A-134). Decision D-52.

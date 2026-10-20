@@ -3,6 +3,5 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/src/payments.ts
-server/src/payments-routes.ts
-server/test/payments-list.test.ts
+server/src/sessions.ts
+server/test/sessions.test.ts

@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 4.10 (size S), 2026-10-20: break-on-purpose for the sign-in lockout (owed from 2.3e)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.10.mjs` (not in git). It changes the lockout parts of `server/src/auth.ts` and the lockout methods of `server/src/memory-store.ts` one mutation at a time, runs `lockout.test.ts`, `auth.test.ts` and `memory-store.test.ts`, and restores the file. Baseline 147 passed. Result: 23 mutations, 21 caught, 2 escaped (A10, A15), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.
+- Caught: A1 to A9, A11 to A14 (limit, lock end boundary, locked user refused, hash checked while locked, locked reason, counting, lock length, `account.locked` written once, count reset on success, inactive refused, dummy hash for an unknown email), M1 to M8 (expired lock cleared, `<=`, no counting while locked, `>=`, lock length, `clearLockout`, `getLockout`, unknown user).
+- Escaped, test gaps (A-139): A10 (`account.locked` detail not checked), A15 (failure count cleared before the inactive check).
+**Stubbed:** nothing new.
+**Tests:** none new. Total 1091. `npm run check` not rerun: no repo file changed.
+**Not verified:** the Prisma store's lockout methods were not mutated (its test file is slow; it shares the lockout contract with the memory store).
+**Found along the way:**
+1. Predictions: A10 and A15 escaped as I said. A14 (dummy hash) was caught, which I did not expect.
+2. My first background start failed: I sent the output to my scratchpad folder, which did not exist. Node never ran, and nothing changed. The second start is the result above.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.9b (size S), 2026-10-20: tests close the sessions.ts gaps (A-138)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** 3 new tests in `server/test/sessions.test.ts`. No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1091 passed, 0 failed, 50.79 s. Tests committed first (`00b2c50`, owner approved) because the script needs a clean tree. Rerun of `node ~/Desktop/mutate-4.9.mjs`: baseline 66 passed; 32 mutations, 23 caught, 9 escaped (S1, S2, S3, S11, S13, S17, S19, S20, S27, all equivalent, A-137); "file restored: yes"; `git status --short` empty after.

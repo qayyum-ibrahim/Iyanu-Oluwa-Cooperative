@@ -130,6 +130,26 @@ describe("createPayment: idempotency key", () => {
     expect(await store.payments.listByMember(m2.id)).toEqual([]);
   });
 
+  it("refuses the same key with the same total and categories but another split of the amounts", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await createPayment(store, actorOf(a), pay(m.id, key(14)));
+    const r = await createPayment(
+      store,
+      actorOf(a),
+      pay(m.id, key(14), {
+        lines: [
+          { category: "Shares", amount: "10000" },
+          { category: "Savings", amount: "5000" },
+          { category: "Special Savings", amount: "5000" },
+        ],
+      }),
+    );
+    expect(r).toEqual({ ok: false, reason: "idempotency_conflict" });
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
   it("keeps keys apart per user", async () => {
     const { store, a, b, addMember } = await build();
     const ma = await addMember(a.id, "A One");

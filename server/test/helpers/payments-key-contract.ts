@@ -90,6 +90,28 @@ export function runPaymentsKeyContract(makeStore: () => Promise<Store> | Store):
       expect((await store.payments.findByKey(b.id, key))?.id).toBe(pb.id);
     });
 
+    it("returns a copy from findByKey: changing it does not change the stored payment", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "k-copy");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      const saved = await store.payments.create(
+        payment(m.id, u.id, { idempotencyKey: key, requestHash: "h" }),
+      );
+      const found = (await store.payments.findByKey(u.id, key)) as {
+        requestHash: string | null;
+        total: bigint;
+        lines: { id: string; category: string; amount: bigint }[];
+        createdAt: Date;
+      } | null;
+      if (found === null) throw new Error("payment not found");
+      found.requestHash = "changed";
+      found.total = 1n;
+      found.lines.splice(0, found.lines.length);
+      found.createdAt.setTime(0);
+      expect(await store.payments.findByKey(u.id, key)).toEqual(saved);
+    });
+
     it("saves payments without a key, as many as wanted, with null key and hash", async () => {
       const store = await makeStore();
       const u = await newUser(store, "k-none");

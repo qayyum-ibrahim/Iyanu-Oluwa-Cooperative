@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.5c (size S), 2026-10-20: close the K15 and M8 test gaps
+
+**Works (verified on your machine, output pasted: grep counts 1 and 1; `npm run check` ended with 34 files, 1019 tests, 0 failed, duration 38.73 s; mutation rerun K15 baseline 32 passed then caught (1 failed, 31 passed), M8 baseline 7 passed then caught (1 failed, 6 passed), "file restored: yes" for both; `git status --short` showed only the two edited test files before and after; I ran nothing in my sandbox):** two additions, no source change. (1) `payments-idempotency.test.ts`: the same key with the same total and categories but another split of the amounts (10000, 5000, 5000 instead of 5000, 10000, 5000) gives `idempotency_conflict`, with one payment and one audit entry left (K15). (2) `payments-key-contract.ts`: a record from `findByKey` is changed (hash, total, lines, date) and the stored payment is read again unchanged (M8). The contract case runs on both adapters. A throwaway script, `mutate-4.5c.mjs`, on your Desktop (not in git), reruns K15 and M8 only.
+**Stubbed:** nothing new. No key clean-up. No payment list route. No screen. A "Loan Repaid" line still changes no loan (DR-09).
+**Tests:** 3 new (1019 - 1016): 1 logic test, 1 contract case x 2 adapters. Total 1019.
+**Not verified:** typecheck and lint output (inferred from `check` reaching the tests; the paste was cut to the last 25 lines). The full 4.5b script was not rerun, so "48 caught, 2 escaped" is my inference, not a result. Behaviour on a server database (A-35, A-110, A-121).
+**Found along the way:**
+1. Predictions matched: 1019 tests, K15 caught, M8 caught, baselines 32 and 7, the two edited files in `git status`.
+2. A-122 and A-123 are closed except for the equivalent mutants K12 and M3. K12 stays equivalent only while the K15 test stays.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. Vitest again suggests `isolate: false` (about 3.5 s faster). I changed nothing.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+
 ## Step 4.5b (size S), 2026-10-20: break-on-purpose for the key code, parallel run on SQLite
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** two throwaway scripts on your Desktop (not in git).

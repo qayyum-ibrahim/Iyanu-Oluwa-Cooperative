@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.9b (size S), 2026-10-20: tests close the sessions.ts gaps (A-138)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** 3 new tests in `server/test/sessions.test.ts`. No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1091 passed, 0 failed, 50.79 s. Tests committed first (`00b2c50`, owner approved) because the script needs a clean tree. Rerun of `node ~/Desktop/mutate-4.9.mjs`: baseline 66 passed; 32 mutations, 23 caught, 9 escaped (S1, S2, S3, S11, S13, S17, S19, S20, S27, all equivalent, A-137); "file restored: yes"; `git status --short` empty after.
+- S8 caught (1 failed): `REFRESH_TOKEN_SECONDS` is 604 800 (A-38).
+- S10 caught (1 failed): a bad secret on refresh throws `TokenConfigError`, the token stays unused and still works with the right secret.
+- S26 caught (1 failed): sign-out with an invalid date throws `TokenConfigError`, revokes nothing, writes no audit entry.
+**Stubbed:** nothing new.
+**Tests:** 3 new (1091 - 1088). `sessions.test.ts` now has 41.
+**Not verified:** S3 on Prisma (A-137). The live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. My 4.9 note that S10 "may be a real weakness" was wrong. The S10 test passed on the current code before any change: the secret is checked first, so a bad secret does not burn a token today. A-138 is corrected.
+2. Prediction held: 23 caught, 9 escaped.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.9 (size S), 2026-10-20: break-on-purpose for sessions.ts (owed from 2.3d)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.9.mjs` (not in git, built from the 4.8b script). It changes `server/src/sessions.ts` one mutation at a time, runs `sessions.test.ts` and `auth-routes.test.ts`, and restores the file. Baseline 63 passed. Result: 32 mutations, 20 caught, 12 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty before and after.

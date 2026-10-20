@@ -84,6 +84,10 @@ const find = (store: Store, token: string) =>
   store.refreshTokens.findByHash(hashRefreshToken(token));
 
 describe("issueSession", () => {
+  it("gives a refresh token a life of 7 days (A-38)", () => {
+    expect(REFRESH_TOKEN_SECONDS).toBe(604_800);
+  });
+
   it("returns an access token and a refresh token for the user", async () => {
     const { store, user } = await setup();
     const s = await issueSession(store, SECRET, user.id, T0);
@@ -224,6 +228,16 @@ describe("refreshSession", () => {
     },
   );
 
+  it("throws TokenConfigError for a bad secret and leaves the token unused", async () => {
+    const { store, user } = await setup();
+    const s0 = await issueSession(store, SECRET, user.id, T0);
+    await expect(refreshSession(store, "short", s0.refreshToken, later(1000))).rejects.toBeInstanceOf(
+      TokenConfigError,
+    );
+    expect((await find(store, s0.refreshToken))?.usedAt).toBeNull();
+    expect((await refreshSession(store, SECRET, s0.refreshToken, later(2000))).ok).toBe(true);
+  });
+
   it("refuses a token at its expiry instant and accepts it one millisecond before", async () => {
     const { store, user } = await setup();
     const s0 = await issueSession(store, SECRET, user.id, T0);
@@ -314,6 +328,17 @@ describe("signOut", () => {
       expect(appended).toHaveLength(0);
     },
   );
+
+  it("throws TokenConfigError for an invalid date and revokes nothing", async () => {
+    const { store, user } = await setup();
+    const { store: spy, appended } = spied(store);
+    const s0 = await issueSession(spy, SECRET, user.id, T0);
+    await expect(signOut(spy, s0.refreshToken, new Date("nope"))).rejects.toBeInstanceOf(
+      TokenConfigError,
+    );
+    expect((await find(store, s0.refreshToken))?.revokedAt).toBeNull();
+    expect(appended).toHaveLength(0);
+  });
 
   it("returns false the second time and writes only one entry", async () => {
     const { store, user } = await setup();

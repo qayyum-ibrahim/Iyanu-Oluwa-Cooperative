@@ -1,5 +1,26 @@
 # Build log (newest first)
 
+## Step 4.5b (size S), 2026-10-20: break-on-purpose for the key code, parallel run on SQLite
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** two throwaway scripts on your Desktop (not in git).
+- `mutate-4.5b.mjs` changes `payments.ts` (29), `payments-routes.ts` (5), the key code in `memory-store.ts` (8) and the key code in `prisma-store.ts` (8) one mutation at a time, runs the matching test files, and restores the files. Baselines: 87, 87, 170 and 17 passed, 0 failed. Result: 50 mutations, 46 caught, 4 escaped, 0 error, 0 timeout, 0 not applied, 0 skipped. "files restored: yes". `git status --short` printed nothing before and after, and `lsof -i :3000` printed nothing.
+- `race-4.5b.mts` builds a temporary SQLite file from the real migrations and sends 8 identical payment requests at once, in 5 rounds with 5 different keys. Result: 40 requests, 5 first saves reported, 35 replays, 0 rejected, 5 payments saved, 5 audit entries. "one payment per key held: yes".
+- Caught: K1 to K11, K13, K14, K16 to K24 (missing-key check and code, invalid-key code, key length bounds, space in key, both pattern anchors, key type check, hash ignoring member id, method, line category, sorted lines, conflict check removed and inverted, replay flag both ways, key lookup skipped or under the wrong user, retry after a lost race removed, key and hash not saved), C1 to C5 (permission check, audit actor from the member's creator (old L35), Staff scope, Inactive check, line cap off by one), R1 to R5 (header name, replay header removed and inverted, conflict status, created status), M1, M2, M4 to M7 (duplicate key not refused, duplicate check and `findByKey` ignoring the user or the key, key and hash not saved) and P1 to P8 (Prisma: key and hash not saved, unique-index error not mapped or mapped to the wrong code, `findByKey` ignoring the user or the key, key and hash lost on read).
+- Escaped: K12, K15, M3, M8.
+  - K12 (hash ignores the total): equivalent. The total always equals the sum of the lines (DR-02), and the lines are hashed with their amounts (A-122).
+  - K15 (hash ignores the line amounts): a test gap. Same key, same total, same categories in the same order, a different split of the amounts would return the first payment instead of 409 (A-122).
+  - M3 (undefined-key guard removed in the memory adapter): equivalent. Stored keys are `null`, never `undefined` (A-123).
+  - M8 (`findByKey` returns the stored object in the memory adapter): a test gap. No contract case changes a record returned by `findByKey` (A-123).
+**Stubbed:** nothing new. No key clean-up. No payment list route. No screen. A "Loan Repaid" line still changes no loan (DR-09).
+**Tests:** none new. Total 1016 (verified at 4.5).
+**Not verified:** whether the `P2002` retry path ran in the race run. The end state is correct, but the output cannot show which route each request took (A-121). How long the mutation run took (not in the paste). The old 4.4b set was not rerun in full: only C1 to C5 and the route mutations R1 to R5 are comparable, and the older scripts for the payments store, transactions and members are still untouched by this step. Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Predictions matched: exactly K12, K15, M3 and M8 escaped, and the race run rejected nothing.
+2. NEXT_FILES miss: the 4.5b list lacked `server/test/helpers/temp-db.ts`, which the race script needed. You pasted it. The new list is written for 4.5c only.
+3. K12 and K15 cover each other. If both were removed, a changed split would pass unseen. Pinning K15 therefore also keeps K12 equivalent.
+4. `mirror/DECISIONS.md` already holds D-48, so STATUS no longer asks for it. I compared the repo `DOMAIN_RULES.md` with the mirror by eye and did not diff it.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. It is not touched in 4.5c either, so the note stays in STATUS.
+
 ## Step 4.5 (size M), 2026-10-20: idempotency key on POST /payments
 
 **Works (verified on your machine, output pasted: grep counts 17 and 4; `db:deploy` applied `20261020060000_payment_idempotency`; `migrate dev` "Already in sync"; `npm run check` ended with 34 files, 1016 tests, 0 failed, duration 50.79 s; live check "105 passed, 0 failed"; `git status --short` showed 10 `M` and 3 `??`; I ran nothing in my sandbox):** `POST /payments` needs the header `Idempotency-Key` (16 to 64 characters of `A-Z a-z 0-9 _ -`). The key and a SHA-256 of the checked request (member, method, exact kobo, lines in order) are saved on the payment, with a unique index on user and key. A repeat with the same key and request returns the first payment: 201, header `Idempotent-Replayed: true`, no second payment, no second audit entry. The same key with a different request gives 409 `idempotency_conflict`. A missing or bad key gives 400. Keys are per user. A refused request does not use up its key. A lost race (the unique index refuses the second save, the transaction is undone) is retried once and then returns the first payment. New: `PaymentStore.findByKey`, `DuplicateIdempotencyKeyError`, migration `20261020060000_payment_idempotency`. Decision D-48.

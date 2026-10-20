@@ -1,5 +1,26 @@
 # Build log (newest first)
 
+## Step 4.4b (size S), 2026-10-20: break-on-purpose for the payment logic and route
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.4b.mjs`, on your Desktop (not in git). It changes `payments.ts` (50 mutations) and `payments-routes.ts` (20) one at a time, runs `test/payments.test.ts` and `test/payments-routes.test.ts`, and restores the files. Baseline 55 passed, 0 failed. Result: 70 mutations, 65 caught, 5 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". `git status --short` and `lsof -i :3000` printed nothing before and after. No source or test file changed, so the totals stay at 33 files, 972 tests (verified at 4.4).
+- Caught: L1 to L34, L36 to L49 (permission check removed and inverted, member id and method checks and codes, the 20-line cap and its boundaries, breakdown code and line index, no transaction, unknown member, Staff scope removed and inverted, Inactive check removed and inverted, saved total, first line, line order, creator, audit action, entity type, entity id, detail fields, every view field, naira text), R1 to R4, R6 to R18 (auth guard, route permission guard, body limit and parser, status codes, created status, every body field name, reply key, failure code, line index, failure reason, actor id).
+- Escaped: L35, L50, R5, R19, R20.
+  - L35 (audit actor taken from the member): a test gap, A-118. Every audit test has Staff paying into their own member.
+  - L50 (unknown errors turned into a 400): no test can make `checkBreakdown` throw a non-breakdown error (A-117).
+  - R5 (`forbidden` status in the route map): unreachable, the route guard runs first (A-117, as A-92).
+  - R19 (no-actor branch): unreachable, `requireAuth` always sets the caller (A-117).
+  - R20 (array body accepted): an array gives `invalid_member_id` either way (A-117).
+**Stubbed:** nothing new. Still no list route, no idempotency key (A-116), no screen.
+**Tests:** none new. Total 972.
+**Not verified:** how long the run took (not in the paste). L35 to R20 reasons are read from the code, not run. Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Predictions: I named L35, L50, R5, R19 and R20 as likely escapes, and exactly those five escaped. The baseline of 55 matched my count (34 + 21).
+2. Owner decision on A-116: yes, build an idempotency key on `POST /payments` (2026-10-20). Recorded as D-47. It becomes step 4.5.
+3. The owed break-on-purpose run for the payment code is closed, except L35. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+4. `mirror/DECISIONS.md` already holds D-46. It needs D-47 by hand.
+5. TRACEABILITY R-05 had a garbled phrase ("createPaymentandPOST"). Fixed here.
+6. A-100 still said "illustrative" although A-115 closed it. Fixed here.
+
 ## Step 4.4 (size M), 2026-10-20: payment route and logic
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 33 files, 972 tests, 0 failed, duration 45.10 s; live check "98 passed, 0 failed"; `git status --short` showed the 6 expected lines; I ran nothing in my sandbox):** `server/src/payments.ts` (`createPayment`, `koboToNairaString`, `MAX_PAYMENT_LINES`) and `server/src/payments-routes.ts` (`POST /payments`, 201), mounted in `app.ts`. Order of work: permission `payments.create`, member id and method, line cap of 20, `checkBreakdown` (DR-02), then one `store.transaction`: find the member, check who may see it, check it is Active, save the payment, write `payment.created`. Staff pay only into members they recorded (other members answer 404). A Super Admin may pay into any member. An Inactive member gives 409 `member_inactive`. Amounts leave as strings with 2 decimals. A 400 carries `code` and, for a bad line, `lineIndex`. The audit detail holds the Membership ID, the total in kobo and the line count only. Decision D-46.

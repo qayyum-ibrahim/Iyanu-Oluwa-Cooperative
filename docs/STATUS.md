@@ -1,15 +1,15 @@
 # Project status
-Last updated: after step 4.4 (all results from the owner's pasted output)
+Last updated: after step 4.4b (all results from the owner's pasted output)
 
 ## Where we stopped
-4.4 is verified on the owner's machine: `POST /payments` checks the breakdown, then saves the payment and its `payment.created` audit entry inside one `store.transaction` (D-46). `npm run check` ended with 33 test files, 972 tests. The live check ended with 98 passed, 0 failed. This is the first user of `transaction`. No break-on-purpose run has been done for the payment code (owed, 4.4b). There is no idempotency key, so a double submit records two payments (A-116). A "Loan Repaid" line does not change any loan yet (DR-09). No payment list route and no screen.
+4.4b is verified on the owner's machine: the break-on-purpose run for `payments.ts` and `payments-routes.ts` gave 70 mutations, 65 caught, 5 escaped. L35 is a real test gap (A-118). L50, R5, R19 and R20 are equivalent or unreachable (A-117). The totals are unchanged: 33 test files, 972 tests, live check 98. The owner decided on 2026-10-20 to build an idempotency key on `POST /payments` (D-47). Until step 4.5 is done, a double submit records two payments (A-116). A "Loan Repaid" line does not change any loan yet (DR-09). No payment list route and no screen.
 
 ## Next step brief
 Owner inputs needed:
-1. Commit this step (commands below). Then start a fresh chat with the resume routine.
-2. The mutation scripts are not needed for 4.4b: Claude writes a new throwaway script, and you save it on your Desktop as before.
-3. One decision for later, not needed for 4.4b: A-116. Do you want an idempotency key on `POST /payments` (the guide asks for it), or accept the gap for now? My default is to build it as its own small step after 4.4b.
-4. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror, say so at the start. The repo wins. Also put D-46 into `mirror/DECISIONS.md` by hand.
+1. Commit this step (commands in the chat). Then start a fresh chat with the resume routine.
+2. Say "go" for 4.4c (size S): one new test in `test/payments.test.ts` for L35, then a rerun of L35 only with a new throwaway script on your Desktop.
+3. Nothing else is needed before 4.5. The 4.5 design questions come with its step message, with defaults.
+4. Put D-47 into `mirror/DECISIONS.md` by hand. If `docs/DOMAIN_RULES.md` in the repo differs from the mirror, say so at the start. The repo wins.
 
 ## What exists
 Docs, `scripts/resume-pack.sh`, `scripts/live-check-auth.sh`, `.gitignore`, `legacy-prototype/` (reference only), empty `web/`, and `server/`: Express app (`src/app.ts`, `src/server.ts`), auth routes, staff routes and logic, audit viewer, member logic and routes, payment logic and route (`payments.ts`, `payments-routes.ts`), payment categories (`categories.ts`), payment breakdown check (`breakdown.ts`), route guards, money, password and email modules, `account.ts`, owner logic, owner setup and reset scripts, permission table, sign-in logic with lockout, tokens, session logic, database client, storage interface and adapters (users, audit, refresh tokens, members, payments, and `transaction`), `prisma/schema.prisma`, six migrations, config files, and tests. Live routes: `GET /health`, `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password`, `GET /auth/me`, `POST /staff`, `GET /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`, `GET /audit`, `POST /members`, `GET /members` (query `status` active, inactive or all, default active; `createdById` for the Super Admin only), `GET /members/:id`, `POST /payments` (needs `payments.create`; body `memberId`, `method` CASH or BANK_TRANSFER, `total`, `lines` of `{category, amount}` as strings; Staff only for members they recorded; Inactive member gives 409). Staff see only members they recorded. No member edit, delete or status route. No category route. No payment list, read, edit or delete route. No UI code yet. An owner account exists on the owner's dev database.
@@ -25,7 +25,7 @@ Break-on-purpose for the categories code: `node ~/Desktop/mutate-3.3b.mjs 2>&1 |
 Break-on-purpose for the breakdown code: `node ~/Desktop/mutate-4.1b.mjs 2>&1 | tail -60`. Expected now: 35 mutations, 35 caught, 0 escaped.
 Break-on-purpose for the payments store code: `node ~/Desktop/mutate-4.2b.mjs 2>&1 | tail -80`. Expected now: 44 mutations, 42 caught, 1 escaped (PP10), 1 not applied (PP8: its find text matches twice). PP8 is run by `node ~/Desktop/mutate-4.2b-pp8.mjs 2>&1 | tail -20`. Expected: 2 failed, 8 passed (caught).
 Break-on-purpose for the transaction code: `node ~/Desktop/mutate-4.3b.mjs 2>&1 | tail -60`. Its baseline now fails: it expects 10 memory cases and there are 12 since 4.3c. Use `node ~/Desktop/mutate-4.3c.mjs 2>&1 | tail -30` for M12 and M13 (expected: 2 caught, 0 escaped). P1 and P2 are open (A-112).
-Break-on-purpose for the payment logic and route: not run yet (step 4.4b).
+Break-on-purpose for the payment logic and route: `node ~/Desktop/mutate-4.4b.mjs 2>&1 | tail -90`. Expected now: 70 mutations, 65 caught, 5 escaped (L35, L50, R5, R19, R20). After 4.4c, L35 should be caught.
 Git commands run from the repo root, not from `server/`.
 Resume routine (3 actions):
 1. Commit your work (from the repo root: `git add .`), then run `sh scripts/resume-pack.sh`.
@@ -39,12 +39,13 @@ Machine (not pins): macOS, Node v22.14.0, npm 11.21.0.
 
 ## Roadmap
 Full plan: PHASE_PLAN.md.
-- 4.4b (S): break-on-purpose for `payments.ts` and `payments-routes.ts` (new throwaway script on the owner's Desktop).
-- Then, sizes set when each starts: idempotency key for `POST /payments` (A-116, needs your decision), Loan Repaid effect on loans (DR-09, needs the loans store from Phase 5, so it may move), fake SMS behind an interface (D-07), first-payment flow after adding a member, payment list route.
+- 4.4c (S): one test for L35 (Super Admin pays into a Staff member; the audit entry belongs to the Super Admin), rerun of L35 only.
+- 4.5 (size set when it starts, M or L): idempotency key for `POST /payments` (A-116, D-47). Design settled in that step.
+- Then, sizes set when each starts: Loan Repaid effect on loans (DR-09, needs the loans store from Phase 5, so it may move), fake SMS behind an interface (D-07), first-payment flow after adding a member, payment list route.
 - Later small steps: retrofit `transaction` into A-25, A-39, A-54, A-58, A-62, A-88 (one step each; payments already use it).
 
 ## Open items
-See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-46. A-22 to A-116 are Claude's choices or checks. DR-02 and DR-04 stay "requested" and "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: step 4.4 (payment code, 4.4b), step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91, A-92, A-98 and A-106 are equivalent escapes (read from code). A-107 to A-110 are the transaction notes. A-111 is closed (4.3c). A-112 is open (Prisma `maxWait` and `timeout` untested). A-113 to A-116 are the payment route choices; A-116 (no idempotency key) is a real gap against the guide. A-114 depends on OQ-07. A-100 is closed by A-115. Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 44 s on this machine; timeouts are 120 s.
+See OPEN_QUESTIONS.md. Phase 6 waits on OQ-00, OQ-06 and OQ-07. Owner may overrule D-19 to D-47. A-22 to A-118 are Claude's choices or checks. DR-02 and DR-04 stay "requested" and "proposed" until Mr. Aro signs off (OQ-00, A-96). Owed break-on-purpose runs: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b). A-42 (no per-IP limit) stays open. A-76 is a small optional test gap. A-91, A-92, A-98, A-106 and A-117 are equivalent or unreachable escapes (read from code). A-118 is a real test gap (4.4c). A-107 to A-110 are the transaction notes. A-112 is open (Prisma `maxWait` and `timeout` untested). A-113 to A-115 are the payment route choices; A-116 (no idempotency key) is decided and waits for 4.5. A-114 depends on OQ-07. Reading the audit log or members is not itself audited (A-75, A-88). A locked owner is unlocked by `npm run reset:owner` (A-67). An access token stays valid until it expires, even after sign-out, change or reset (A-50, A-63, A-69); after deactivation it is refused at once. TRACEABILITY R-25 is marked unused. The mutation scripts live on the owner's Desktop, not in git. The Prisma test file takes about 44 s on this machine; timeouts are 120 s.
 
 ## How we work
 Delivery: whole files pasted in chat (exact find-and-replace text for files with one or two small changes). Mode: lean.

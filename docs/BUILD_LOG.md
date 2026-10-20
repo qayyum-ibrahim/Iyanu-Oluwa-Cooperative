@@ -1,5 +1,23 @@
 # Build log (newest first)
 
+## Step 4.7c (size S), 2026-10-20: tests close the payment-sms gaps (A-131)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** 7 new tests in `server/test/payment-sms.test.ts`. No source file changed. `npm run check`: typecheck and lint clean, 36 files, 1068 passed, 0 failed, duration 54.18 s. Tests committed first (`2be3ed5`) because `mutate-4.7b.mjs` needs a clean tree (owner approved). Rerun of `node ~/Desktop/mutate-4.7b.mjs` from the repo root: baseline 86 passed; 27 mutations, 26 caught, 1 escaped (S15), 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.
+- S13 caught (3 failed): exact failure result with no `sms` key, for an unknown member, an Inactive member, and an Inactive member with `sendSms: false`.
+- S16 caught (2 failed), S17 caught (1 failed): a spy provider is not called for an empty or a spaces-only phone.
+- S20 caught (2 failed): the provider's reason `invalid_number` or `invalid_message` comes back unchanged.
+- S15 still escapes: equivalent (A-130).
+**Stubbed:** nothing new. Fake provider only. No Twilio adapter. No screen. A "Loan Repaid" line still changes no loan (DR-09). No payment list route.
+**Tests:** 7 new (1068 - 1061). `payment-sms.test.ts` now has 33.
+**Not verified:** the live check was not run (no route or source change; still 109 from 4.7).
+**Found along the way:**
+1. Predictions held: 26 caught, only S15 escaped. I predicted "about 4 tests"; there are 7, because each gap got its cases as a table.
+2. I read `payments.ts`. S13 was a test gap as A-131 said; the "not seen" note is removed.
+3. My first run was from `server/`; the script needs the repo root. It also refused a dirty tree. Nothing changed either time.
+4. No decision in this step, so DECISIONS and the mirror are unchanged.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+6. A-132 check: in this step Claude Code asked before the commit and before the mutation script (which edits a source file for a moment). It ran `npm run check` without asking, as `CLAUDE.md` allows. It did not touch the dev database.
+
 ## Step 4.6c-setup (size S), 2026-10-20: Claude Code setup, D-51
 
 **Works (verified on your machine, output pasted: `git status --short` showed ` M docs/DECISIONS.md` and `?? CLAUDE.md`; `tail` showed the end of D-51; Claude Code read `CLAUDE.md` and the docs and replied with the four required lines; I ran nothing in my sandbox):** `CLAUDE.md` in the repo root (working rules, step shape, what Claude Code may do alone and what it must ask first, commands, handoff). Decision D-51: work moves to Claude Code. It replaces D-09 (whole files pasted in chat) and the "owner pastes the output" part of D-37.

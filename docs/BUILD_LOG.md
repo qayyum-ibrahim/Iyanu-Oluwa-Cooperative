@@ -1,5 +1,25 @@
 # Build log (newest first)
 
+## Step 4.7b (size S), 2026-10-20: break-on-purpose for payment-sms.ts
+
+**Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.7b.mjs`, on your Desktop (not in git). It changes `payment-sms.ts` one mutation at a time, runs `payment-sms.test.ts`, `payments-routes.test.ts` and `payments-idempotency.test.ts`, and restores the file. Baseline 79 passed, 0 failed. Result: 27 mutations, 22 caught, 5 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` printed nothing before and after. No source or test file changed, so the totals stay at 36 files, 1061 tests (verified at 4.7).
+- Caught: S1 to S12, S14, S18, S19, S21 to S27 (permission check removed and inverted, sendSms check removed, missing and null sendSms, code and reason of the refusal, not_requested and skipped_repeat logic and labels, SMS never tried, wrong number, wrong body, provider result inverted, provider throw not caught, NGN dropped, member id in the text, wrong member lookup, empty phone reason).
+- Escaped: S13, S15, S16, S17, S20.
+  - S15 (member null guard removed): equivalent. A null member throws a TypeError inside the `try`, which gives the same `provider_error` (A-130).
+  - S13 (early return on a failed payment removed): likely test gap. A failed payment would carry an extra `sms` key, and no test checks the exact failure result; the route ignores the key. I have not seen `payments.ts` (A-131).
+  - S16 (empty phone guard removed): test gap. The fake refuses a blank number with the same reason, so "without calling the provider" is not pinned (A-131).
+  - S17 (phone not trimmed): test gap, same cause as S16 (A-131).
+  - S20 (provider failure reason replaced by `provider_error`): test gap. Every provider-failure test uses `provider_error` (A-131).
+**Stubbed:** nothing new. Fake provider only. No Twilio adapter. No screen toggle. A "Loan Repaid" line still changes no loan (DR-09). No payment list route.
+**Tests:** none new. Total 1061.
+**Not verified:** why S13 escaped (read from the code shown, not run). How long the run took (not in the paste). The Prisma path through `recordPayment` (live check only). Everything about Twilio (A-125).
+**Found along the way:**
+1. Predictions: S15, S16, S17 and S20 escaped as I said. S13 I did not predict. S1 was caught by one test, as I said.
+2. The 4.7 claim "without calling the provider" for an empty phone is true in the code but not pinned by a test.
+3. The owed break-on-purpose run for `payment-sms.ts` is closed, except the gaps above. Still owed: step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+4. No decision in this step, so DECISIONS and the mirror are unchanged.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+
 ## Step 4.7 (size M), 2026-10-20: SMS wired into POST /payments
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 36 files, 1061 tests, 0 failed, duration 38.95 s; the sed edit applied (grep counts 1 and 1); live check "109 passed, 0 failed"; `git status --short` showed 5 `M` and 2 `??`; `lsof -i :3000` printed nothing; I ran nothing in my sandbox):** `server/src/payment-sms.ts` (`recordPayment`, `paymentSmsText`, `SmsOutcome`) wraps `createPayment`. `POST /payments` takes an optional boolean `sendSms` (missing means true). The payment is saved first. The reply is `{ payment, sms }` with `sms.status` `sent`, `failed` (with `reason`), `not_requested` or `skipped_repeat`. An SMS failure or a throw from the provider never undoes the payment (201 still). A repeat of a saved request sends nothing. A member with an empty phone gives `failed` with `invalid_number` without calling the provider. A `sendSms` that is not true or false gives 400 `invalid_send_sms`, nothing saved. `createApp` takes an optional `sms` provider (default `FakeSmsProvider`); `server.ts` passes a `FakeSmsProvider`. Decision D-50.

@@ -5,7 +5,5 @@ docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/src/payment-sms.ts
 server/test/payment-sms.test.ts
-server/src/payments-routes.ts
+server/src/payments.ts
 server/src/sms.ts
-server/vitest.config.ts
-server/package.json

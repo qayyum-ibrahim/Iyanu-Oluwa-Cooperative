@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.4c (size S), 2026-10-20: close the L35 test gap
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 33 files, 973 tests, 0 failed, duration 48.85 s; mutation rerun baseline 35 of 35, L35 caught (1 failed, 34 passed), "file restored: yes"; `git status --short` showed only `M server/test/payments.test.ts`; I ran nothing in my sandbox):** one test added to `test/payments.test.ts`: the Super Admin pays into a Staff member's record, and the `payment.created` audit entry belongs to the Super Admin, with none under the Staff user (DR-15). A throwaway script, `mutate-4.4c.mjs`, on your Desktop (not in git), reruns L35 only.
+**Stubbed:** nothing new. Still no list route, no idempotency key (A-116), no screen. No source file changed.
+**Tests:** 1 new. Total 973 (was 972).
+**Not verified:** the full 4.4b script was not rerun, so "66 caught, 4 escaped" is my inference, not a result. Typecheck and lint output (inferred from `check` reaching the tests; the paste was cut to the last 15 lines). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Predictions matched: 973 tests, L35 caught with 1 failed.
+2. A-118 is closed.
+3. `mirror/DECISIONS.md` already holds D-47, so STATUS no longer asks for it.
+4. The A-116, A-117 and A-118 rows in `ASSUMPTIONS.md` were run together on one line, with missing spaces in A-117. They are rewritten cleanly in this step (command below).
+5. Still owed: break-on-purpose for step 1.4 (needs the real Prisma engine), `sessions.ts` (2.3d), lockout (2.3e), the auth routes (2.4a), `server.ts` (2.4b).
+
 ## Step 4.4b (size S), 2026-10-20: break-on-purpose for the payment logic and route
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.4b.mjs`, on your Desktop (not in git). It changes `payments.ts` (50 mutations) and `payments-routes.ts` (20) one at a time, runs `test/payments.test.ts` and `test/payments-routes.test.ts`, and restores the files. Baseline 55 passed, 0 failed. Result: 70 mutations, 65 caught, 5 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". `git status --short` and `lsof -i :3000` printed nothing before and after. No source or test file changed, so the totals stay at 33 files, 972 tests (verified at 4.4).

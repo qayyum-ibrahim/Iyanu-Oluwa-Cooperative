@@ -273,6 +273,16 @@ describe("createPayment: audit and transaction", () => {
     expect(text).not.toContain("08000000001");
   });
 
+  it("logs the caller, not the member's recorder, when the Super Admin pays into a Staff member", async () => {
+    const { store, admin, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const r = must(await createPayment(store, actorOf(admin), pay(m.id)));
+    const adminEntries = await store.audit.listByActor(admin.id);
+    expect(adminEntries).toHaveLength(1);
+    expect(adminEntries[0]).toMatchObject({ action: "payment.created", entityId: r.id });
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
   it("writes no audit entry when the payment is refused", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");

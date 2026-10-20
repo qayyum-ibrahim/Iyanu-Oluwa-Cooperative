@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.9 (size S), 2026-10-20: break-on-purpose for sessions.ts (owed from 2.3d)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.9.mjs` (not in git, built from the 4.8b script). It changes `server/src/sessions.ts` one mutation at a time, runs `sessions.test.ts` and `auth-routes.test.ts`, and restores the file. Baseline 63 passed. Result: 32 mutations, 20 caught, 12 escaped, 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty before and after.
+- Caught: S4 to S7, S9, S12, S14 to S16, S18, S21 to S25, S28 to S32 (inactive user, fixed family, token stored instead of hash, access expiry, stored refresh expiry, unknown token, reuse revoke and audit and order, inactive user on refresh, consume result, rotation family, sign-out checks, revoke scope, audit and return value).
+- Escaped, equivalent (A-137): S1, S2, S3, S11, S13, S17, S19, S20, S27.
+- Escaped, test gaps (A-138): S8 (7-day life not pinned), S10 (bad secret on refresh burns the token), S26 (sign-out with an invalid date).
+**Stubbed:** nothing new.
+**Tests:** none new. Total 1088. `npm run check` not rerun: no repo file changed.
+**Not verified:** S3 on Prisma (a non-text user id). The Prisma `consume` was read, not run, for S13, S17, S19, S20.
+**Found along the way:**
+1. Predictions: I listed S2, S3, S8, S9, S10, S11, S13, S17, S26, S27 as possible escapes. S9 was caught. I did not predict S1, S19 and S20; they escape because `createAccessToken` checks the secret and `consume` checks expiry.
+2. The owner restored all the Desktop scripts before this step (A-136 closed).
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.8b (size S), 2026-10-20: break-on-purpose for listPayments and GET /payments
 
 **Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.8b.mjs` (not in git). It changes `payments.ts` or `payments-routes.ts` one mutation at a time, runs `payments-list.test.ts` and `payments-routes.test.ts`, and restores the file. Baseline 41 passed. Result: 23 mutations, 22 caught, 1 escaped (R1), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.

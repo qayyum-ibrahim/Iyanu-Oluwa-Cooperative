@@ -4,4 +4,5 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/src/sessions.ts
+server/src/tokens.ts
 server/test/sessions.test.ts

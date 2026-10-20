@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.11 (size S), 2026-10-20: break-on-purpose for auth-routes.ts (owed from 2.4a)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.11.mjs` (not in git). It changes `server/src/auth-routes.ts` one mutation at a time, runs `auth-routes.test.ts`, `account-routes.test.ts` and `auth-me.test.ts`, and restores the file. Baseline 43 passed. Result: 22 mutations, 20 caught, 2 escaped (R5, R19), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.
+- Caught: R1 to R4, R6 to R18, R20 to R22 (no-store header, login status and body, reply fields, token and expiry fields, app clock on login and refresh, refresh status and userId, logout always 204 and really signs out, the guards on `/password` and `/me`, password status codes and reason, `/me` permissions and user).
+- Escaped, test gaps (A-140): R5 (`SessionError` on login not caught: a race would give 500), R19 (password change on the real clock).
+**Stubbed:** nothing new.
+**Tests:** none new. Total 1092. `npm run check` not rerun: no repo file changed.
+**Not verified:** nothing else.
+**Found along the way:**
+1. Predictions: I said R15 and R20 (the `requireAuth` guards) would escape because the handler checks too. Wrong: the handler only reads what `requireAuth` set, so without the guard every request gets 401 and the tests fail. R5 escaped as I said, but it is a test gap, not equivalent: a race can reach it. R19 escaped; I listed it as possible.
+2. No decision in this step, so DECISIONS and the mirror are unchanged.
+3. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.10b (size S), 2026-10-20: tests close the lockout gaps (A-139)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** one new test in `server/test/auth.test.ts` (an inactive user's failure count is kept when the right password is typed) and one stronger check in `server/test/lockout.test.ts` (`account.locked` detail is `failures=5`). No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1092 passed, 0 failed, 53.65 s. Tests committed first (`a3d2fd1`, owner approved). Rerun of `node ~/Desktop/mutate-4.10.mjs`: baseline 148 passed; 23 mutations, 23 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.

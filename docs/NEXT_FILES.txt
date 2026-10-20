@@ -4,6 +4,6 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/src/auth-routes.ts
-server/src/guards.ts
+server/src/account.ts
 server/test/auth-routes.test.ts
 server/test/account-routes.test.ts

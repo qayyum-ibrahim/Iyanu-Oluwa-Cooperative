@@ -99,6 +99,36 @@ describe("recordPayment", () => {
     expect(await store.payments.listByMember(m.id)).toHaveLength(1);
   });
 
+  it.each([
+    { label: "empty", phone: "" },
+    { label: "only spaces", phone: "   " },
+  ])("does not call the provider for a phone that is $label", async ({ phone }) => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One", phone);
+    let calls = 0;
+    const spy: SmsProvider = {
+      send: async () => {
+        calls += 1;
+        return { ok: true, providerMessageId: "spy-1" };
+      },
+    };
+    const r = await recordPayment(store, spy, actorOf(a), pay(m.id));
+    expect(r).toMatchObject({ ok: true, sms: { status: "failed", reason: "invalid_number" } });
+    expect(calls).toBe(0);
+  });
+
+  it.each(["invalid_number", "invalid_message"] as const)(
+    "passes the provider's failure reason %s through",
+    async (reason) => {
+      const { store, a, addMember } = await build();
+      const m = await addMember(a.id, "A One");
+      const fake = new FakeSmsProvider();
+      fake.failNext(reason);
+      const r = await recordPayment(store, fake, actorOf(a), pay(m.id));
+      expect(r).toMatchObject({ ok: true, sms: { status: "failed", reason } });
+    },
+  );
+
   it("reports a provider failure separately, and keeps the payment", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");
@@ -221,6 +251,24 @@ describe("recordPayment", () => {
     const r = await recordPayment(store, fake, actorOf(a), pay(ids[which], over));
     expect(r.ok).toBe(false);
     expect(fake.sent).toEqual([]);
+  });
+
+  it.each([
+    { label: "an unknown member", which: "unknown", over: {}, reason: "not_found" },
+    { label: "an Inactive member", which: "inactive", over: {}, reason: "member_inactive" },
+    {
+      label: "an Inactive member with sendSms false",
+      which: "inactive",
+      over: { sendSms: false },
+      reason: "member_inactive",
+    },
+  ])("returns the payment failure exactly, with no sms key, for $label", async (c) => {
+    const { store, a, addMember } = await build();
+    const inactive = await addMember(a.id, "A Two");
+    await store.members.setStatus(inactive.id, "INACTIVE");
+    const id = c.which === "inactive" ? inactive.id : "no-such-id";
+    const r = await recordPayment(store, new FakeSmsProvider(), actorOf(a), pay(id, c.over));
+    expect(r).toEqual({ ok: false, reason: c.reason });
   });
 
   it("sends no SMS when the payment is not saved (audit write fails)", async () => {

@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 4.12b (size S), 2026-10-20: break-on-purpose for server.ts (owed from 2.4b)
+
+**Works (verified in this session):** new throwaway script `~/Desktop/mutate-4.12b.mjs` (not in git). It changes `server/src/server.ts` one mutation at a time, runs `server-start.test.ts`, and restores the file. No mutation made the server ignore `DATABASE_URL`. Baseline 3 passed. Result: 15 mutations, 10 caught, 5 escaped (V3, V12, V13, V14, V15), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.
+- Caught: V1, V2, V4 to V11 (bad secret exit code and message, unchecked secret, PORT, port-in-use exit code, message and return, listening message, SIGTERM handler, stop exit code).
+- Escaped, equivalent (A-142): V3, V12, V14.
+- Escaped, test gaps (A-142): V13 (SIGINT, the Ctrl+C stop), V15 (dotenv not loaded).
+**Stubbed:** nothing new.
+**Tests:** none new. Total 1097.
+**Not verified:** whether `DOTENV_CONFIG_PATH` works with the pinned dotenv 18.0.7 (to check at 4.12c).
+**Found along the way:**
+1. After the run, 3 `src/server.ts` processes were still listening on high ports (started 21:57:23, 21:57:53, 21:58:37; parent PID 1). Cause: when a test fails, `server-start.test.ts` kills only the `tsx` wrapper, and the real server under it keeps running. They had fake secrets and their temporary folders were already deleted. I stopped them with `kill`; `pgrep` then found none. The test file needs fixing (4.12c).
+2. Predictions held: V3, V12, V13, V14, V15 escaped as I said.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.12 (size M), 2026-10-20: start-up tests for server.ts
 
 **Works (verified in this session):** new `server/test/server-start.test.ts` with 3 tests that start `src/server.ts` as a child process with a fake secret, a temporary database file and a free port: (1) an empty `TOKEN_SECRET` prints the "Set TOKEN_SECRET in server/.env." message, exits with code 1 and never listens; (2) a good start prints "server listening on port N", answers 200 `{ status: "ok" }` on `/health`, and SIGTERM stops it with exit code 0; (3) a port already in use prints "Could not listen on port N" and exits with code 1. The file alone: 3 passed in 3.49 s. `npm run check`: typecheck and lint clean, 38 files, 1097 passed, 0 failed, 52.14 s. No source file changed. `dev.db` kept its 20:46 time; no temporary folder was left behind.

@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 4.10b (size S), 2026-10-20: tests close the lockout gaps (A-139)
+
+**Works (verified in this session, Claude ran it on the owner's machine):** one new test in `server/test/auth.test.ts` (an inactive user's failure count is kept when the right password is typed) and one stronger check in `server/test/lockout.test.ts` (`account.locked` detail is `failures=5`). No source file changed. `npm run check`: typecheck and lint clean, 37 files, 1092 passed, 0 failed, 53.65 s. Tests committed first (`a3d2fd1`, owner approved). Rerun of `node ~/Desktop/mutate-4.10.mjs`: baseline 148 passed; 23 mutations, 23 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "file restored: yes"; `git status --short` empty after.
+**Stubbed:** nothing new.
+**Tests:** 1 new (1092 - 1091), 1 existing test made stricter.
+**Not verified:** the Prisma store's lockout methods were not mutated (see 4.10). The live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. Prediction held: 23 of 23 caught.
+2. No decision in this step, so DECISIONS and the mirror are unchanged.
+3. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.10 (size S), 2026-10-20: break-on-purpose for the sign-in lockout (owed from 2.3e)
 
 **Works (verified in this session, Claude ran it on the owner's machine):** new throwaway script `~/Desktop/mutate-4.10.mjs` (not in git). It changes the lockout parts of `server/src/auth.ts` and the lockout methods of `server/src/memory-store.ts` one mutation at a time, runs `lockout.test.ts`, `auth.test.ts` and `memory-store.test.ts`, and restores the file. Baseline 147 passed. Result: 23 mutations, 21 caught, 2 escaped (A10, A15), 0 error, 0 timeout, 0 not applied. "file restored: yes". `git status --short` empty after.

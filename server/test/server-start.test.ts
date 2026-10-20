@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -29,7 +29,16 @@ const folders: string[] = [];
 const blockers: Server[] = [];
 
 afterEach(() => {
-  for (const c of children.splice(0)) if (c.exitCode === null) c.kill("SIGKILL");
+  // Each child leads its own process group (detached), so this also ends the server that tsx
+  // started under it. Killing only the tsx wrapper left servers running (4.12b, A-142).
+  for (const c of children.splice(0)) {
+    if (c.pid === undefined) continue;
+    try {
+      process.kill(-c.pid, "SIGKILL");
+    } catch {
+      // The group has already ended.
+    }
+  }
   for (const b of blockers.splice(0)) b.close();
   for (const f of folders.splice(0)) rmSync(f, { recursive: true, force: true });
 });
@@ -46,18 +55,28 @@ function freePort(): Promise<number> {
   });
 }
 
-function start(settings: { TOKEN_SECRET: string; PORT: number }): Started {
+function newFolder(): string {
   const folder = mkdtempSync(join(tmpdir(), "iyanu-server-start-"));
   folders.push(folder);
+  return folder;
+}
+
+function start(settings: { TOKEN_SECRET: string; PORT: number }): Started {
+  const folder = newFolder();
+  return startWith({
+    ...process.env,
+    TOKEN_SECRET: settings.TOKEN_SECRET,
+    DATABASE_URL: `file:${join(folder, "test.db")}`,
+    PORT: String(settings.PORT),
+  });
+}
+
+function startWith(env: NodeJS.ProcessEnv): Started {
   const child = spawn(TSX, ["src/server.ts"], {
     cwd: SERVER_DIR,
-    env: {
-      ...process.env,
-      TOKEN_SECRET: settings.TOKEN_SECRET,
-      DATABASE_URL: `file:${join(folder, "test.db")}`,
-      PORT: String(settings.PORT),
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
   children.push(child);
   let text = "";
@@ -106,6 +125,31 @@ describe("server.ts", () => {
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
+    s.child.kill("SIGTERM");
+    expect(await s.exited).toBe(0);
+  });
+
+  it("stops with exit code 0 on SIGINT (Ctrl+C)", SLOW, async () => {
+    const port = await freePort();
+    const s = start({ TOKEN_SECRET: FAKE_SECRET, PORT: port });
+    await s.waitFor(`server listening on port ${port}`);
+    s.child.kill("SIGINT");
+    expect(await s.exited).toBe(0);
+  });
+
+  it("loads its settings from a dotenv file", SLOW, async () => {
+    // DOTENV_PATH points dotenv at a temporary file, so server/.env is not read (dotenv 18.0.7).
+    const port = await freePort();
+    const folder = newFolder();
+    const file = join(folder, "test.env");
+    writeFileSync(
+      file,
+      `TOKEN_SECRET=${FAKE_SECRET}\nDATABASE_URL=file:${join(folder, "test.db")}\nPORT=${port}\n`,
+    );
+    const env: NodeJS.ProcessEnv = { ...process.env, DOTENV_PATH: file };
+    for (const name of ["TOKEN_SECRET", "DATABASE_URL", "PORT", "DOTENV_CONFIG_PATH"]) delete env[name];
+    const s = startWith(env);
+    await s.waitFor(`server listening on port ${port}`);
     s.child.kill("SIGTERM");
     expect(await s.exited).toBe(0);
   });

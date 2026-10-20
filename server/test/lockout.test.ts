@@ -79,7 +79,11 @@ describe("sign-in lockout", () => {
       "login.failure",
       "account.locked",
     ]);
-    expect(appended.at(-1)).toMatchObject({ actorId: user.id, entityId: user.id });
+    expect(appended.at(-1)).toMatchObject({
+      actorId: user.id,
+      entityId: user.id,
+      detail: "failures=5",
+    });
   });
 
   it("refuses even the right password while locked, logs locked, counts nothing", SLOW, async () => {

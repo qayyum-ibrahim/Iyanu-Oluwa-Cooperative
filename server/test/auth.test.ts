@@ -140,6 +140,15 @@ describe("authenticate: failure", () => {
     expect(appended.some((e) => e.action === "login.success")).toBe(false);
   });
 
+  it("keeps an inactive user's failure count when the right password is typed", async () => {
+    const { store, base, user } = await setup();
+    const inactive = asInactive(store);
+    await authenticate(inactive, EMAIL, "wrong-password-123");
+    await authenticate(inactive, EMAIL, "wrong-password-123");
+    expect(await authenticate(inactive, EMAIL, PASSWORD)).toEqual({ ok: false });
+    expect(await base.users.getLockout(user.id)).toEqual({ failedCount: 2, lockedUntil: null });
+  });
+
   it("logs bad_password, not inactive, for an inactive user with a wrong password", async () => {
     const { store, appended } = await setup();
     await authenticate(asInactive(store), EMAIL, "wrong-password-123");

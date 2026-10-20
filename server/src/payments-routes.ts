@@ -1,4 +1,5 @@
-// Payment routes (step 4.4, idempotency key in 4.5). Thin: all rules live in payments.ts.
+// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7). Thin: all rules live in
+// payments.ts and payment-sms.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -10,12 +11,13 @@ import {
   sendUnauthorized,
   type GuardDeps,
 } from "./guards.js";
-import {
-  createPayment,
-  type PaymentActor,
-  type PaymentFailure,
-  type PaymentFailureResult,
-} from "./payments.js";
+import { recordPayment } from "./payment-sms.js";
+import type { PaymentActor, PaymentFailure, PaymentFailureResult } from "./payments.js";
+import type { SmsProvider } from "./sms.js";
+
+export interface PaymentsRouterDeps extends GuardDeps {
+  sms: SmsProvider;
+}
 
 const STATUS: Record<PaymentFailure, number> = {
   forbidden: 403,
@@ -46,7 +48,7 @@ function sendFailure(res: Response, f: PaymentFailureResult): void {
   });
 }
 
-export function createPaymentsRouter(deps: GuardDeps): Router {
+export function createPaymentsRouter(deps: PaymentsRouterDeps): Router {
   const router = Router();
   router.use(requireAuth(deps));
 
@@ -61,19 +63,20 @@ export function createPaymentsRouter(deps: GuardDeps): Router {
         return;
       }
       const body = bodyOf(req);
-      const result = await createPayment(deps.store, actor, {
+      const result = await recordPayment(deps.store, deps.sms, actor, {
         idempotencyKey: req.header("idempotency-key"),
         memberId: body["memberId"],
         method: body["method"],
         total: body["total"],
         lines: body["lines"],
+        sendSms: body["sendSms"],
       });
       if (!result.ok) {
         sendFailure(res, result);
         return;
       }
       if (result.replayed) res.setHeader("Idempotent-Replayed", "true");
-      res.status(201).json({ payment: result.value });
+      res.status(201).json({ payment: result.value, sms: result.sms });
     },
   );
 

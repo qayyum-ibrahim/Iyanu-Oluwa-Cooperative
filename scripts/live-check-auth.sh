@@ -263,6 +263,7 @@ payment_json "$SMID" "20000"
 code=$(authed_send POST /payments "$SAT" "$(new_key)")
 expect "staff records a payment" "$code" 201
 expect "payment total" "$(pick payment.total)" "20000.00"
+expect "payment SMS reported" "$(pick sms.status)" sent
 expect "payment has a membership id" "$([ -n "$(pick payment.membershipId)" ] && echo yes || echo no)" yes
 payment_json "$SMID" "19999"
 code=$(authed_send POST /payments "$SAT" "$(new_key)")
@@ -285,10 +286,16 @@ PID1=$(pick payment.id)
 code=$(authed_send POST /payments "$SAT" "$IKEY")
 expect "repeat with the same key answers 201" "$code" 201
 expect "repeat returns the same payment" "$(pick payment.id)" "$PID1"
+expect "repeat sends no SMS" "$(pick sms.status)" skipped_repeat
 payment_json "$OMID" "20000"
 code=$(authed_send POST /payments "$SAT" "$IKEY")
 expect "same key with another request refused" "$code" 409
 expect "conflict error" "$(pick error)" idempotency_conflict
+
+printf '%s' '{"memberId":"x","method":"CASH","total":"1","lines":[{"category":"Shares","amount":"1"}],"sendSms":"yes"}' > "$REQ"
+code=$(authed_send POST /payments "$SAT" "$(new_key)")
+expect "bad sendSms refused" "$code" 400
+expect "bad sendSms code" "$(pick code)" invalid_send_sms
 code=$(authed_get "/audit?action=payment.created&limit=1" "$AT")
 expect "audit log has payment.created" "$code" 200
 expect "newest entry is payment.created" "$(pick entries.0.action)" payment.created

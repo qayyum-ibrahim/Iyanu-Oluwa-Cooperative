@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 4.7 (size M), 2026-10-20: SMS wired into POST /payments
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 36 files, 1061 tests, 0 failed, duration 38.95 s; the sed edit applied (grep counts 1 and 1); live check "109 passed, 0 failed"; `git status --short` showed 5 `M` and 2 `??`; `lsof -i :3000` printed nothing; I ran nothing in my sandbox):** `server/src/payment-sms.ts` (`recordPayment`, `paymentSmsText`, `SmsOutcome`) wraps `createPayment`. `POST /payments` takes an optional boolean `sendSms` (missing means true). The payment is saved first. The reply is `{ payment, sms }` with `sms.status` `sent`, `failed` (with `reason`), `not_requested` or `skipped_repeat`. An SMS failure or a throw from the provider never undoes the payment (201 still). A repeat of a saved request sends nothing. A member with an empty phone gives `failed` with `invalid_number` without calling the provider. A `sendSms` that is not true or false gives 400 `invalid_send_sms`, nothing saved. `createApp` takes an optional `sms` provider (default `FakeSmsProvider`); `server.ts` passes a `FakeSmsProvider`. Decision D-50.
+**Stubbed:** the provider is the fake, so no real text is sent and the live check cannot show the message. The message text is a placeholder (OQ-05). No screen toggle. No Twilio adapter. A "Loan Repaid" line still changes no loan (DR-09). No payment list route.
+**Tests:** 26 new (1061 - 1035): `payment-sms.test.ts` 20 (logic) and 6 (route). Live check gains 4 checks (105 to 109).
+**Not verified:** break-on-purpose for `payment-sms.ts` (not run). Typecheck and lint output (inferred from `check` reaching the tests; the paste was cut). The Prisma path through `recordPayment` is covered only by the live check. SMS character set and length rules (A-124, A-126). Everything about Twilio (A-125).
+**Found along the way:**
+1. My count error: I predicted 1062 tests and 27 new. The real numbers are 1061 and 26. The live check prediction (109) was right.
+2. `payments-idempotency.test.ts` compared whole reply bodies on a repeat. The reply now carries `sms`, which differs between a first request and a repeat. The test now compares the payment only.
+3. A repeat with another `sendSms` value is treated as a repeat (A-127): `sendSms` is not part of the request hash.
+4. Vitest again suggests `isolate: false` (about 3.75 s faster). I changed nothing.
+5. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed. The file was not touched.
+6. `mirror/DECISIONS.md` needs D-50 by hand.
+
 ## Step 4.6 (size S), 2026-10-20: SMS provider interface and fake provider
 
 **Works (verified on your machine, output pasted: `npm run check` ran typecheck and lint without errors and ended with 35 files, 1035 tests, 0 failed, duration 51.49 s; `git status --short` showed only `?? src/sms.ts` and `?? test/sms.test.ts`; I ran nothing in my sandbox):** `server/src/sms.ts`: `SmsProvider` (one method, `send`), `SmsMessage`, `SmsResult`, `SmsFailure` (`invalid_number`, `invalid_message`, `provider_error`) and `FakeSmsProvider`. The fake sends nothing: it keeps accepted messages in memory, gives ids `fake-1`, `fake-2`, and can fail the next valid send (`failNext`). Expected failures come back as `{ ok: false }`. Decision D-49.

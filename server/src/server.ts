@@ -1,11 +1,13 @@
 // Starts the real server: real database, real signing secret (D-32).
 // Run from inside server/ so ".env" and the default "file:./dev.db" resolve there.
 // Never log a secret, a token or a request body.
+// SMS goes to the fake provider until the Twilio adapter exists (D-07, D-49).
 
 import "dotenv/config";
 import { createApp } from "./app.js";
 import { createPrismaClient } from "./db.js";
 import { createPrismaStore } from "./prisma-store.js";
+import { FakeSmsProvider } from "./sms.js";
 import { TokenConfigError, readTokenSecret } from "./tokens.js";
 
 function start(): void {
@@ -22,7 +24,11 @@ function start(): void {
   }
 
   const prisma = createPrismaClient(process.env["DATABASE_URL"] ?? "file:./dev.db");
-  const app = createApp({ store: createPrismaStore(prisma), tokenSecret });
+  const app = createApp({
+    store: createPrismaStore(prisma),
+    tokenSecret,
+    sms: new FakeSmsProvider(),
+  });
   const port = Number(process.env["PORT"] ?? 3000);
 
   // Express 5 calls this with an error if the port cannot be opened (for example, already in use).

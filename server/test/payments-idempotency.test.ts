@@ -361,7 +361,7 @@ describe("POST /payments: Idempotency-Key header", () => {
     expect(second.status).toBe(201);
     expect(second.headers["idempotent-replayed"]).toBe("true");
     expect(second.headers["cache-control"]).toBe("no-store");
-    expect(second.body).toEqual(first.body);
+    expect(second.body.payment).toEqual(first.body.payment);
     expect(await store.payments.listByMember(m.id)).toHaveLength(1);
   });
 

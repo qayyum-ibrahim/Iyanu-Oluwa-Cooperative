@@ -5,6 +5,6 @@ docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/prisma/schema.prisma
 server/prisma.config.ts
-server/src/db.ts
 server/test/db.test.ts
-server/test/prisma-store.test.ts
+server/test/helpers/temp-db.ts
+server/package.json

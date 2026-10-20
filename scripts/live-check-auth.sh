@@ -249,6 +249,32 @@ expect "blank name refused" "$code" 400
 code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/members")
 expect "members without a token refused" "$code" 401
 
+# --- payments (step 4.4) ---
+# Two fictional payments are added to the dev database on each run (D-08).
+printf '%s' '{"permissions":["members.create","members.view","payments.create"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given payment permission" "$code" 200
+payment_json() { M="$1" T="$2" node -e 'process.stdout.write(JSON.stringify({memberId:process.env.M,method:"CASH",total:process.env.T,lines:[{category:"Shares",amount:"5000"},{category:"Savings",amount:"10000"},{category:"Special Savings",amount:"5000"}]}))' > "$REQ"; }
+payment_json "$SMID" "20000"
+code=$(authed_send POST /payments "$SAT")
+expect "staff records a payment" "$code" 201
+expect "payment total" "$(pick payment.total)" "20000.00"
+expect "payment has a membership id" "$([ -n "$(pick payment.membershipId)" ] && echo yes || echo no)" yes
+payment_json "$SMID" "19999"
+code=$(authed_send POST /payments "$SAT")
+expect "mismatched breakdown refused" "$code" 400
+expect "mismatch code" "$(pick code)" mismatch
+payment_json "$OMID" "20000"
+code=$(authed_send POST /payments "$SAT")
+expect "staff cannot pay into the owner's member" "$code" 404
+code=$(authed_send POST /payments "$AT")
+expect "owner records a payment" "$code" 201
+code=$(authed_get "/audit?action=payment.created&limit=1" "$AT")
+expect "audit log has payment.created" "$code" 200
+expect "newest entry is payment.created" "$(pick entries.0.action)" payment.created
+code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/payments" -H "Content-Type: application/json" --data '{}')
+expect "payment without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.4 (size M), 2026-10-20: payment route and logic
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 33 files, 972 tests, 0 failed, duration 45.10 s; live check "98 passed, 0 failed"; `git status --short` showed the 6 expected lines; I ran nothing in my sandbox):** `server/src/payments.ts` (`createPayment`, `koboToNairaString`, `MAX_PAYMENT_LINES`) and `server/src/payments-routes.ts` (`POST /payments`, 201), mounted in `app.ts`. Order of work: permission `payments.create`, member id and method, line cap of 20, `checkBreakdown` (DR-02), then one `store.transaction`: find the member, check who may see it, check it is Active, save the payment, write `payment.created`. Staff pay only into members they recorded (other members answer 404). A Super Admin may pay into any member. An Inactive member gives 409 `member_inactive`. Amounts leave as strings with 2 decimals. A 400 carries `code` and, for a bad line, `lineIndex`. The audit detail holds the Membership ID, the total in kobo and the line count only. Decision D-46.
+**Stubbed:** no list, read, edit or delete route for payments. No balances. A "Loan Repaid" line does not change any loan (DR-09, later). No SMS. No first-payment flow from the member screen. No idempotency key (A-116). No screen.
+**Tests:** 55 new (972 - 917). By my count `payments.test.ts` 34 and `payments-routes.test.ts` 21. The paste shows only the total.
+**Not verified:** break-on-purpose for `payments.ts` and `payments-routes.ts` (owed, step 4.4b). Typecheck and lint output (inferred from `check` reaching the tests; the paste was cut to the last 25 lines). That the server was stopped and port 3000 freed (the paste ends with it running). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. All predictions matched: 33 files, 972 tests, 98 live checks.
+2. My slip: the step message said `cd server && npm start` when your shell was already in `server/`. Harmless.
+3. The rollback test (audit write fails, nothing saved) passed on the memory adapter. The Prisma adapter's rollback is covered by the transaction contract (4.3), not by a payment test.
+4. A-100 is settled by the 20-line cap (A-115).
+5. `mirror/DECISIONS.md` needs D-46 by hand.
+
 ## Step 4.3c (size S), 2026-10-20: close the memory-adapter transaction test gaps
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 917 tests, 0 failed, duration 51.45 s; mutation rerun baseline 12 of 12, M12 caught (1 failed), M13 caught (2 failed), "file restored: yes"; `git status --short` showed only `M server/test/memory-store.test.ts`; I ran nothing in my sandbox):** two tests added to `test/memory-store.test.ts`, in a suite named "memory adapter transactions (queue)". (1) A slow transaction that later throws is started first, and a second transaction is started while it is open: the second must start only after the first ends, and its write must survive the first one's rollback. (2) A transaction runs normally on the same store after an earlier one failed. A throwaway script, `mutate-4.3c.mjs`, on your Desktop (not in git), reruns M12 and M13 only, because the 4.3b script expects 10 memory cases and there are now 12.

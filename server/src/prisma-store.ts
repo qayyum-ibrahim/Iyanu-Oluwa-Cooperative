@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   UnknownMemberError,
+  DuplicateIdempotencyKeyError,
   formatMembershipId,
   type AuditRecord,
   type PaymentMethod,
@@ -40,6 +41,8 @@ interface PaymentRow {
   memberId: string;
   method: PaymentMethod;
   totalKobo: bigint;
+  idempotencyKey: string | null;
+  requestHash: string | null;
   createdById: string;
   createdAt: Date;
   lines: { id: string; position: number; category: string; amountKobo: bigint }[];
@@ -50,6 +53,8 @@ const toPayment = (r: PaymentRow): PaymentRecord => ({
   memberId: r.memberId,
   method: r.method,
   total: r.totalKobo,
+  idempotencyKey: r.idempotencyKey,
+  requestHash: r.requestHash,
   lines: [...r.lines]
     .sort((a, b) => a.position - b.position)
     .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo })),
@@ -338,6 +343,8 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
             memberId: input.memberId,
             method: input.method,
             totalKobo: input.total,
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
             createdById: input.createdById,
             lines: {
               create: input.lines.map((l, position) => ({
@@ -348,11 +355,22 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
             },
           },
           include: { lines: true },
+        }).catch((e: unknown) => {
+          // The only other unique index here is the line position, which cannot clash (A-119).
+          if (hasCode(e, "P2002")) throw new DuplicateIdempotencyKeyError();
+          throw e;
         });
         return toPayment(row);
       },
       async findById(id) {
         const row = await prisma.payment.findUnique({ where: { id }, include: { lines: true } });
+        return row ? toPayment(row) : null;
+      },
+      async findByKey(createdById, idempotencyKey) {
+        const row = await prisma.payment.findFirst({
+          where: { createdById, idempotencyKey },
+          include: { lines: true },
+        });
         return row ? toPayment(row) : null;
       },
       async listByMember(memberId) {

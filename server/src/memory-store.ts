@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   UnknownMemberError,
+  DuplicateIdempotencyKeyError,
   formatMembershipId,
   type AuditRecord,
   type PaymentRecord,
@@ -261,10 +262,20 @@ export function createMemoryStore(): Store {
             throw new UnknownMemberError(input.memberId);
           }
           if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          if (
+            input.idempotencyKey !== undefined &&
+            rows.some(
+              (p) => p.createdById === input.createdById && p.idempotencyKey === input.idempotencyKey,
+            )
+          ) {
+            throw new DuplicateIdempotencyKeyError();
+          }
           const record: PaymentRecord = {
             id: randomUUID(),
             memberId: input.memberId,
             method: input.method,
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
             total: input.total,
             lines: input.lines.map((l) => ({
               id: randomUUID(),
@@ -279,6 +290,12 @@ export function createMemoryStore(): Store {
         },
         async findById(id) {
           const found = rows.find((p) => p.id === id);
+          return found ? copyPayment(found) : null;
+        },
+        async findByKey(createdById, idempotencyKey) {
+          const found = rows.find(
+            (p) => p.createdById === createdById && p.idempotencyKey === idempotencyKey,
+          );
           return found ? copyPayment(found) : null;
         },
         async listByMember(memberId) {

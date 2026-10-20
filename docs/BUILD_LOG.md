@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 4.5 (size M), 2026-10-20: idempotency key on POST /payments
+
+**Works (verified on your machine, output pasted: grep counts 17 and 4; `db:deploy` applied `20261020060000_payment_idempotency`; `migrate dev` "Already in sync"; `npm run check` ended with 34 files, 1016 tests, 0 failed, duration 50.79 s; live check "105 passed, 0 failed"; `git status --short` showed 10 `M` and 3 `??`; I ran nothing in my sandbox):** `POST /payments` needs the header `Idempotency-Key` (16 to 64 characters of `A-Z a-z 0-9 _ -`). The key and a SHA-256 of the checked request (member, method, exact kobo, lines in order) are saved on the payment, with a unique index on user and key. A repeat with the same key and request returns the first payment: 201, header `Idempotent-Replayed: true`, no second payment, no second audit entry. The same key with a different request gives 409 `idempotency_conflict`. A missing or bad key gives 400. Keys are per user. A refused request does not use up its key. A lost race (the unique index refuses the second save, the transaction is undone) is retried once and then returns the first payment. New: `PaymentStore.findByKey`, `DuplicateIdempotencyKeyError`, migration `20261020060000_payment_idempotency`. Decision D-48.
+**Stubbed:** no key clean-up (keys live as long as payments). No payment list route. No screen. A "Loan Repaid" line still changes no loan (DR-09).
+**Tests:** 43 new (1016 - 973): contract `payments-key-contract.ts` 6 cases x 2 adapters = 12, `payments-idempotency.test.ts` 31 (24 logic, 7 route). The existing payment tests now send a key. The live check gains 7 checks (98 to 105).
+**Not verified:** break-on-purpose for the key code (owed, step 4.5b). Typecheck and lint output (inferred from `check` reaching the tests; the paste was cut to the last 25 lines). That the server was stopped and port 3000 freed (your `lsof` showed it running, and the paste ends with it running). The Prisma `P2002` retry path on a real two-request race (the race test on the memory adapter simulates it; A-121). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. My count error: I predicted 1015 tests and 42 new. The real numbers are 1016 and 43. I counted one route test too few. The live check prediction (105) was right.
+2. The old break-on-purpose scripts for the payments store and the payment logic and route were written against code that 4.5 changed. They may now report "not applied". 4.5b replaces them.
+3. A comment in `prisma-store.ts` cites A-119 where A-121 is right. Harmless. Fix it when the file is next edited.
+4. `mirror/DECISIONS.md` needs D-48 by hand.
+5. Vitest again suggests `isolate: false` (about 4.3 s faster). I changed nothing.
+
 ## Step 4.4c (size S), 2026-10-20: close the L35 test gap
 
 **Works (verified on your machine, output pasted: `npm run check` ended with 33 files, 973 tests, 0 failed, duration 48.85 s; mutation rerun baseline 35 of 35, L35 caught (1 failed, 34 passed), "file restored: yes"; `git status --short` showed only `M server/test/payments.test.ts`; I ran nothing in my sandbox):** one test added to `test/payments.test.ts`: the Super Admin pays into a Staff member's record, and the `payment.created` audit entry belongs to the Super Admin, with none under the Staff user (DR-15). A throwaway script, `mutate-4.4c.mjs`, on your Desktop (not in git), reruns L35 only.

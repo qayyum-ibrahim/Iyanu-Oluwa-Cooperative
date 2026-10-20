@@ -104,6 +104,9 @@ model Payment {
   method      PaymentMethod
   // Whole kobo (D-15). The lines add up to this; the logic code checks it (DR-02).
   totalKobo   BigInt
+  // Set when the caller sent an Idempotency-Key (step 4.5, D-47). Old rows have none.
+  idempotencyKey String?
+  requestHash    String?
   // The user who recorded the payment (DR-15).
   createdById String
   createdBy   User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
@@ -112,6 +115,7 @@ model Payment {
 
   @@index([memberId])
   @@index([createdById])
+  @@unique([createdById, idempotencyKey])
 }
 
 model PaymentLine {

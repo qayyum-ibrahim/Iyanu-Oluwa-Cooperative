@@ -8,6 +8,8 @@ import { createAccessToken } from "../src/tokens.js";
 // Fake values for tests only. Fictional data only (D-08).
 const SECRET = "test-only-secret-for-payments-routes-0123456789";
 const T0 = new Date("2026-10-20T10:00:00.000Z");
+let keyCounter = 0;
+const key = () => `route-test-key-${String(++keyCounter).padStart(8, "0")}`;
 
 async function build() {
   const store = createMemoryStore();
@@ -45,7 +47,7 @@ const payBody = (memberId: unknown, over: Record<string, unknown> = {}) => ({
 describe("POST /payments", () => {
   it("answers 401 without a token", async () => {
     const { app } = await build();
-    const res = await request(app).post("/payments").send(payBody("x"));
+    const res = await request(app).post("/payments").set("Idempotency-Key", key()).send(payBody("x"));
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: "unauthorized" });
   });
@@ -54,7 +56,7 @@ describe("POST /payments", () => {
     const { app, noPay, a, bearer, addMember, store } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(noPay))
       .send(payBody(m.id));
     expect(res.status).toBe(403);
@@ -65,7 +67,7 @@ describe("POST /payments", () => {
   it("answers 403, not 400, to a caller without the permission who sends malformed JSON", async () => {
     const { app, noPay, bearer } = await build();
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(noPay))
       .set("Content-Type", "application/json")
       .send("{bad");
@@ -77,7 +79,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id));
     expect(res.status).toBe(201);
@@ -110,7 +112,7 @@ describe("POST /payments", () => {
     const { app, admin, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(admin))
       .send(payBody(m.id));
     expect(res.status).toBe(201);
@@ -120,7 +122,7 @@ describe("POST /payments", () => {
   it("saves the payment and one audit entry", async () => {
     const { app, a, bearer, addMember, store } = await build();
     const m = await addMember(a.id, "A One");
-    await request(app).post("/payments").set("Authorization", bearer(a)).send(payBody(m.id));
+    await request(app).post("/payments").set("Idempotency-Key", key()).set("Authorization", bearer(a)).send(payBody(m.id));
     expect(await store.payments.listByMember(m.id)).toHaveLength(1);
     const actions = (await store.audit.listByActor(a.id)).map((e) => e.action);
     expect(actions).toEqual(["payment.created"]);
@@ -130,7 +132,7 @@ describe("POST /payments", () => {
     const { app, a, b, bearer, addMember } = await build();
     const m = await addMember(b.id, "B One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id));
     expect(res.status).toBe(404);
@@ -140,7 +142,7 @@ describe("POST /payments", () => {
   it("answers 404 for an unknown member", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody("no-such-id"));
     expect(res.status).toBe(404);
@@ -152,7 +154,7 @@ describe("POST /payments", () => {
     const m = await addMember(a.id, "A One");
     await store.members.setStatus(m.id, "INACTIVE");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id));
     expect(res.status).toBe(409);
@@ -163,7 +165,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id, { total: "19999" }));
     expect(res.status).toBe(400);
@@ -174,7 +176,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(
         payBody(m.id, {
@@ -192,7 +194,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id, { total: 20000 }));
     expect(res.status).toBe(400);
@@ -203,7 +205,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id, { method: "cash" }));
     expect(res.status).toBe(400);
@@ -213,7 +215,7 @@ describe("POST /payments", () => {
   it("answers 400 invalid_input when the body is not an object", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send([1, 2, 3]);
     expect(res.status).toBe(400);
@@ -223,7 +225,7 @@ describe("POST /payments", () => {
   it("answers 400 bad_request for malformed JSON from a permitted user", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .set("Content-Type", "application/json")
       .send("{bad");
@@ -234,7 +236,7 @@ describe("POST /payments", () => {
   it("answers 401, not 400, for malformed JSON without a token", async () => {
     const { app } = await build();
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Content-Type", "application/json")
       .send("{bad");
     expect(res.status).toBe(401);
@@ -244,7 +246,7 @@ describe("POST /payments", () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     const res = await request(app)
-      .post("/payments")
+      .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
       .send(payBody(m.id, { note: "x".repeat(20_000) }));
     expect(res.status).toBe(413);

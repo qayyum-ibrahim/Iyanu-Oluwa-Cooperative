@@ -266,6 +266,10 @@ export interface PaymentRecord {
   total: bigint;
   /** In the order given when the payment was saved. */
   lines: PaymentLineRecord[];
+  /** The caller's idempotency key, or null (step 4.5). Unique per user. */
+  idempotencyKey: string | null;
+  /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
+  requestHash: string | null;
   /** The user who recorded the payment (DR-15). */
   createdById: string;
   createdAt: Date;
@@ -276,6 +280,8 @@ export interface NewPayment {
   method: PaymentMethod;
   total: bigint;
   lines: { category: string; amount: bigint }[];
+  idempotencyKey?: string;
+  requestHash?: string;
   createdById: string;
 }
 
@@ -283,6 +289,13 @@ export class UnknownMemberError extends Error {
   constructor(memberId: string) {
     super(`No member with id ${memberId}`);
     this.name = "UnknownMemberError";
+  }
+}
+
+export class DuplicateIdempotencyKeyError extends Error {
+  constructor() {
+    super("A payment with this idempotency key already exists for this user");
+    this.name = "DuplicateIdempotencyKeyError";
   }
 }
 
@@ -296,6 +309,8 @@ export interface PaymentStore {
   findById(id: string): Promise<PaymentRecord | null>;
   /** Payments of one member, oldest first. Payments with equal times are in no fixed order. Returns copies. */
   listByMember(memberId: string): Promise<PaymentRecord[]>;
+  /** The payment this user saved with this key, or null. Returns a copy. */
+  findByKey(createdById: string, idempotencyKey: string): Promise<PaymentRecord | null>;
 }
 
 export interface Store {

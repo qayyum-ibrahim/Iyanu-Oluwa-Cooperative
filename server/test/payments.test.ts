@@ -39,7 +39,10 @@ async function build() {
 const actorOf = (u: UserRecord): PaymentActor => ({ id: u.id, subject: subjectOf(u) });
 
 // The DR-02 example: 20,000 = 5,000 + 10,000 + 5,000.
+let keyCounter = 0;
+const nextKey = () => `logic-test-key-${String(++keyCounter).padStart(8, "0")}`;
 const pay = (memberId: unknown, over: Record<string, unknown> = {}) => ({
+  idempotencyKey: nextKey(),
   memberId,
   method: "CASH",
   total: "20000",

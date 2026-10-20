@@ -26,12 +26,16 @@ send() { # path; JSON comes in on stdin; prints the status code; body goes to $B
 get_me() { # access token; prints the status code; body goes to $BODY. The token goes in on stdin.
   printf 'header = "Authorization: Bearer %s"\n' "$1" | curl -s -o "$BODY" -w "%{http_code}" -K - "$BASE/auth/me"
 }
+
 authed_get() { # path, access token; prints the status code; body goes to $BODY
   printf 'header = "Authorization: Bearer %s"\n' "$2" | curl -s -o "$BODY" -w "%{http_code}" -K - "$BASE$1"
 }
-authed_send() { # method, path, access token; the JSON body is in $REQ; prints the status code
-  printf 'header = "Authorization: Bearer %s"\nheader = "Content-Type: application/json"\n' "$3" | curl -s -o "$BODY" -w "%{http_code}" -K - -X "$1" "$BASE$2" --data @"$REQ"
+authed_send() { # method, path, access token, optional idempotency key; the JSON body is in $REQ; prints the status code
+  EXTRA=""
+  [ -n "$4" ] && EXTRA="header = \"Idempotency-Key: $4\""
+  printf 'header = "Authorization: Bearer %s"\nheader = "Content-Type: application/json"\n%s\n' "$3" "$EXTRA" | curl -s -o "$BODY" -w "%{http_code}" -K - -X "$1" "$BASE$2" --data @"$REQ"
 }
+new_key() { node -e 'process.stdout.write(require("crypto").randomUUID())'; }
 field() { # name of a top-level field in the last body
   node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(b[process.argv[2]]??""))' "$BODY" "$1"
 }
@@ -256,19 +260,35 @@ code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
 expect "staff given payment permission" "$code" 200
 payment_json() { M="$1" T="$2" node -e 'process.stdout.write(JSON.stringify({memberId:process.env.M,method:"CASH",total:process.env.T,lines:[{category:"Shares",amount:"5000"},{category:"Savings",amount:"10000"},{category:"Special Savings",amount:"5000"}]}))' > "$REQ"; }
 payment_json "$SMID" "20000"
-code=$(authed_send POST /payments "$SAT")
+code=$(authed_send POST /payments "$SAT" "$(new_key)")
 expect "staff records a payment" "$code" 201
 expect "payment total" "$(pick payment.total)" "20000.00"
 expect "payment has a membership id" "$([ -n "$(pick payment.membershipId)" ] && echo yes || echo no)" yes
 payment_json "$SMID" "19999"
-code=$(authed_send POST /payments "$SAT")
+code=$(authed_send POST /payments "$SAT" "$(new_key)")
 expect "mismatched breakdown refused" "$code" 400
 expect "mismatch code" "$(pick code)" mismatch
 payment_json "$OMID" "20000"
-code=$(authed_send POST /payments "$SAT")
+code=$(authed_send POST /payments "$SAT" "$(new_key)")
 expect "staff cannot pay into the owner's member" "$code" 404
-code=$(authed_send POST /payments "$AT")
+code=$(authed_send POST /payments "$AT" "$(new_key)")
 expect "owner records a payment" "$code" 201
+# idempotency key (step 4.5)
+payment_json "$SMID" "20000"
+code=$(authed_send POST /payments "$SAT")
+expect "payment without a key refused" "$code" 400
+expect "missing key code" "$(pick code)" missing_idempotency_key
+IKEY=$(new_key)
+code=$(authed_send POST /payments "$SAT" "$IKEY")
+expect "keyed payment recorded" "$code" 201
+PID1=$(pick payment.id)
+code=$(authed_send POST /payments "$SAT" "$IKEY")
+expect "repeat with the same key answers 201" "$code" 201
+expect "repeat returns the same payment" "$(pick payment.id)" "$PID1"
+payment_json "$OMID" "20000"
+code=$(authed_send POST /payments "$SAT" "$IKEY")
+expect "same key with another request refused" "$code" 409
+expect "conflict error" "$(pick error)" idempotency_conflict
 code=$(authed_get "/audit?action=payment.created&limit=1" "$AT")
 expect "audit log has payment.created" "$code" 200
 expect "newest entry is payment.created" "$(pick entries.0.action)" payment.created

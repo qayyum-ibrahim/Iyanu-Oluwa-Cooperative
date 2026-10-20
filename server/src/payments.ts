@@ -1,15 +1,26 @@
-// Payment logic (step 4.4; D-43, D-44, D-45, DR-02, DR-13, DR-15). Rules over the Store: no HTTP here.
-// The breakdown is checked first. The member check, the payment and the audit entry
-// then run inside one store transaction, so all three are saved or none (D-45).
-// Audit details hold the Membership ID, the total in kobo and the line count: no name, no phone.
+// Payment logic (step 4.4, idempotency key added in 4.5; D-43 to D-47, DR-02, DR-13, DR-15).
+// Rules over the Store: no HTTP here.
+// The breakdown is checked first. The key lookup, the member check, the payment and the audit
+// entry then run inside one store transaction, so all of them are saved or none (D-45).
+// Audit details hold the Membership ID, the total in kobo and the line count: no name, no phone,
+// no key.
 
+import { createHash } from "node:crypto";
 import { BreakdownError, checkBreakdown } from "./breakdown.js";
 import type { Kobo } from "./money.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
-import type { PaymentMethod, PaymentRecord, Store } from "./store.js";
+import {
+  DuplicateIdempotencyKeyError,
+  type PaymentMethod,
+  type PaymentRecord,
+  type Store,
+} from "./store.js";
 
 /** Most lines one payment may have (A-100: my choice). There are 14 categories. */
 export const MAX_PAYMENT_LINES = 20;
+
+/** A key is 16 to 64 characters from these (A-119: my choice). A UUID fits. */
+export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
 /** Who is acting: the user id (the actor, DR-15) and what they may do. */
 export interface PaymentActor {
@@ -35,7 +46,12 @@ export interface PaymentView {
   createdAt: string;
 }
 
-export type PaymentFailure = "forbidden" | "invalid_input" | "not_found" | "member_inactive";
+export type PaymentFailure =
+  | "forbidden"
+  | "invalid_input"
+  | "not_found"
+  | "member_inactive"
+  | "idempotency_conflict";
 
 export interface PaymentFailureResult {
   ok: false;
@@ -46,7 +62,10 @@ export interface PaymentFailureResult {
   lineIndex?: number;
 }
 
-export type PaymentResult = { ok: true; value: PaymentView } | PaymentFailureResult;
+/** replayed is true when the key had been used before and the first payment is returned. */
+export type PaymentResult =
+  | { ok: true; value: PaymentView; replayed: boolean }
+  | PaymentFailureResult;
 
 function failure(reason: PaymentFailure, code?: string, lineIndex?: number): PaymentFailureResult {
   return {
@@ -80,8 +99,24 @@ function parseMethod(value: unknown): PaymentMethod | null {
   return value === "CASH" || value === "BANK_TRANSFER" ? value : null;
 }
 
-/** Raw values as they arrive from a request body. Anything may be wrong; this code checks it. */
+/** A fingerprint of the checked request: member, method, exact kobo, lines in order. */
+function hashRequest(
+  memberId: string,
+  method: PaymentMethod,
+  checked: ReturnType<typeof checkBreakdown>,
+): string {
+  const canonical = JSON.stringify({
+    memberId,
+    method,
+    total: checked.total.toString(),
+    lines: checked.lines.map((l) => [l.category, l.amount.toString()]),
+  });
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+/** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
 export interface NewPaymentInput {
+  idempotencyKey?: unknown;
   memberId?: unknown;
   method?: unknown;
   total?: unknown;
@@ -90,10 +125,12 @@ export interface NewPaymentInput {
 
 /**
  * Records a payment for a member and writes one audit entry "payment.created".
- * Order: permission, member id and method, line count, breakdown (DR-02), then one transaction:
- * find the member, check who may see it, check it is Active, save the payment, write the audit entry.
+ * Order: permission, idempotency key shape, member id and method, line count, breakdown (DR-02),
+ * then one transaction: look the key up (a repeat returns the first payment, a different request
+ * with the same key is refused), find the member, check who may see it, check it is Active,
+ * save the payment with its key, write the audit entry.
  * Staff may pay only into members they recorded (OQ-09); other members answer not_found.
- * If any write fails, nothing is saved (D-45).
+ * If any write fails, nothing is saved (D-45). A refused request does not use up the key.
  */
 export async function createPayment(
   store: Store,
@@ -101,6 +138,12 @@ export async function createPayment(
   input: NewPaymentInput,
 ): Promise<PaymentResult> {
   if (!hasPermission(actor.subject, "payments.create")) return failure("forbidden");
+
+  const key = input.idempotencyKey;
+  if (key === undefined) return failure("invalid_input", "missing_idempotency_key");
+  if (typeof key !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    return failure("invalid_input", "invalid_idempotency_key");
+  }
 
   const memberId = input.memberId;
   if (typeof memberId !== "string" || memberId.length === 0) {
@@ -119,29 +162,50 @@ export async function createPayment(
     if (e instanceof BreakdownError) return failure("invalid_input", e.code, e.lineIndex);
     throw e;
   }
+  const requestHash = hashRequest(memberId, method, checked);
 
-  return store.transaction<PaymentResult>(async (tx) => {
-    const member = await tx.members.findById(memberId);
-    if (member === null) return failure("not_found");
-    if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
-      return failure("not_found");
-    }
-    if (member.status !== "ACTIVE") return failure("member_inactive");
+  const attempt = (): Promise<PaymentResult> =>
+    store.transaction<PaymentResult>(async (tx) => {
+      const existing = await tx.payments.findByKey(actor.id, key);
+      if (existing !== null) {
+        if (existing.requestHash !== requestHash) return failure("idempotency_conflict");
+        const original = await tx.members.findById(existing.memberId);
+        if (original === null) throw new Error("The member of a saved payment is missing");
+        return { ok: true, value: toView(existing, original.membershipId), replayed: true };
+      }
 
-    const payment = await tx.payments.create({
-      memberId: member.id,
-      method,
-      total: checked.total,
-      lines: checked.lines.map((l) => ({ category: l.category, amount: l.amount })),
-      createdById: actor.id,
+      const member = await tx.members.findById(memberId);
+      if (member === null) return failure("not_found");
+      if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
+        return failure("not_found");
+      }
+      if (member.status !== "ACTIVE") return failure("member_inactive");
+
+      const payment = await tx.payments.create({
+        memberId: member.id,
+        method,
+        total: checked.total,
+        lines: checked.lines.map((l) => ({ category: l.category, amount: l.amount })),
+        createdById: actor.id,
+        idempotencyKey: key,
+        requestHash,
+      });
+      await tx.audit.append({
+        actorId: actor.id,
+        action: "payment.created",
+        entityType: "Payment",
+        entityId: payment.id,
+        detail: `membership_id=${member.membershipId} total_kobo=${checked.total.toString()} lines=${checked.lines.length}`,
+      });
+      return { ok: true, value: toView(payment, member.membershipId), replayed: false };
     });
-    await tx.audit.append({
-      actorId: actor.id,
-      action: "payment.created",
-      entityType: "Payment",
-      entityId: payment.id,
-      detail: `membership_id=${member.membershipId} total_kobo=${checked.total.toString()} lines=${checked.lines.length}`,
-    });
-    return { ok: true, value: toView(payment, member.membershipId) };
-  });
+
+  try {
+    return await attempt();
+  } catch (e) {
+    // Another request with the same key was saved between our lookup and our save. Our
+    // transaction was undone, so one more attempt finds the first payment.
+    if (e instanceof DuplicateIdempotencyKeyError) return attempt();
+    throw e;
+  }
 }

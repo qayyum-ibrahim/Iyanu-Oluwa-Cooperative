@@ -12,6 +12,7 @@ import { runAuditListContract } from "./audit-list-contract.js";
 import { runMembersContract } from "./members-contract.js";
 import { runPasswordContract } from "./password-contract.js";
 import { runPaymentsContract } from "./payments-contract.js";
+import { runPaymentsKeyContract } from "./payments-key-contract.js";
 import { runPermissionsContract } from "./permissions-contract.js";
 import { runTransactionContract } from "./transaction-contract.js";
 
@@ -374,6 +375,7 @@ export function runStoreContract(
     runAuditListContract(makeStore);
     runMembersContract(makeStore, makeEmptyStore);
     runPaymentsContract(makeStore);
+    runPaymentsKeyContract(makeStore);
     runTransactionContract(makeStore);
   });
 }

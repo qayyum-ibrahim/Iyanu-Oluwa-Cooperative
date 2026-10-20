@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.3c (size S), 2026-10-20: close the memory-adapter transaction test gaps
+
+**Works (verified on your machine, output pasted: `npm run check` ended with 31 files, 917 tests, 0 failed, duration 51.45 s; mutation rerun baseline 12 of 12, M12 caught (1 failed), M13 caught (2 failed), "file restored: yes"; `git status --short` showed only `M server/test/memory-store.test.ts`; I ran nothing in my sandbox):** two tests added to `test/memory-store.test.ts`, in a suite named "memory adapter transactions (queue)". (1) A slow transaction that later throws is started first, and a second transaction is started while it is open: the second must start only after the first ends, and its write must survive the first one's rollback. (2) A transaction runs normally on the same store after an earlier one failed. A throwaway script, `mutate-4.3c.mjs`, on your Desktop (not in git), reruns M12 and M13 only, because the 4.3b script expects 10 memory cases and there are now 12.
+**Stubbed:** nothing new. Nothing uses `transaction` yet. No source file changed.
+**Tests:** 2 new. Total 917 (was 915).
+**Not verified:** P1 and P2 (Prisma `maxWait` and `timeout`) are still untested (A-112). Typecheck and lint output (inferred from `check` stopping at the first failure; the paste was cut to the last 15 lines). Behaviour on a server database (A-35, A-110).
+**Found along the way:**
+1. Prediction: 917 tests matched. M12 caught with 1 failed matched. M13 caught with 2 failed, not 1 as I expected: both new tests fail when the queue is poisoned.
+2. A-111 is closed.
+3. `mutate-4.3b.mjs` now stops at its baseline check, because it expects 10 memory cases. It is only needed again for P1 and P2, which stay open. STATUS points to `mutate-4.3c.mjs` for M12 and M13.
+4. `mirror/DECISIONS.md` already holds D-45, so STATUS no longer asks for it. No new decision in this step.
+
 ## Step 4.3b (size S), 2026-10-19: break-on-purpose for the transaction code
 
 **Works (verified on your machine, output pasted; I ran nothing in my sandbox):** one throwaway script, `mutate-4.3b.mjs`, on your Desktop (not in git). It changes the transaction code in `memory-store.ts` and `prisma-store.ts` one mutation at a time, runs the transaction cases of the matching adapter test file (`-t transactions`), and restores the files. Baselines: memory 10 of 10, Prisma 10 of 10. Result: 19 mutations, 15 caught, 4 escaped, 0 error, 0 timeout, 0 not applied. "files restored: yes". `git status --short` printed nothing before and after the run, and `lsof -i :3000` printed nothing. No source or test file changed, so the totals stay at 31 files, 915 tests (verified at 4.3).

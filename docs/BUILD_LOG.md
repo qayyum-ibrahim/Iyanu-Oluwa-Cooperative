@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 5.3c (size S), 2026-10-21: break-on-purpose for the loans store, the loan links and their migrations
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.3c.mjs` (not in git), modelled on `mutate-5.2b.mjs`. Baselines 133 passed (`memory-store.test.ts`) and 145 passed (`prisma-store.test.ts`, `db.test.ts`). 59 mutations: LM1 to LM15 (memory loans store), KM1 to KM6 (memory loan checks and `loanId` on payment lines and expenses), LP1 to LP11 (Prisma loans store), KP1 to KP8 (Prisma `requireLoans`, line `loanId`, check order), EL1 to EL7 (loans migration), EK1 to EK7 (loan links migration), C1 to C5 (`schema.prisma`, with generate and typecheck). Result: 58 caught, 1 escaped (EK7), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 39 files, 1176 passed, 0 failed, 61.23 s.
+**Escaped:** EK7 (the `INSERT INTO "new_Expense"` row copy in `20261021150000_loan_links` leaves out `loanId`). Test gap (A-160): every test database is empty when the migrations run, so the drift test sees the shape only, not the copied rows.
+**Stubbed:** nothing. No source or test change.
+**Not verified:** whether the dev database has any expense with a loan id (not read; the dev database was not touched).
+**Found along the way:**
+1. STATUS said 5.3b was "Not committed yet". It is commit `69da21d`, and `origin/main` matched it at the start of this step. Fixed.
+2. Three find texts in the first draft of the script had the wrong indent. A pre-run match check found them; fixed before the run.
+3. New: A-160. No new decision.
+
 ## Step 5.3b (size M), 2026-10-21: loan links on payment lines and expenses (D-58)
 
 **Works (verified in this session):** `PaymentLine.loanId` (nullable, index) and the `Expense.loanId` foreign key, both to `Loan` with `onDelete: Restrict`; back relations `repayments` and `expense` on `Loan`. Migration `20261021150000_loan_links` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `UnknownLoanError`, `PaymentLineRecord.loanId` and an optional `loanId` on `NewPayment` lines in `store.ts`; both adapters read the loan before the insert. Contracts: payments +3 cases (line keeps its loan, unknown loan saves nothing, member and creator checked first); expenses use real loans and +2 cases (unknown loan, creator before loan). `db.test.ts` +3 (line and expense with an unknown loan give P2003; a loan with a line or an expense cannot be deleted). `npm run check`: 39 files, 1176 passed, 0 failed, 51.80 s.

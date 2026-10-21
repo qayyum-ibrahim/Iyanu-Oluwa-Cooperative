@@ -29,7 +29,7 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.2 (M) Expense table and store (both adapters, shared contract, migration): category, amount (BigInt kobo), method, description, "Others" narration, optional unique `loanId`, `createdById`, `createdAt`, `deletedAt`, `deletedById`.
 - 5.3 (M) Loan table and store (both adapters, shared contract, migration): `memberId`, principal (BigInt kobo), optional interest note (A-146), notes, `createdById`, `createdAt`. Outstanding and status worked out on read (A-144). Done (D-57).
 - 5.3b (M) Nullable `PaymentLine.loanId` and a foreign key on `Expense.loanId`, both to `Loan`, with store checks for an unknown loan in both adapters (A-151, A-157). Split from 5.3. Done (D-58).
-- 5.3c (S) Break-on-purpose for the loans store, 5.3b and their migrations.
+- 5.3c (S) Break-on-purpose for the loans store, 5.3b and their migrations. Done: 58 of 59 caught (EK7 test gap, A-160).
 - 5.4 (M) `POST /loans` (permission `loans.disburse`, A-149): member visible and Active, no active loan; loan, its Loan expense and the audit entry in one transaction (DR-08, DR-10).
 - 5.5 (M) Loan Repaid effect in `createPayment`: lines linked to the active loan; no active loan or more than outstanding is refused (DR-08, DR-09, A-145).
 - 5.6 (S) `GET /loans` and one member's loans, with outstanding and status.

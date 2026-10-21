@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DuplicateExpenseLoanError,
   UnknownActorError,
+  UnknownLoanError,
   type NewExpense,
   type Store,
 } from "../../src/store.js";
@@ -9,7 +10,6 @@ import {
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
 const uniqueEmail = (tag: string) => `${tag}-${Date.now()}-${++counter}@example.test`;
-const uniqueLoanId = () => `loan-${Date.now()}-${++counter}`;
 // Expenses with equal times have no promised order, so tests wait a little between them.
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
@@ -22,6 +22,19 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         passwordHash: "not-a-real-hash",
         displayName: "Test User",
       });
+
+    // A real loan, since loanId is a foreign key (5.3b). Fictional details only (D-08).
+    const newLoanId = async (store: Store, createdById: string) => {
+      const m = await store.members.create({
+        fullName: "Expense Member",
+        phone: "",
+        address: "",
+        occupation: "",
+        createdById,
+      });
+      const l = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById });
+      return l.id;
+    };
 
     // 1,500,000 kobo is ₦15,000. Fictional details only (D-08).
     const expense = (createdById: string, over: Partial<NewExpense> = {}): NewExpense => ({
@@ -55,7 +68,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       const store = await makeStore();
       const u = await newUser(store, "e-exact");
       const huge = 9_007_199_254_740_993n; // 2^53 + 1: a float would round it
-      const loanId = uniqueLoanId();
+      const loanId = await newLoanId(store, u.id);
       const e = await store.expenses.create(
         expense(u.id, {
           category: "Others",
@@ -94,7 +107,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
     it("rejects a second expense for the same loan with DuplicateExpenseLoanError and saves nothing", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-loan");
-      const loanId = uniqueLoanId();
+      const loanId = await newLoanId(store, u.id);
       const first = await store.expenses.create(expense(u.id, { category: "Loan", loanId }));
       await expect(
         store.expenses.create(expense(u.id, { category: "Loan", loanId })),
@@ -105,11 +118,27 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
     it("checks the creator before the loan id", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-order");
-      const loanId = uniqueLoanId();
+      const loanId = await newLoanId(store, u.id);
       await store.expenses.create(expense(u.id, { loanId }));
       await expect(store.expenses.create(expense("no-such-user", { loanId }))).rejects.toBeInstanceOf(
         UnknownActorError,
       );
+    });
+
+    it("rejects an unknown loan with UnknownLoanError and saves nothing", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-noloan-id");
+      await expect(
+        store.expenses.create(expense(u.id, { category: "Loan", loanId: "no-such-loan" })),
+      ).rejects.toBeInstanceOf(UnknownLoanError);
+      expect(await store.expenses.list({ createdById: u.id })).toEqual([]);
+    });
+
+    it("checks the creator before the loan", async () => {
+      const store = await makeStore();
+      await expect(
+        store.expenses.create(expense("no-such-user", { loanId: "no-such-loan" })),
+      ).rejects.toBeInstanceOf(UnknownActorError);
     });
 
     it("allows many expenses with no loan", async () => {

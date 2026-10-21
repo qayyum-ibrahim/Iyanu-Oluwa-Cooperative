@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   UnknownMemberError,
+  UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
   formatMembershipId,
@@ -48,7 +49,7 @@ interface PaymentRow {
   requestHash: string | null;
   createdById: string;
   createdAt: Date;
-  lines: { id: string; position: number; category: string; amountKobo: bigint }[];
+  lines: { id: string; position: number; category: string; amountKobo: bigint; loanId: string | null }[];
 }
 
 const toPayment = (r: PaymentRow): PaymentRecord => ({
@@ -60,7 +61,7 @@ const toPayment = (r: PaymentRow): PaymentRecord => ({
   requestHash: r.requestHash,
   lines: [...r.lines]
     .sort((a, b) => a.position - b.position)
-    .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo })),
+    .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo, loanId: l.loanId })),
   createdById: r.createdById,
   createdAt: r.createdAt,
 });
@@ -94,6 +95,15 @@ const toLoan = (r: LoanRow): LoanRecord => ({
   createdById: r.createdById,
   createdAt: r.createdAt,
 });
+
+/** Throws UnknownLoanError for the first id that is not a loan. Reads before writing, as for members (A-102). */
+async function requireLoans(prisma: Db, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const found = await prisma.loan.findMany({ where: { id: { in: [...new Set(ids)] } }, select: { id: true } });
+  const known = new Set(found.map((l) => l.id));
+  const missing = ids.find((id) => !known.has(id));
+  if (missing !== undefined) throw new UnknownLoanError(missing);
+}
 
 function hasCode(e: unknown, code: string): boolean {
   return typeof e === "object" && e !== null && "code" in e && e.code === code;
@@ -370,6 +380,10 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           select: { id: true },
         });
         if (actor === null) throw new UnknownActorError(input.createdById);
+        await requireLoans(
+          prisma,
+          input.lines.flatMap((l) => (l.loanId !== undefined ? [l.loanId] : [])),
+        );
         // One nested create: the payment and its lines are saved together or not at all.
         const row = await prisma.payment.create({
           data: {
@@ -384,6 +398,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
                 position,
                 category: l.category,
                 amountKobo: l.amount,
+                loanId: l.loanId ?? null,
               })),
             },
           },
@@ -423,6 +438,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           select: { id: true },
         });
         if (actor === null) throw new UnknownActorError(input.createdById);
+        if (input.loanId !== undefined) await requireLoans(prisma, [input.loanId]);
         try {
           const row = await prisma.expense.create({
             data: {

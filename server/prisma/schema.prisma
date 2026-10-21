@@ -1,6 +1,6 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
 // stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2),
-// loans (step 5.3).
+// loans (step 5.3), loan links on payment lines and expenses (step 5.3b).
 // Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -131,8 +131,13 @@ model PaymentLine {
   position   Int
   category   String
   amountKobo BigInt
+  // The loan a Loan Repaid line pays back (DR-09, A-145). Null for every other line. The logic
+  // code decides which lines get one (step 5.5); the store only checks that the loan exists.
+  loanId     String?
+  loan       Loan?   @relation(fields: [loanId], references: [id], onDelete: Restrict)
 
   @@unique([paymentId, position])
+  @@index([loanId])
 }
 
 // Money going out (DR-11, D-54). Soft-delete only (D-10, DR-12): deletedAt and deletedById are set
@@ -147,8 +152,8 @@ model Expense {
   // The free text for "Others" (DR-11). Empty for other categories.
   narration   String        @default("")
   // The loan this expense pays out (DR-10). At most one expense per loan (A-148).
-  // No foreign key yet: it comes at step 5.3b (A-151).
   loanId      String?       @unique
+  loan        Loan?         @relation(fields: [loanId], references: [id], onDelete: Restrict)
   // The user who recorded the expense (DR-15).
   createdById String
   createdBy   User          @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -176,6 +181,8 @@ model Loan {
   createdById   String
   createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt     DateTime @default(now())
+  repayments    PaymentLine[]
+  expense       Expense?
 
   @@index([memberId])
   @@index([createdById])

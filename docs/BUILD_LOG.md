@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 5.3b (size M), 2026-10-21: loan links on payment lines and expenses (D-58)
+
+**Works (verified in this session):** `PaymentLine.loanId` (nullable, index) and the `Expense.loanId` foreign key, both to `Loan` with `onDelete: Restrict`; back relations `repayments` and `expense` on `Loan`. Migration `20261021150000_loan_links` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `UnknownLoanError`, `PaymentLineRecord.loanId` and an optional `loanId` on `NewPayment` lines in `store.ts`; both adapters read the loan before the insert. Contracts: payments +3 cases (line keeps its loan, unknown loan saves nothing, member and creator checked first); expenses use real loans and +2 cases (unknown loan, creator before loan). `db.test.ts` +3 (line and expense with an unknown loan give P2003; a loan with a line or an expense cannot be deleted). `npm run check`: 39 files, 1176 passed, 0 failed, 51.80 s.
+**Stubbed:** nothing. No route sets `loanId` yet (5.4, 5.5). `PaymentView` does not show it.
+**Tests:** +13 (5 per adapter, 3 database). Total 1176. The drift test passes with the new migration.
+**Not verified:** no break-on-purpose run yet (5.3c). The dev database does not have the new migration until `npm run db:deploy` runs (A-159).
+**Found along the way:**
+1. Owner confirmed 5.3 was pushed and `db:deploy` ran after 5.3. STATUS had still said "Not committed yet".
+2. `DATA_MODEL.md` had a blank line that split the tables table. Fixed.
+3. New: D-58, A-158, A-159. A-151 closed. The mirror needs D-58.
+
 ## Step 5.3 (size M), 2026-10-21: loan table and store (D-57)
 
 **Works (verified in this session):** `Loan` model in `schema.prisma` (relations to `Member` and `User`, `onDelete: Restrict`, indexes on `memberId` and `createdById`) and migration `20261021120000_loans` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `LoanRecord`, `NewLoan` and `LoanStore` (`create`, `findById`, `listByMember`) in `store.ts`, both adapters; the memory transaction snapshot copies loans. New `test/helpers/loans-contract.ts`, 11 cases per adapter, including a rollback case that saves a loan first (the M16 lesson). Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `loans` (owner approved). `npm run check`: 39 files, 1163 passed, 0 failed, 56.16 s.

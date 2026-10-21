@@ -129,6 +129,50 @@ describe("database (real migration, temporary SQLite file)", () => {
     ).rejects.toMatchObject({ code: "P2003" });
   });
 
+  // The stores read the loan first (5.3b), so only these tests reach the loan foreign keys.
+  it("rejects a payment line whose loan does not exist", async () => {
+    const u = await newUser("line-loan@example.test");
+    const m = await newMember(9003, u.id);
+    const p = await db.payment.create({
+      data: { memberId: m.id, createdById: u.id, method: "CASH", totalKobo: 100n },
+    });
+    await expect(
+      db.paymentLine.create({
+        data: { paymentId: p.id, position: 0, category: "Loan Repaid", amountKobo: 100n, loanId: "no-such-loan" },
+      }),
+    ).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("rejects an expense whose loan does not exist", async () => {
+    const u = await newUser("expense-loan@example.test");
+    await expect(
+      db.expense.create({
+        data: { category: "Loan", amountKobo: 100n, method: "CASH", loanId: "no-such-loan", createdById: u.id },
+      }),
+    ).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("refuses to delete a loan that has a repayment line or an expense", async () => {
+    const u = await newUser("loan-keep@example.test");
+    const m = await newMember(9004, u.id);
+    const repaid = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, createdById: u.id } });
+    const paidOut = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, createdById: u.id } });
+    await db.payment.create({
+      data: {
+        memberId: m.id,
+        createdById: u.id,
+        method: "CASH",
+        totalKobo: 100n,
+        lines: { create: [{ position: 0, category: "Loan Repaid", amountKobo: 100n, loanId: repaid.id }] },
+      },
+    });
+    await db.expense.create({
+      data: { category: "Loan", amountKobo: 100n, method: "CASH", loanId: paidOut.id, createdById: u.id },
+    });
+    await expect(db.loan.delete({ where: { id: repaid.id } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(db.loan.delete({ where: { id: paidOut.id } })).rejects.toMatchObject({ code: "P2003" });
+  });
+
   it("rejects two lines with the same position in one payment", async () => {
     const u = await newUser("pay-lines@example.test");
     const m = await newMember(9002, u.id);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   UnknownActorError,
+  UnknownLoanError,
   UnknownMemberError,
   type NewPayment,
   type Store,
@@ -172,7 +173,7 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       // Change what create returned.
       p.method = "BANK_TRANSFER";
       p.createdAt.setFullYear(2000);
-      p.lines.push({ id: "x", category: "Savings", amount: 1n });
+      p.lines.push({ id: "x", category: "Savings", amount: 1n, loanId: null });
       const l0 = p.lines[0];
       if (l0 !== undefined) l0.amount = 1n;
       // Change what findById and listByMember returned.
@@ -182,7 +183,7 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
         if (r === undefined || r === null) throw new Error("payment not found");
         r.method = "BANK_TRANSFER";
         r.createdAt.setFullYear(2000);
-        r.lines.push({ id: "y", category: "Savings", amount: 1n });
+        r.lines.push({ id: "y", category: "Savings", amount: 1n, loanId: null });
         const first0 = r.lines[0];
         if (first0 !== undefined) first0.amount = 1n;
       }
@@ -190,6 +191,60 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       expect(again?.method).toBe("CASH");
       expect(again?.createdAt.getTime()).toBe(time);
       expect(again?.lines.map((l) => l.amount)).toEqual([500_000n, 1_000_000n, 500_000n]);
+    });
+
+    it("keeps the loan of a line, and null on lines with none", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-loan");
+      const m = await newMember(store, u.id);
+      const loan = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: u.id });
+      const p = await store.payments.create(
+        payment(m.id, u.id, {
+          total: 2_500_000n,
+          lines: [
+            { category: "Savings", amount: 500_000n },
+            { category: "Loan Repaid", amount: 2_000_000n, loanId: loan.id },
+          ],
+        }),
+      );
+      expect(p.lines.map((l) => [l.category, l.loanId])).toEqual([
+        ["Savings", null],
+        ["Loan Repaid", loan.id],
+      ]);
+      expect(await store.payments.findById(p.id)).toEqual(p);
+      expect(await store.payments.listByMember(m.id)).toEqual([p]);
+    });
+
+    it("rejects a line with an unknown loan with UnknownLoanError and saves nothing", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-noloan");
+      const m = await newMember(store, u.id);
+      const loan = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: u.id });
+      await expect(
+        store.payments.create(
+          payment(m.id, u.id, {
+            total: 300n,
+            lines: [
+              { category: "Loan Repaid", amount: 100n, loanId: loan.id },
+              { category: "Loan Repaid", amount: 200n, loanId: "no-such-loan" },
+            ],
+          }),
+        ),
+      ).rejects.toBeInstanceOf(UnknownLoanError);
+      expect(await store.payments.listByMember(m.id)).toEqual([]);
+    });
+
+    it("checks the member and the creator before the loan", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-loan-order");
+      const m = await newMember(store, u.id);
+      const lines = [{ category: "Loan Repaid", amount: 2_000_000n, loanId: "no-such-loan" }];
+      await expect(
+        store.payments.create(payment("no-such-member", "no-such-user", { lines })),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+      await expect(
+        store.payments.create(payment(m.id, "no-such-user", { lines })),
+      ).rejects.toBeInstanceOf(UnknownActorError);
     });
 
     it("gives parallel creates different ids and saves every one", async () => {

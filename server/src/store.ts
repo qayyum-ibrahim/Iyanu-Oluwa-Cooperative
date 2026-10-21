@@ -255,6 +255,8 @@ export interface PaymentLineRecord {
   id: string;
   category: string;
   amount: bigint;
+  /** The loan this line pays back (A-145), or null. Which lines get one is the logic code's job. */
+  loanId: string | null;
 }
 
 /** A saved payment. Append-only: nothing changes it after it is saved (D-17). */
@@ -279,7 +281,7 @@ export interface NewPayment {
   memberId: string;
   method: PaymentMethod;
   total: bigint;
-  lines: { category: string; amount: bigint }[];
+  lines: { category: string; amount: bigint; loanId?: string }[];
   idempotencyKey?: string;
   requestHash?: string;
   createdById: string;
@@ -289,6 +291,13 @@ export class UnknownMemberError extends Error {
   constructor(memberId: string) {
     super(`No member with id ${memberId}`);
     this.name = "UnknownMemberError";
+  }
+}
+
+export class UnknownLoanError extends Error {
+  constructor(loanId: string) {
+    super(`No loan with id ${loanId}`);
+    this.name = "UnknownLoanError";
   }
 }
 
@@ -302,8 +311,9 @@ export class DuplicateIdempotencyKeyError extends Error {
 export interface PaymentStore {
   /**
    * Saves a payment and all its lines together, or nothing. Throws UnknownMemberError if the
-   * member does not exist, then UnknownActorError if createdById is not a user. It saves the
-   * values as given: checking the breakdown (checkBreakdown) is the logic code's job.
+   * member does not exist, then UnknownActorError if createdById is not a user, then
+   * UnknownLoanError if a line's loanId is not a loan. It saves the values as given: checking the
+   * breakdown (checkBreakdown) and which loan a line may name are the logic code's job.
    */
   create(input: NewPayment): Promise<PaymentRecord>;
   findById(id: string): Promise<PaymentRecord | null>;
@@ -363,7 +373,8 @@ export class DuplicateExpenseLoanError extends Error {
 export interface ExpenseStore {
   /**
    * Saves a new expense. Throws UnknownActorError if createdById is not a user, then
-   * DuplicateExpenseLoanError if another expense has the same loanId. Values are saved as given:
+   * UnknownLoanError if loanId is not a loan, then DuplicateExpenseLoanError if another expense
+   * has the same loanId. Values are saved as given:
    * checking the category, amount and narration is the logic code's job (A-150).
    */
   create(input: NewExpense): Promise<ExpenseRecord>;

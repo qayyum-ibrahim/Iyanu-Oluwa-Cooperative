@@ -5,6 +5,7 @@ import {
   UnknownActorError,
   UnknownUserError,
   UnknownMemberError,
+  UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
   formatMembershipId,
@@ -281,6 +282,11 @@ export function createMemoryStore(): Store {
             throw new UnknownMemberError(input.memberId);
           }
           if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          for (const l of input.lines) {
+            if (l.loanId !== undefined && !loanRows.some((x) => x.id === l.loanId)) {
+              throw new UnknownLoanError(l.loanId);
+            }
+          }
           if (
             input.idempotencyKey !== undefined &&
             rows.some(
@@ -300,6 +306,7 @@ export function createMemoryStore(): Store {
               id: randomUUID(),
               category: l.category,
               amount: l.amount,
+              loanId: l.loanId ?? null,
             })),
             createdById: input.createdById,
             createdAt: new Date(),
@@ -328,6 +335,9 @@ export function createMemoryStore(): Store {
         async create(input) {
           // No await in this method, so the checks and the save cannot be interleaved.
           if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          if (input.loanId !== undefined && !loanRows.some((l) => l.id === input.loanId)) {
+            throw new UnknownLoanError(input.loanId);
+          }
           if (input.loanId !== undefined && rows.some((e) => e.loanId === input.loanId)) {
             throw new DuplicateExpenseLoanError();
           }

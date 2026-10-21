@@ -552,6 +552,21 @@ describe("disburseLoan: idempotency key (D-60)", () => {
     expect(must(rb).id).not.toBe(ra.id);
   });
 
+  it("a repeat returns its own loan's expense when the same user gave other loans (A-164)", async () => {
+    const { store, a, addMember } = await build();
+    const m1 = await addMember(a.id, "A One");
+    const m2 = await addMember(a.id, "A Two");
+    const body1 = loanBody(m1.id);
+    const body2 = loanBody(m2.id, { principal: "50000" });
+    const first = must(await disburseLoan(store, actorOf(a), body1));
+    const second = must(await disburseLoan(store, actorOf(a), body2));
+    expect(second.expenseId).not.toBe(first.expenseId);
+    // Both replays, so the check holds whatever order the expenses are listed in.
+    expect(must(await disburseLoan(store, actorOf(a), body2))).toEqual(second);
+    expect(must(await disburseLoan(store, actorOf(a), body1))).toEqual(first);
+    expect(await store.expenses.list({})).toHaveLength(2);
+  });
+
   it("does not use up the key when the request is refused", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");

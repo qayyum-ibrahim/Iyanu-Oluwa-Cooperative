@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.4e (size S), 2026-10-21: one test for the loan replay expense lookup (A-164)
+
+**Works (verified in this session):** new test in `server/test/loans.test.ts`: one user gives loans to two members, then repeats both requests; each repeat returns its own loan with its own `expenseId`. `npm run check`: 41 files, 1294 passed, 0 failed, 103.28 s. L20 alone (applied by hand with `sed`, then `npx vitest run test/loans.test.ts`): 1 failed (the new test), 73 passed, so caught. `loans.ts` restored; `git diff` on it empty; `git status --short` showed only the test file.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** +1 (`loans.test.ts` 73 to 74). Total 1294.
+**Not verified:** the full `mutate-5.4d.mjs` was not rerun; 80 of 80 caught is an inference.
+**Found along the way:**
+1. STATUS still said 5.4d was not committed; `914af18` was HEAD and `origin/main` pointed to it. Fixed.
+2. `expenses.list` gives equal times in no fixed order (`store.ts`), so the test repeats both loans; the mutant fails whichever comes first.
+3. The 5.4d script has no option to run one mutation, so L20 was applied by hand.
+4. A full `npm run check` took 103.28 s, longer than the 86 s noted before. STATUS updated.
+5. A-164 closed. No new decision; the mirror needs no change for this step.
+
 ## Step 5.4d (size S), 2026-10-21: break-on-purpose for `POST /loans` and its idempotency key (5.4, 5.4c)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.4d.mjs` (not in git). Baselines 101, 28, 214 and 226 passed. 80 mutations: 44 in `loans.ts` (L), 14 in `loans-routes.ts` (R), 8 in the memory key code (KM), 7 in the Prisma key code (KP), 4 in the 5.4c migration (EQ), 3 in `schema.prisma` (C). 79 caught, 1 escaped (L20), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1293 passed, 0 failed, 69.56 s.

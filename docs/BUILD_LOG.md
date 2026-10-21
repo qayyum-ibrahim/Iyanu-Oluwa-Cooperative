@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.7d (size S), 2026-10-21: break-on-purpose for `POST /expenses` and its key (5.7, 5.7c, D-64, D-65)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.7d.mjs` (not in git; `--dry`: all 84 find texts found once). Baselines 97 (`expenses.test.ts` and `expenses-routes.test.ts`), 29 (`expenses-routes.test.ts`), 218 (`memory-store.test.ts` and `expenses.test.ts`) and 230 (`prisma-store.test.ts`, `db.test.ts` and `expenses.test.ts`). 84 mutations: 46 in `expenses.ts` (E), 13 in `expenses-routes.ts` (R), 8 in the memory adapter expense key code (KM), 10 in the Prisma adapter (KP), 4 in the 5.7c migration (EQ), 3 in `schema.prisma` (C). 82 caught, 2 escaped (R10, KP2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 43 files, 1448 passed, 0 failed, 69.07 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added. Total 1448.
+**Not verified:** no live check (the script has no expense checks).
+**Found along the way:**
+1. STATUS still said 5.7c was not committed; `0b8de37` was HEAD and `origin/main` pointed to it. Fixed.
+2. R10 (route maps `forbidden` to 401) is unreachable: the route guard answers 403 first with the same check. KP2 (Prisma reads every expense `P2002` as a key clash) matters only for a race on one `loanId`, which no code path makes (A-171).
+3. Caught on purpose: key shape and order, every hash field, replay and conflict, the lost-race retry, the lookup outside the transaction, audit in and out of the transaction, the 200-character and ₦0 edges, Others narration rules, per-user keys in both adapters, the migration index and columns, and the schema.
+4. No new decision; the mirror needs no change for this step.
+
 ## Step 5.7c (size M), 2026-10-21: idempotency key on `POST /expenses` (D-65)
 
 **Works (verified in this session):** `POST /expenses` needs `Idempotency-Key` (same rules as payments and loans), checked right after the permission. A repeat gives 201 with the first expense and `Idempotent-Replayed: true`, nothing saved, no audit entry; the same key with another request gives 409 `idempotency_conflict`; a refused request keeps its key free; a clash at save is retried once. `Expense.idempotencyKey`, `Expense.requestHash`, unique on creator and key (migration `20261021200000_expense_idempotency`, from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; columns added only; dev database not touched). `expenses.findByKey` and `DuplicateExpenseKeyError` in both adapters. `npm run check`: 43 files, 1448 passed, 0 failed, 73.36 s. `npx vitest run test/expenses.test.ts test/expenses-routes.test.ts`: 2 files, 97 passed. Five parallel requests with one key on real SQLite: one expense, one audit entry. `npm run db:deploy` on the dev database (owner said yes): "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".

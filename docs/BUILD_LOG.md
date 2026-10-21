@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.9e (size S), 2026-10-22: tests for the 5.9d test gaps (A-178)
+
+**Works (verified in this session):** three tests. `server/test/expenses.test.ts`: "gives not_found for a deleted expense sent with unchanged fields, and changes nothing (A-178 U5)" (Super Admin deletes f's expense; f sends the same category, amount and method; the row and the audit log stay as they were) and "saves a change of the narration alone on an Others expense (A-178 U18)" (two edits; the second changes only the narration, which is saved, and its audit detail has `narration_changed=true`). `server/test/helpers/expenses-contract.ts`: "returns null for an empty change to a deleted expense (A-178 UP8)", run on both adapters. `npm run check`: typecheck and lint clean, 43 files, 1607 passed, 0 failed, 74.96 s, exit 0. Tests committed as `2dbb0ca` (owner said yes) so the mutation script could run. Full rerun of `~/Desktop/mutate-5.9d.mjs` (output in `~/Desktop/mutate-5.9e.out`): baselines 220, 54, 334 and 346; 96 mutations, 92 caught, 4 escaped (D3, D4, U3, R3), 0 errors, 0 timeouts, 0 not applied; U5, U18 and UP8 caught (1 failed each, the new test); "files restored: yes"; `git status --short` empty.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 4 added (2 logic, 1 contract case per adapter). Total 1607.
+**Not verified:** no live check (the step has none).
+**Found along the way:**
+1. STATUS said 5.9d was not committed; `037b3c1` was HEAD and `origin/main` pointed to it. Fixed.
+2. The first draft of the U5 test used a user without `expenses.delete`; replaced before any run by the Super Admin from `buildEdit`.
+3. No new decision; the mirror needs no change for this step.
+
+---
+
 ## Step 5.9d (size S), 2026-10-22: break-on-purpose for 5.9, 5.9b and 5.9c (A-178)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.9d.mjs` (not in git), built on the 5.8c harness. `--dry`: all 96 find texts found once. Baselines 218 (`expenses.test.ts` and `expenses-routes.test.ts`), 54 (routes), 331 (memory store and `expenses.test.ts`), 343 (Prisma store, db and `expenses.test.ts`). 96 mutations: 18 in `deleteExpense` (D), 31 in `updateExpense` (U), 5 in the shared `checkFields` (C), 13 in the DELETE and PUT routes (R), 8 in the memory `update` (UM), 7 in the memory `softDelete`, list filter and copy (DM), 9 in the Prisma `update` (UP), 5 in the Prisma `softDelete` and list filter (DP). Result: 89 caught, 7 escaped (D3, D4, U3, U5, U18, R3, UP8), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. Output kept in `~/Desktop/mutate-5.9d.out`. `npm run check` afterwards: 43 files, 1603 passed, 0 failed, 74.71 s, exit 0.

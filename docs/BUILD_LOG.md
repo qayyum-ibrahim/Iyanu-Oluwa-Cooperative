@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 5.8c (size S), 2026-10-21: break-on-purpose for the expense list (5.8, 5.8b, D-66, D-67)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.8c.mjs` (not in git; `--dry`: all 66 find texts found once). Baselines 139 (`expenses.test.ts` and `expenses-routes.test.ts`), 40 (`expenses-routes.test.ts`), 254 (`memory-store.test.ts` and `expenses.test.ts`) and 266 (`prisma-store.test.ts`, `db.test.ts` and `expenses.test.ts`). 66 mutations: 30 in `listExpenses` (L), 7 in `parseTime` (T), 10 in the GET route (R), 9 in the memory `expenses.list` (LM), 10 in the Prisma `expenses.list` (LP). 60 caught, 6 escaped (L6, L27, T6, T7, R1, R2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 43 files, 1500 passed, 0 failed, 70.96 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added. Total 1500.
+**Not verified:** no live check (the script has no expense checks).
+**Found along the way:**
+1. STATUS said 5.8b was not committed; `1505db4` was HEAD and `origin/main` pointed to it. Fixed.
+2. Test gaps (A-174): L6 (a `createdById` of exactly 100 characters refused), L27 (`listExpenses` reversed to newest first; the logic and route tests compare lists by id or hold one row, so only the store contract pins the order) and R2 (the GET guard asks `expenses.create`; both permissions are `staffGrantable` separately in `permissions.ts`, and no test sends Staff with view but not create). Proposed 5.8d (S).
+3. Equivalent (A-174): T6 (offsets allowed by the pattern) and T7 (type check removed) are still refused by the round-trip compare, checked with `node -e`: `2026-10-01T00:00:00+01:00` and `["2026-10-01T00:00:00Z"]` refused, `{a:"x"}`, `123`, `true` fail the pattern. R1 (GET guard removed): `listExpenses` checks `expenses.view` first and the route maps `forbidden` to 403 (as A-168 R2).
+4. Caught on purpose: every filter in both adapters, both range edges in both adapters and in the logic, the order of the query checks, Staff and Super Admin scope, the total (naira string, every row), the route's query mapping, status and reply shape, and copies from the memory list.
+5. PHASE_PLAN listed 5.2b and 5.2c after 5.9; moved into order.
+6. No new decision; the mirror needs no change for this step.
+
 ## Step 5.8b (size M), 2026-10-21: `GET /expenses` with DR-13 scope and the list total (D-67, A-173)
 
 **Works (verified in this session):** `listExpenses` in `server/src/expenses.ts` and `GET /expenses` in `expenses-routes.ts` (200 `{ expenses, total }`), permission `expenses.view`. Staff see only their own expenses (a `createdById` filter is checked but ignored); the Super Admin sees all or one creator's. Query `category` (any DR-11 name), `method`, `from` (included) and `before` (not included) as UTC times; refusals are 400 `invalid_input` with `invalid_created_by_id`, `invalid_category`, `invalid_method`, `invalid_from`, `invalid_before` or `invalid_range`. `total` is the sum of the listed amounts as a naira string. Read only: no audit entry. `npm run check`: 43 files, 1500 passed, 0 failed, 66.28 s.

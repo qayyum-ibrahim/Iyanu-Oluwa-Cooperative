@@ -27,6 +27,8 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.1 (S) `server/src/expense-categories.ts`: the DR-11 list; "Loan" and "Membership Withdrawal" system-only (A-148). Pure logic and tests.
 - 5.1b (S) Start the server with `node --import tsx` (D-56, A-153). Added at 5.2 after a start-up test failed. Done.
 - 5.2 (M) Expense table and store (both adapters, shared contract, migration): category, amount (BigInt kobo), method, description, "Others" narration, optional unique `loanId`, `createdById`, `createdAt`, `deletedAt`, `deletedById`.
+- 5.2b (S) Break-on-purpose for the expenses store and migration. Added at 5.2. Done: 43 of 45 caught.
+- 5.2c (S) One contract case for the M16 gap (A-155): a rollback keeps the expenses saved before it. Then rerun `mutate-5.2b.mjs`. Added at 5.2b. Done: 44 of 45 caught.
 - 5.3 (M) Loan table and store (both adapters, shared contract, migration): `memberId`, principal (BigInt kobo), optional interest note (A-146), notes, `createdById`, `createdAt`. Outstanding and status worked out on read (A-144). Done (D-57).
 - 5.3b (M) Nullable `PaymentLine.loanId` and a foreign key on `Expense.loanId`, both to `Loan`, with store checks for an unknown loan in both adapters (A-151, A-157). Split from 5.3. Done (D-58).
 - 5.3c (S) Break-on-purpose for the loans store, 5.3b and their migrations. Done: 58 of 59 caught (EK7 test gap, A-160).
@@ -43,8 +45,7 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.7d (S) One break-on-purpose run for 5.7 and 5.7c. Done: 82 of 84 caught (R10 unreachable, KP2 race only, A-171).
 - 5.8 (M) Expense list filters in the store: creator, category, method, half-open `createdAt` range (D-66). Split at start. Done.
 - 5.8b (M) `GET /expenses` (permission `expenses.view`): DR-13 scope (Staff own, Super Admin all or by creator), filters from the query, the list total (a naira string, A-18). Defines "totals reconcile". Done (D-67).
-- 5.8c (S) One break-on-purpose run for 5.8 and 5.8b.
+- 5.8c (S) One break-on-purpose run for 5.8 and 5.8b. Done: 60 of 66 caught (L6, L27, R2 test gaps; T6, T7, R1 equivalent; A-174).
+- 5.8d (S, proposed at 5.8c) Three tests for L6, L27 and R2 (A-174) in `expenses.test.ts` and `expenses-routes.test.ts`, then rerun those three.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).
-- 5.2b (S) Break-on-purpose for the expenses store and migration. Added at 5.2. Done: 43 of 45 caught.
-- 5.2c (S) One contract case for the M16 gap (A-155): a rollback keeps the expenses saved before it. Then rerun `mutate-5.2b.mjs`. Added at 5.2b. Done: 44 of 45 caught.
 Exit "totals reconcile" is defined at 5.8.

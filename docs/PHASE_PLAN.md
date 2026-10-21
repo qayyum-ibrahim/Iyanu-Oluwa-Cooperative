@@ -32,7 +32,8 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.3c (S) Break-on-purpose for the loans store, 5.3b and their migrations. Done: 58 of 59 caught (EK7 test gap, A-160).
 - 5.4 (M) `POST /loans` (permission `loans.disburse`, A-149): member visible and Active, no active loan; loan, its Loan expense and the audit entry in one transaction (DR-08, DR-10). Done (D-59).
 - 5.4c (M) `Idempotency-Key` header on `POST /loans`, as D-48 for payments (D-60). Needs a migration. Added at 5.4 by the owner. Done (D-61).
-- 5.4d (S) One break-on-purpose run for 5.4 and 5.4c (owner's choice).
+- 5.4d (S) One break-on-purpose run for 5.4 and 5.4c (owner's choice). Done: 79 of 80 caught (L20, A-164).
+- 5.4e (S, proposed at 5.4d) One test for the replay expense lookup (A-164), then rerun L20.
 - 5.5 (M) Loan Repaid effect in `createPayment`: lines linked to the active loan; no active loan or more than outstanding is refused (DR-08, DR-09, A-145).
 - 5.6 (S) `GET /loans` and one member's loans, with outstanding and status.
 - 5.7 (M) `POST /expenses` (only categories that can be picked by hand).

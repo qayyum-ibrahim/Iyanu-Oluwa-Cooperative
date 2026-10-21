@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.4d (size S), 2026-10-21: break-on-purpose for `POST /loans` and its idempotency key (5.4, 5.4c)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.4d.mjs` (not in git). Baselines 101, 28, 214 and 226 passed. 80 mutations: 44 in `loans.ts` (L), 14 in `loans-routes.ts` (R), 8 in the memory key code (KM), 7 in the Prisma key code (KP), 4 in the 5.4c migration (EQ), 3 in `schema.prisma` (C). 79 caught, 1 escaped (L20), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1293 passed, 0 failed, 69.56 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added. Total 1293.
+**Not verified:** L20 is open (A-164). The Prisma mutations ran the parallel cases on SQLite only (A-121).
+**Found along the way:**
+1. STATUS still said 5.4c was not committed; `8f94b7d` was HEAD and `origin/main` pointed to it. Fixed.
+2. Eleven find texts first matched the payment key code too (same field names in `Payment`); the dry run showed it and they were anchored on loan-only lines before the run.
+3. L20 escaped: no test replays a key after the same user gave another loan (A-164). Proposed 5.4e.
+
 ## Step 5.4c (size M), 2026-10-21: idempotency key on `POST /loans` (D-60, D-61)
 
 **Works (verified in this session):** `POST /loans` needs `Idempotency-Key` (same rules as payments). A repeat gives 201 with the first loan and `Idempotent-Replayed: true`, nothing saved; the same key with another request gives 409 `idempotency_conflict`; a refused request keeps its key free; a clash at save is retried once. `Loan.idempotencyKey`, `Loan.requestHash`, unique on creator and key (migration `20261021180000_loan_idempotency`, from `prisma migrate diff` on a temporary database, columns added only). `loans.findByKey` and `DuplicateLoanKeyError` in both adapters. `npm run check`: 41 files, 1293 passed, 0 failed, 85.73 s. Five parallel requests with one key on real SQLite: one loan, one expense. `npm run db:deploy` on the dev database (owner said yes): "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".

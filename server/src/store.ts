@@ -372,6 +372,45 @@ export interface ExpenseStore {
   list(query: ExpenseListQuery): Promise<ExpenseRecord[]>;
 }
 
+/**
+ * A loan given to a member (D-54). The repaid and outstanding amounts and the status are not
+ * stored: they are worked out on read (D-17, A-144). Nothing changes a loan after it is saved (OQ-16).
+ */
+export interface LoanRecord {
+  id: string;
+  memberId: string;
+  /** Whole kobo. */
+  principal: bigint;
+  /** Information only, no formula (D-02, A-146). Empty when not given. */
+  interestNote: string;
+  notes: string;
+  /** The user who gave the loan (DR-15). */
+  createdById: string;
+  createdAt: Date;
+}
+
+export interface NewLoan {
+  memberId: string;
+  principal: bigint;
+  /** Defaults to "". */
+  interestNote?: string;
+  /** Defaults to "". */
+  notes?: string;
+  createdById: string;
+}
+
+export interface LoanStore {
+  /**
+   * Saves a new loan. Throws UnknownMemberError if the member does not exist, then
+   * UnknownActorError if createdById is not a user. Values are saved as given: the amount, the
+   * member's status and the one-active-loan rule are the logic code's job (A-156).
+   */
+  create(input: NewLoan): Promise<LoanRecord>;
+  findById(id: string): Promise<LoanRecord | null>;
+  /** Loans of one member, oldest first. Equal times are in no fixed order. Returns copies. */
+  listByMember(memberId: string): Promise<LoanRecord[]>;
+}
+
 export interface Store {
   users: UserStore;
   audit: AuditStore;
@@ -379,6 +418,7 @@ export interface Store {
   members: MemberStore;
   payments: PaymentStore;
   expenses: ExpenseStore;
+  loans: LoanStore;
   /**
    * Runs fn with a store bound to one transaction. If fn returns, every write inside it is saved.
    * If fn throws, every write inside it is undone and the same error is thrown again.

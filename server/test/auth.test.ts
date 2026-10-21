@@ -35,7 +35,7 @@ function withSpy(base: Store) {
       listByActor: (id) => base.audit.listByActor(id),
       list: (q) => base.audit.list(q),
     },
-    refreshTokens: base.refreshTokens, members: base.members, payments: base.payments, expenses: base.expenses, transaction: base.transaction,
+    refreshTokens: base.refreshTokens, members: base.members, payments: base.payments, expenses: base.expenses, loans: base.loans, transaction: base.transaction,
   };
   return { store, appended };
 }
@@ -56,7 +56,7 @@ async function setup(over: { role?: "STAFF" | "SUPER_ADMIN" } = {}) {
 function asInactive(store: Store): Store {
   return {
     audit: store.audit,
-    refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, transaction: store.transaction,
+    refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, loans: store.loans, transaction: store.transaction,
     users: {
       ...store.users,
       findByEmail: async (email) => {
@@ -239,7 +239,7 @@ describe("authenticate: audit rules", () => {
         listByActor: store.audit.listByActor,
         list: store.audit.list,
       },
-      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, transaction: store.transaction,
+      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, loans: store.loans, transaction: store.transaction,
     };
     await expect(authenticate(broken, EMAIL, PASSWORD)).rejects.toThrow("audit down");
   });
@@ -255,7 +255,7 @@ describe("authenticate: audit rules", () => {
         listByActor: store.audit.listByActor,
         list: store.audit.list,
       },
-      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, transaction: store.transaction,
+      refreshTokens: store.refreshTokens, members: store.members, payments: store.payments, expenses: store.expenses, loans: store.loans, transaction: store.transaction,
     };
     await expect(authenticate(broken, EMAIL, "wrong-password-123")).rejects.toThrow("audit down");
   });

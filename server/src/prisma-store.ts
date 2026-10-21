@@ -10,6 +10,7 @@ import {
   formatMembershipId,
   type AuditRecord,
   type ExpenseRecord,
+  type LoanRecord,
   type PaymentMethod,
   type PaymentRecord,
   type LockoutState,
@@ -79,6 +80,19 @@ const toExpense = (r: ExpenseRow): ExpenseRecord => ({
   createdAt: r.createdAt,
   deletedAt: r.deletedAt,
   deletedById: r.deletedById,
+});
+
+/** A Loan row as the database holds it. */
+type LoanRow = Omit<LoanRecord, "principal"> & { principalKobo: bigint };
+
+const toLoan = (r: LoanRow): LoanRecord => ({
+  id: r.id,
+  memberId: r.memberId,
+  principal: r.principalKobo,
+  interestNote: r.interestNote,
+  notes: r.notes,
+  createdById: r.createdById,
+  createdAt: r.createdAt,
 });
 
 function hasCode(e: unknown, code: string): boolean {
@@ -439,6 +453,42 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toExpense);
+      },
+    },
+    loans: {
+      async create(input) {
+        // Read the member, then the creator, so the error order is the same as in memory (A-156).
+        const member = await prisma.member.findUnique({
+          where: { id: input.memberId },
+          select: { id: true },
+        });
+        if (member === null) throw new UnknownMemberError(input.memberId);
+        const actor = await prisma.user.findUnique({
+          where: { id: input.createdById },
+          select: { id: true },
+        });
+        if (actor === null) throw new UnknownActorError(input.createdById);
+        const row = await prisma.loan.create({
+          data: {
+            memberId: input.memberId,
+            principalKobo: input.principal,
+            interestNote: input.interestNote ?? "",
+            notes: input.notes ?? "",
+            createdById: input.createdById,
+          },
+        });
+        return toLoan(row);
+      },
+      async findById(id) {
+        const row = await prisma.loan.findUnique({ where: { id } });
+        return row ? toLoan(row) : null;
+      },
+      async listByMember(memberId) {
+        const rows = await prisma.loan.findMany({
+          where: { memberId },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toLoan);
       },
     },
     refreshTokens: {

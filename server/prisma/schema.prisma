@@ -1,5 +1,6 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
-// stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2).
+// stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2),
+// loans (step 5.3).
 // Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -49,6 +50,7 @@ model User {
   payments         Payment[]
   expenses         Expense[]      @relation("ExpenseCreatedBy")
   deletedExpenses  Expense[]      @relation("ExpenseDeletedBy")
+  loans            Loan[]
 }
 
 model AuditLog {
@@ -94,6 +96,7 @@ model Member {
   createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt   DateTime     @default(now())
   payments    Payment[]
+  loans       Loan[]
 
   @@index([createdById])
 }
@@ -144,7 +147,7 @@ model Expense {
   // The free text for "Others" (DR-11). Empty for other categories.
   narration   String        @default("")
   // The loan this expense pays out (DR-10). At most one expense per loan (A-148).
-  // No foreign key yet: the Loan table comes at step 5.3 (A-151).
+  // No foreign key yet: it comes at step 5.3b (A-151).
   loanId      String?       @unique
   // The user who recorded the expense (DR-15).
   createdById String
@@ -156,4 +159,24 @@ model Expense {
 
   @@index([createdById])
   @@index([createdAt])
+}
+
+// A loan given to a member (D-54). No repaid or outstanding amount is stored: both are worked out
+// on read from the Loan Repaid lines (D-17, A-144). No update or delete exists (OQ-16).
+model Loan {
+  id            String   @id @default(uuid())
+  memberId      String
+  member        Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  // Whole kobo (D-15).
+  principalKobo BigInt
+  // Information only, no formula (D-02, A-146).
+  interestNote  String   @default("")
+  notes         String   @default("")
+  // The user who gave the loan (DR-15).
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now())
+
+  @@index([memberId])
+  @@index([createdById])
 }

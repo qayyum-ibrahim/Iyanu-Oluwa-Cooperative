@@ -11,6 +11,8 @@ import {
   type AuditRecord,
   type ExpenseRecord,
   type ExpenseStore,
+  type LoanRecord,
+  type LoanStore,
   type PaymentRecord,
   type PaymentStore,
   type LockoutState,
@@ -35,6 +37,7 @@ const copyExpense = (e: ExpenseRecord): ExpenseRecord => ({
   createdAt: new Date(e.createdAt),
   deletedAt: copyDate(e.deletedAt),
 });
+const copyLoan = (l: LoanRecord): LoanRecord => ({ ...l, createdAt: new Date(l.createdAt) });
 const copyUser = (u: UserRecord): UserRecord => ({
   ...u,
   createdAt: new Date(u.createdAt),
@@ -64,6 +67,7 @@ export function createMemoryStore(): Store {
   const memberRows: MemberRecord[] = [];
   const paymentRows: PaymentRecord[] = [];
   const expenseRows: ExpenseRecord[] = [];
+  const loanRows: LoanRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
   function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
@@ -85,6 +89,7 @@ export function createMemoryStore(): Store {
       members: memberRows.map((m) => copyMember(m)),
       payments: paymentRows.map((p) => copyPayment(p)),
       expenses: expenseRows.map((e) => copyExpense(e)),
+      loans: loanRows.map((l) => copyLoan(l)),
       tokens: [...tokens.entries()].map(([id, t]) => [id, copyToken(t)] as const),
     };
   }
@@ -103,6 +108,8 @@ export function createMemoryStore(): Store {
     paymentRows.push(...s.payments);
     expenseRows.length = 0;
     expenseRows.push(...s.expenses);
+    loanRows.length = 0;
+    loanRows.push(...s.loans);
     tokens.clear();
     for (const [id, t] of s.tokens) tokens.set(id, t);
   }
@@ -348,6 +355,36 @@ export function createMemoryStore(): Store {
           return rows
             .filter((e) => query.createdById === undefined || e.createdById === query.createdById)
             .map(copyExpense);
+        },
+      };
+    })(),
+    loans: ((): LoanStore => {
+      const rows = loanRows;
+      return {
+        async create(input) {
+          // No await in this method, so the checks and the save cannot be interleaved.
+          if (!memberRows.some((m) => m.id === input.memberId)) {
+            throw new UnknownMemberError(input.memberId);
+          }
+          if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          const record: LoanRecord = {
+            id: randomUUID(),
+            memberId: input.memberId,
+            principal: input.principal,
+            interestNote: input.interestNote ?? "",
+            notes: input.notes ?? "",
+            createdById: input.createdById,
+            createdAt: new Date(),
+          };
+          rows.push(record);
+          return copyLoan(record);
+        },
+        async findById(id) {
+          const found = rows.find((l) => l.id === id);
+          return found ? copyLoan(found) : null;
+        },
+        async listByMember(memberId) {
+          return rows.filter((l) => l.memberId === memberId).map(copyLoan);
         },
       };
     })(),

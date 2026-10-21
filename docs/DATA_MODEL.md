@@ -1,5 +1,5 @@
 # Data model
-Last updated: step 4.5. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
+Last updated: step 5.3. Schema file: `server/prisma/schema.prisma`. Database: SQLite for development (A-04).
 
 ## Conventions
 - Money columns: `BigInt`, whole kobo (D-15).
@@ -19,5 +19,8 @@ Last updated: step 4.5. Schema file: `server/prisma/schema.prisma`. Database: SQ
 | Payment | id, memberId, method (CASH or BANK_TRANSFER), totalKobo (BigInt), idempotencyKey (nullable), requestHash (nullable), createdById, createdAt | Step 4.2, D-44; key columns added in 4.5 (D-48). Append-only. Unique on (createdById, idempotencyKey); old rows and any payment saved without a key have both columns empty. A member or user with payments cannot be deleted. |
 | PaymentLine | id, paymentId, position, category (text), amountKobo (BigInt) | Step 4.2. Unique on (paymentId, position). The lines add up to the payment total; the logic code checks it (DR-02). |
 
+| Expense | id, category (text), amountKobo (BigInt), method (CASH or BANK_TRANSFER), description, narration, loanId (nullable, unique), createdById, createdAt, deletedAt, deletedById | Step 5.2, D-55. Soft-delete only (D-10). `loanId` has no foreign key until 5.3b (A-151, A-157). |
+| Loan | id, memberId, principalKobo (BigInt), interestNote, notes, createdById, createdAt | Step 5.3, D-57. No stored repaid, outstanding or status (D-17, A-144). No update or delete (OQ-16). A member or user with loans cannot be deleted. |
+
 ## Not yet modelled
-Loans, expenses, balances. See PHASE_PLAN.md.
+`PaymentLine.loanId` (5.3b), balances. See PHASE_PLAN.md.

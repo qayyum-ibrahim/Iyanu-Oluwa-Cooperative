@@ -9,13 +9,12 @@ docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/prisma/schema.prisma
 server/prisma/migrations/20261021090000_expenses/migration.sql
+server/prisma/migrations/20261021120000_loans/migration.sql
 server/src/store.ts
 server/src/memory-store.ts
 server/src/prisma-store.ts
-server/test/helpers/store-contract.ts
+server/src/payments.ts
 server/test/helpers/expenses-contract.ts
 server/test/helpers/payments-contract.ts
+server/test/helpers/loans-contract.ts
 server/test/db.test.ts
-server/test/auth.test.ts
-server/test/sessions.test.ts
-server/test/auth-routes.test.ts

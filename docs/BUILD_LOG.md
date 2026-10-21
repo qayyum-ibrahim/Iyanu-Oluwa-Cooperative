@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.3 (size M), 2026-10-21: loan table and store (D-57)
+
+**Works (verified in this session):** `Loan` model in `schema.prisma` (relations to `Member` and `User`, `onDelete: Restrict`, indexes on `memberId` and `createdById`) and migration `20261021120000_loans` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `LoanRecord`, `NewLoan` and `LoanStore` (`create`, `findById`, `listByMember`) in `store.ts`, both adapters; the memory transaction snapshot copies loans. New `test/helpers/loans-contract.ts`, 11 cases per adapter, including a rollback case that saves a loan first (the M16 lesson). Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `loans` (owner approved). `npm run check`: 39 files, 1163 passed, 0 failed, 56.16 s.
+**Stubbed:** nothing. No route uses the store.
+**Tests:** +22 (11 per adapter). Total 1163. The drift test passes with the new migration.
+**Not verified:** no break-on-purpose run yet (5.3c). The dev database does not have the `Loan` table until `npm run db:deploy` runs.
+**Found along the way:**
+1. Split: `PaymentLine.loanId` and the `Expense.loanId` foreign key moved to 5.3b, because each needs a store check so both adapters refuse an unknown loan alike, and the expenses contract must then use real loans (owner approved, A-157). PHASE_PLAN and A-151 updated.
+2. `DATA_MODEL.md` was stuck at step 4.5 (no Expense row). Fixed now, with the Loan row.
+3. TRACEABILITY R-10 said 11 expense cases per adapter; there are 12 since 5.2c. Fixed.
+4. New: D-57, A-156, A-157. The mirror needs D-57.
+
 ## Step 5.2c (size S), 2026-10-21: test closes the M16 gap (A-155)
 
 **Works (verified in this session):** one new case in `server/test/helpers/expenses-contract.ts`, "keeps the expenses saved before a transaction that throws": save one expense, then a transaction saves a second and throws; the list must hold only the first. No source change. `npm run check`: 39 files, 1141 passed, 0 failed, 59.10 s. Test committed first (`ad320e0`, owner approved), because the script needs a clean tree. Rerun of `node ~/Desktop/mutate-5.2b.mjs`: baselines 117 and 126; 45 mutations, 44 caught, 1 escaped (P3, unreachable, A-154), 0 errors, 0 timeouts, 0 not applied; M16 caught by the new case, M17 by both rollback cases; "files restored: yes"; `git status --short` empty.

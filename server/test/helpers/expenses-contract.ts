@@ -180,5 +180,18 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       ).rejects.toThrow("stop");
       expect(await store.expenses.list({ createdById: u.id })).toEqual([]);
     });
+
+    it("keeps the expenses saved before a transaction that throws", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-tx-keep");
+      const before = await store.expenses.create(expense(u.id, { description: "Before" }));
+      await expect(
+        store.transaction(async (tx) => {
+          await tx.expenses.create(expense(u.id, { description: "Inside" }));
+          throw new Error("stop");
+        }),
+      ).rejects.toThrow("stop");
+      expect(await store.expenses.list({ createdById: u.id })).toEqual([before]);
+    });
   });
 }

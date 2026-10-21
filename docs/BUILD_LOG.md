@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.6b (size S), 2026-10-21: break-on-purpose for `listLoans` and `GET /loans` (5.6, D-63)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.6b.mjs` (not in git; `--dry`: all 32 find texts found once). Baselines 122 (`loans.test.ts` and `loans-routes.test.ts`) and 34 (`loans-routes.test.ts`). 32 mutations: 25 in `listLoans` in `loans.ts` (G), 7 in the GET route in `loans-routes.ts` (R). 30 caught, 2 escaped (G12, R2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1333 passed, 0 failed, 72.80 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added. Total 1333.
+**Not verified:** no live check (the script has no loan list checks).
+**Found along the way:**
+1. STATUS still said 5.6 was not committed; `42675d7` was HEAD and `origin/main` pointed to it. Fixed.
+2. G12 (early empty return removed) and R2 (the `loans.view` guard removed from the GET route) are equivalent, read from the code (A-168): without loans the loops run over nothing and give `[]`; `listLoans` checks `loans.view` itself and answers the same 403 `{ error: "forbidden" }`, and the GET route reads no body.
+3. Caught on purpose: money shown (repaid, outstanding, the ₦0 and 1 kobo status edges), DR-13 visibility (Staff check removed, reversed, on the wrong role, answering 403), the expense lookup across lenders, order, Fully Repaid history, no audit entry.
+4. No new decision; the mirror needs no change for this step.
+
 ## Step 5.6 (size S), 2026-10-21: one member's loans with repaid, outstanding and status (D-63)
 
 **Works (verified in this session):** `listLoans` in `loans.ts` and `GET /loans?memberId=<id>` in `loans-routes.ts` (permission `loans.view`). Oldest first, Fully Repaid loans kept (DR-08). Each loan: the `POST /loans` view plus `repaid`, `outstanding` and `status` (`ACTIVE` or `FULLY_REPAID`), worked out on read (A-144). DR-08 example: ₦300,000 loan, ₦20,000 repaid gives `"20000.00"` repaid, `"280000.00"` outstanding, `ACTIVE`. Staff see loans the Super Admin gave to their members; other members give 404. Nothing is written. `npx vitest run test/loans.test.ts test/loans-routes.test.ts`: 2 files, 122 passed. `npm run check`: 41 files, 1333 passed, 0 failed, 69.78 s.

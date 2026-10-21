@@ -278,6 +278,13 @@ describe("GET /expenses (5.8b)", () => {
     expect(res.body).toEqual({ error: "forbidden" });
   });
 
+  it("answers 200 to Staff with expenses.view but not expenses.create", async () => {
+    const { app, viewOnly, bearer } = await buildList();
+    const res = await request(app).get("/expenses").set("Authorization", bearer(viewOnly));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ expenses: [], total: "0.00" });
+  });
+
   it("answers 200 for Staff with only their expenses, the total, no-store and exact fields", async () => {
     const { app, admin, b, b1, b2, bearer } = await buildList();
     const res = await request(app).get(`/expenses?createdById=${admin.id}`).set("Authorization", bearer(b));

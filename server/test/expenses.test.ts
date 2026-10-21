@@ -644,6 +644,13 @@ describe("listExpenses: who sees what (DR-13)", () => {
     });
   });
 
+  it("keeps the store's order, oldest first, without sorting or reversing it", async () => {
+    const { store, admin } = await buildList();
+    const fromStore = (await store.expenses.list({})).map((e) => e.id);
+    expect(fromStore).toHaveLength(3);
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).expenses.map((e) => e.id)).toEqual(fromStore);
+  });
+
   it("writes no audit entry", async () => {
     const { store, admin, b } = await buildList();
     const before = (await store.audit.listByActor(b.id)).length;
@@ -706,6 +713,17 @@ describe("listExpenses: filters (D-66)", () => {
       { createdById: b.id, method: "CASH" },
       {},
     ]);
+  });
+
+  it("accepts a createdById of exactly 100 characters", async () => {
+    const { store: inner, admin } = await buildList();
+    const { store, seen } = spying(inner);
+    const longest = "u".repeat(100);
+    expect(mustList(await listExpenses(store, actorOf(admin), { createdById: longest }))).toEqual({
+      expenses: [],
+      total: "0.00",
+    });
+    expect(seen).toEqual([{ createdById: longest }]);
   });
 
   it.each([

@@ -35,5 +35,5 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.8 (M) Expense list with filters.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).
 - 5.2b (S) Break-on-purpose for the expenses store and migration. Added at 5.2. Done: 43 of 45 caught.
-- 5.2c (S) One contract case for the M16 gap (A-155): a rollback keeps the expenses saved before it. Then rerun `mutate-5.2b.mjs`. Added at 5.2b.
+- 5.2c (S) One contract case for the M16 gap (A-155): a rollback keeps the expenses saved before it. Then rerun `mutate-5.2b.mjs`. Added at 5.2b. Done: 44 of 45 caught.
 Exit "totals reconcile" is defined at 5.8.

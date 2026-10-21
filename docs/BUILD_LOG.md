@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 5.2c (size S), 2026-10-21: test closes the M16 gap (A-155)
+
+**Works (verified in this session):** one new case in `server/test/helpers/expenses-contract.ts`, "keeps the expenses saved before a transaction that throws": save one expense, then a transaction saves a second and throws; the list must hold only the first. No source change. `npm run check`: 39 files, 1141 passed, 0 failed, 59.10 s. Test committed first (`ad320e0`, owner approved), because the script needs a clean tree. Rerun of `node ~/Desktop/mutate-5.2b.mjs`: baselines 117 and 126; 45 mutations, 44 caught, 1 escaped (P3, unreachable, A-154), 0 errors, 0 timeouts, 0 not applied; M16 caught by the new case, M17 by both rollback cases; "files restored: yes"; `git status --short` empty.
+**Stubbed:** nothing.
+**Tests:** +2 (one per adapter). Total 1141.
+**Not verified:** whether the other tables' rollback tests have the same blind spot (no rows before the transaction). The live check was not run (no route uses expenses; still 120 from 4.8).
+**Found along the way:**
+1. STATUS said `1d2e10f` was not pushed and the 5.2b commit was waiting for approval. `git status -sb` showed `main...origin/main` with `c5f4a38` on top, so both were already pushed. Fixed in STATUS.
+2. There is no `mirror/` folder in the repo, so whether the mirror has D-52 to D-56 cannot be checked from here.
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+
 ## Step 5.2b (size S), 2026-10-21: break-on-purpose for the expenses store and migration (A-154, A-155)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.2b.mjs` (not in git), from the repo root. M1 to M17 change `memory-store.ts` (tests `memory-store.test.ts`); P1 to P14 change `prisma-store.ts`, E1 to E9 the migration SQL, C1 to C5 `schema.prisma` (tests `prisma-store.test.ts` and `db.test.ts`; C runs `prisma generate` and the typecheck first). Dry run first: every find text matched once. Baselines 116 and 125 passed. Result: 45 mutations, 43 caught, 2 escaped (M16, P3), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. The drift test caught all of E1 to E9 and C1, C3 to C5; C2 also failed the typecheck (4 errors). `npm run check` afterwards: 39 files, 1139 passed, 0 failed, 58.86 s.

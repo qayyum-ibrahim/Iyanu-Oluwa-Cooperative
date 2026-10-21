@@ -1,4 +1,4 @@
-// Loan routes (step 5.4, idempotency key in 5.4c). Thin: all rules live in loans.ts.
+// Loan routes (step 5.4, idempotency key in 5.4c, list in 5.6). Thin: all rules live in loans.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -10,7 +10,13 @@ import {
   sendUnauthorized,
   type GuardDeps,
 } from "./guards.js";
-import { disburseLoan, type LoanActor, type LoanFailure, type LoanFailureResult } from "./loans.js";
+import {
+  disburseLoan,
+  listLoans,
+  type LoanActor,
+  type LoanFailure,
+  type LoanFailureResult,
+} from "./loans.js";
 
 const STATUS: Record<LoanFailure, number> = {
   forbidden: 403,
@@ -72,6 +78,20 @@ export function createLoansRouter(deps: GuardDeps): Router {
       res.status(201).json({ loan: result.value });
     },
   );
+
+  router.get("/", requirePermission("loans.view"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const result = await listLoans(deps.store, actor, { memberId: req.query["memberId"] });
+    if (!result.ok) {
+      sendFailure(res, result);
+      return;
+    }
+    res.status(200).json({ loans: result.value });
+  });
 
   return router;
 }

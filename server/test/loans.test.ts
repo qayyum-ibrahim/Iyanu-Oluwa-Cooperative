@@ -3,9 +3,12 @@ import { subjectOf } from "../src/guards.js";
 import {
   disburseLoan,
   isLoanActive,
+  listLoans,
   loanOutstanding,
   LOAN_TEXT_MAX,
   type LoanActor,
+  type LoanListResult,
+  type LoanListView,
   type LoanResult,
   type LoanView,
 } from "../src/loans.js";
@@ -25,9 +28,10 @@ async function build(store: Store = createMemoryStore()) {
       permissions,
     });
   const admin = await make("admin", "SUPER_ADMIN", []);
-  const a = await make("staff-a", "STAFF", ["loans.disburse"]);
-  const b = await make("staff-b", "STAFF", ["loans.disburse"]);
+  const a = await make("staff-a", "STAFF", ["loans.disburse", "loans.view"]);
+  const b = await make("staff-b", "STAFF", ["loans.disburse", "loans.view"]);
   const createOnly = await make("create-only", "STAFF", ["loans.create", "members.view"]);
+  const disburseOnly = await make("disburse-only", "STAFF", ["loans.disburse"]);
   const addMember = (createdById: string, fullName: string) =>
     store.members.create({
       fullName,
@@ -45,7 +49,7 @@ async function build(store: Store = createMemoryStore()) {
       lines: [{ category: "Loan Repaid", amount, loanId }],
       createdById,
     });
-  return { store, admin, a, b, createOnly, addMember, repay };
+  return { store, admin, a, b, createOnly, disburseOnly, addMember, repay };
 }
 
 const actorOf = (u: UserRecord): LoanActor => ({ id: u.id, subject: subjectOf(u) });
@@ -64,6 +68,11 @@ const loanBody = (memberId: unknown, over: Record<string, unknown> = {}) => ({
 });
 
 function must(r: LoanResult): LoanView {
+  if (!r.ok) throw new Error(`unexpected failure: ${r.reason}`);
+  return r.value;
+}
+
+function mustList(r: LoanListResult): LoanListView[] {
   if (!r.ok) throw new Error(`unexpected failure: ${r.reason}`);
   return r.value;
 }
@@ -746,6 +755,146 @@ describe("disburseLoan: idempotency key (D-60)", () => {
   });
 });
 
+describe("listLoans (step 5.6)", () => {
+  it("refuses Staff without loans.view (loans.create or loans.disburse is not enough)", async () => {
+    const { store, createOnly, disburseOnly, addMember } = await build();
+    const m1 = await addMember(createOnly.id, "C One");
+    const m2 = await addMember(disburseOnly.id, "D One");
+    expect(await listLoans(store, actorOf(createOnly), { memberId: m1.id })).toEqual({ ok: false, reason: "forbidden" });
+    expect(await listLoans(store, actorOf(disburseOnly), { memberId: m2.id })).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("checks the permission before the input", async () => {
+    const { store, createOnly } = await build();
+    expect(await listLoans(store, actorOf(createOnly), {})).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("refuses a missing or bad member id", async () => {
+    const { store, a } = await build();
+    expect(await listLoans(store, actorOf(a), {})).toEqual({ ok: false, reason: "invalid_input", code: "missing_member_id" });
+    for (const memberId of ["", 5, null, ["x"]]) {
+      expect(await listLoans(store, actorOf(a), { memberId })).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "invalid_member_id",
+      });
+    }
+  });
+
+  it("answers not_found for an unknown member and for another user's member", async () => {
+    const { store, a, b, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    expect(await listLoans(store, actorOf(a), { memberId: "no-such-member" })).toEqual({ ok: false, reason: "not_found" });
+    expect(await listLoans(store, actorOf(b), { memberId: m.id })).toEqual({ ok: false, reason: "not_found" });
+  });
+
+  it("gives an empty list for a member with no loans", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await listLoans(store, actorOf(a), { memberId: m.id })).toEqual({ ok: true, value: [] });
+  });
+
+  it("shows the DR-08 example: ₦300,000 loan, ₦20,000 repaid, ₦280,000 outstanding, Active", async () => {
+    const { store, a, addMember, repay } = await build();
+    const m = await addMember(a.id, "A One");
+    const given = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { interestNote: "5% flat", notes: "rent" })));
+    await repay(m.id, given.id, 2_000_000n, a.id);
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))).toEqual([
+      { ...given, repaid: "20000.00", outstanding: "280000.00", status: "ACTIVE" },
+    ]);
+  });
+
+  it("is Active at 1 kobo outstanding and Fully Repaid at ₦0", async () => {
+    const { store, a, addMember, repay } = await build();
+    const m = await addMember(a.id, "A One");
+    const given = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    await repay(m.id, given.id, 29_999_999n, a.id);
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))[0]).toMatchObject({
+      repaid: "299999.99",
+      outstanding: "0.01",
+      status: "ACTIVE",
+    });
+    await repay(m.id, given.id, 1n, a.id);
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))[0]).toMatchObject({
+      repaid: "300000.00",
+      outstanding: "0.00",
+      status: "FULLY_REPAID",
+    });
+  });
+
+  it("keeps a Fully Repaid loan in history, oldest first, and counts each loan's own lines only", async () => {
+    const { store, a, addMember, repay } = await build();
+    const m = await addMember(a.id, "A One");
+    const first = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    await repay(m.id, first.id, 30_000_000n, a.id);
+    const second = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { principal: "50000" })));
+    await repay(m.id, second.id, 1_000_000n, a.id);
+    await store.payments.create({
+      memberId: m.id,
+      method: "CASH",
+      total: 500_000n,
+      lines: [{ category: "Loan Interest", amount: 500_000n }],
+      createdById: a.id,
+    });
+    const list = mustList(await listLoans(store, actorOf(a), { memberId: m.id }));
+    expect(list.map((l) => [l.id, l.expenseId, l.principal, l.repaid, l.outstanding, l.status])).toEqual([
+      [first.id, first.expenseId, "300000.00", "300000.00", "0.00", "FULLY_REPAID"],
+      [second.id, second.expenseId, "50000.00", "10000.00", "40000.00", "ACTIVE"],
+    ]);
+  });
+
+  it("lets Staff see a loan the Super Admin gave to their member, with its expense", async () => {
+    const { store, admin, a, addMember, repay } = await build();
+    const m = await addMember(a.id, "A One");
+    const first = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    await repay(m.id, first.id, 30_000_000n, a.id);
+    const second = must(await disburseLoan(store, actorOf(admin), loanBody(m.id, { principal: "1000" })));
+    const list = mustList(await listLoans(store, actorOf(a), { memberId: m.id }));
+    expect(list.map((l) => [l.id, l.expenseId, l.createdById])).toEqual([
+      [first.id, first.expenseId, a.id],
+      [second.id, second.expenseId, admin.id],
+    ]);
+  });
+
+  it("lets the Super Admin see the loans of a Staff member, and lists an Inactive member's loans", async () => {
+    const { store, admin, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const given = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    await store.members.setStatus(m.id, "INACTIVE");
+    expect(mustList(await listLoans(store, actorOf(admin), { memberId: m.id })).map((l) => l.id)).toEqual([given.id]);
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id })).map((l) => l.id)).toEqual([given.id]);
+  });
+
+  it("does not show another member's loans", async () => {
+    const { store, a, addMember } = await build();
+    const m1 = await addMember(a.id, "A One");
+    const m2 = await addMember(a.id, "A Two");
+    const given = must(await disburseLoan(store, actorOf(a), loanBody(m1.id)));
+    must(await disburseLoan(store, actorOf(a), loanBody(m2.id)));
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m1.id })).map((l) => l.id)).toEqual([given.id]);
+  });
+
+  it("writes nothing, not even an audit entry", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    mustList(await listLoans(store, actorOf(a), { memberId: m.id }));
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("fails loudly when a saved loan has no Loan expense", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await store.loans.create({ memberId: m.id, principal: 100n, createdById: a.id });
+    await expect(listLoans(store, actorOf(a), { memberId: m.id })).rejects.toThrow(
+      "The Loan expense of a saved loan is missing",
+    );
+  });
+});
+
 describe("disburseLoan on the Prisma store (real SQLite)", () => {
   let tmp: TempDb;
   let store: Store;
@@ -809,5 +958,15 @@ describe("disburseLoan on the Prisma store (real SQLite)", () => {
     const again = await disburseLoan(store, actorOf(a), body);
     expect(again).toMatchObject({ ok: true, replayed: true });
     expect(must(again)).toEqual(first);
+  });
+
+  it("lists a loan with repaid, outstanding and status, read back from the database", async () => {
+    const { a, addMember, repay } = await build(store);
+    const m = await addMember(a.id, "P Six");
+    const given = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    await repay(m.id, given.id, 2_000_000n, a.id);
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))).toEqual([
+      { ...given, repaid: "20000.00", outstanding: "280000.00", status: "ACTIVE" },
+    ]);
   });
 });

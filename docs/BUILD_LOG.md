@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.6 (size S), 2026-10-21: one member's loans with repaid, outstanding and status (D-63)
+
+**Works (verified in this session):** `listLoans` in `loans.ts` and `GET /loans?memberId=<id>` in `loans-routes.ts` (permission `loans.view`). Oldest first, Fully Repaid loans kept (DR-08). Each loan: the `POST /loans` view plus `repaid`, `outstanding` and `status` (`ACTIVE` or `FULLY_REPAID`), worked out on read (A-144). DR-08 example: ₦300,000 loan, ₦20,000 repaid gives `"20000.00"` repaid, `"280000.00"` outstanding, `ACTIVE`. Staff see loans the Super Admin gave to their members; other members give 404. Nothing is written. `npx vitest run test/loans.test.ts test/loans-routes.test.ts`: 2 files, 122 passed. `npm run check`: 41 files, 1333 passed, 0 failed, 69.78 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No list of all loans (A-167). No read by id.
+**Tests:** +20 (`loans.test.ts` +14: 13 on the memory store, 1 on real SQLite; `loans-routes.test.ts` +7, minus the old 404 case for `GET /loans`). Total 1333.
+**Not verified:** no break-on-purpose run yet (5.6b). No live check (the script has no loan list checks). The reads are not in one transaction, so a payment saved during a list may or may not be counted (A-167).
+**Found along the way:**
+1. STATUS still said 5.5b was not committed; `7192645` was HEAD and `origin/main` pointed to it. Fixed.
+2. A list of all loans needs a new store method in both adapters and the contract, outside this step's files. The step follows `GET /payments` instead: `memberId` is required (A-167).
+3. Staff `a` and `b` in both loan test files now also hold `loans.view`; a new `disburse-only` user checks the 403.
+4. New decision D-63: the mirror needs it.
+
 ## Step 5.5b (size S), 2026-10-21: break-on-purpose for the Loan Repaid effect (5.5, D-62)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.5b.mjs` (not in git; `--dry` checks the find texts: all 19 found once). Baselines 213 (`payments.test.ts`, `payments-routes.test.ts`, `payments-idempotency.test.ts`, `payment-sms.test.ts`, `loans.test.ts`) and 22 (`payments-routes.test.ts`). 19 mutations: 17 in `payments.ts` (P), 2 in `payments-routes.ts` (R). 17 caught, 2 escaped (P15, P16), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1313 passed, 0 failed, 72.18 s.

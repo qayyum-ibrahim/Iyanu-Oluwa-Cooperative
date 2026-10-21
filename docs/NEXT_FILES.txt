@@ -7,7 +7,5 @@ docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/src/loans.ts
 server/src/loans-routes.ts
-server/src/store.ts
-server/src/permissions.ts
 server/test/loans.test.ts
 server/test/loans-routes.test.ts

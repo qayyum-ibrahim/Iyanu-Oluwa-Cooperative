@@ -36,7 +36,8 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.4e (S, proposed at 5.4d) One test for the replay expense lookup (A-164), then rerun L20. Done: L20 caught.
 - 5.5 (M) Loan Repaid effect in `createPayment`: lines linked to the active loan; no active loan or more than outstanding is refused (DR-08, DR-09, A-145). Done (D-62).
 - 5.5b (S) Break-on-purpose for 5.5 (`payments.ts` Loan Repaid code, the two route codes). Done: 17 of 19 caught (P15, P16 equivalent as tested, A-166).
-- 5.6 (S) `GET /loans` and one member's loans, with outstanding and status.
+- 5.6 (S) `GET /loans` and one member's loans, with outstanding and status. Done (D-63): one member only, `memberId` required (A-167).
+- 5.6b (S, proposed at 5.6) Break-on-purpose for `listLoans` and `GET /loans`.
 - 5.7 (M) `POST /expenses` (only categories that can be picked by hand).
 - 5.8 (M) Expense list with filters.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).

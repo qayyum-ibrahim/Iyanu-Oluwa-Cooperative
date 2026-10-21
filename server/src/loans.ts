@@ -1,4 +1,4 @@
-// Loan logic (step 5.4, idempotency key in 5.4c; D-54, D-59, D-60, DR-08, DR-10, DR-13, DR-14,
+// Loan logic (step 5.4, idempotency key in 5.4c, list in 5.6; D-54, D-59, D-60, DR-08, DR-10, DR-13, DR-14,
 // DR-15). Rules over the Store: no HTTP here.
 // Giving a loan needs loans.disburse (A-149). The key lookup, the member checks, the
 // one-active-loan check, the loan, its one Loan expense and the audit entry run inside one store
@@ -240,4 +240,71 @@ export async function disburseLoan(
     if (e instanceof DuplicateLoanKeyError) return attempt();
     throw e;
   }
+}
+
+/** ACTIVE while anything is outstanding, FULLY_REPAID at ₦0 (DR-08). */
+export type LoanStatus = "ACTIVE" | "FULLY_REPAID";
+
+/** A loan in a list, with what is worked out on read (A-144). Amounts as in LoanView. */
+export interface LoanListView extends LoanView {
+  repaid: string;
+  outstanding: string;
+  status: LoanStatus;
+}
+
+export interface LoanListInput {
+  memberId?: unknown;
+}
+
+export type LoanListResult = { ok: true; value: LoanListView[] } | LoanFailureResult;
+
+/**
+ * The loans of one member, oldest first (step 5.6), Fully Repaid ones too. Read only: nothing is
+ * written, not even an audit entry (as A-134).
+ * Order: permission (loans.view), member id, find the member, check who may see it. Staff see
+ * the loans of members they recorded, whoever gave the loan (A-133, A-147). An unknown member and
+ * a member Staff may not see both answer not_found. An Inactive member's loans are listed too.
+ */
+export async function listLoans(
+  store: Store,
+  actor: LoanActor,
+  input: LoanListInput,
+): Promise<LoanListResult> {
+  if (!hasPermission(actor.subject, "loans.view")) return failure("forbidden");
+
+  const memberId = input.memberId;
+  if (memberId === undefined) return failure("invalid_input", "missing_member_id");
+  if (typeof memberId !== "string" || memberId.length === 0) {
+    return failure("invalid_input", "invalid_member_id");
+  }
+
+  const member = await store.members.findById(memberId);
+  if (member === null) return failure("not_found");
+  if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
+    return failure("not_found");
+  }
+
+  const loans = await store.loans.listByMember(member.id);
+  if (loans.length === 0) return { ok: true, value: [] };
+  const payments = await store.payments.listByMember(member.id);
+  // The Loan expense of each loan, looked up by the users who gave the loans.
+  const expenseIds = new Map<string, string>();
+  for (const creatorId of new Set(loans.map((l) => l.createdById))) {
+    for (const e of await store.expenses.list({ createdById: creatorId })) {
+      if (e.loanId !== null) expenseIds.set(e.loanId, e.id);
+    }
+  }
+
+  const value = loans.map((loan): LoanListView => {
+    const expenseId = expenseIds.get(loan.id);
+    if (expenseId === undefined) throw new Error("The Loan expense of a saved loan is missing");
+    const outstanding = loanOutstanding(loan, payments);
+    return {
+      ...toView(loan, member.membershipId, expenseId),
+      repaid: koboToNairaString(loan.principal - outstanding),
+      outstanding: koboToNairaString(outstanding),
+      status: outstanding > 0n ? "ACTIVE" : "FULLY_REPAID",
+    };
+  });
+  return { ok: true, value };
 }

@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.9d (size S), 2026-10-22: break-on-purpose for 5.9, 5.9b and 5.9c (A-178)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.9d.mjs` (not in git), built on the 5.8c harness. `--dry`: all 96 find texts found once. Baselines 218 (`expenses.test.ts` and `expenses-routes.test.ts`), 54 (routes), 331 (memory store and `expenses.test.ts`), 343 (Prisma store, db and `expenses.test.ts`). 96 mutations: 18 in `deleteExpense` (D), 31 in `updateExpense` (U), 5 in the shared `checkFields` (C), 13 in the DELETE and PUT routes (R), 8 in the memory `update` (UM), 7 in the memory `softDelete`, list filter and copy (DM), 9 in the Prisma `update` (UP), 5 in the Prisma `softDelete` and list filter (DP). Result: 89 caught, 7 escaped (D3, D4, U3, U5, U18, R3, UP8), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. Output kept in `~/Desktop/mutate-5.9d.out`. `npm run check` afterwards: 43 files, 1603 passed, 0 failed, 74.71 s, exit 0.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added (1603).
+**Not verified:** the reasons for the escapes are read from the code, not run (A-178).
+**Found along the way:**
+1. Three test gaps (A-178): U5 (no deleted check in `updateExpense`: a PUT with the same fields on a deleted expense would answer 200 through the no-change path), U18 (narration ignored in the no-change check: on an Others expense, a change to the narration alone would answer 200 and save nothing), UP8 (the Prisma empty `update` reads without `deletedAt: null`, so it would return a deleted expense instead of null; no caller sends an empty change). Proposed fix: 5.9e (S).
+2. Four equivalent escapes (A-178): D3 and U3 (id checks; an unknown or non-text id finds nothing on the memory store, as A-91), D4 (`softDelete` refuses a deleted expense itself and the answer is the same 404), R3 (DELETE guard; `deleteExpense` gives the same 403 first, and DELETE reads no body, as A-168).
+3. TRACEABILITY R-09 said the totals were not built (stale since 5.8b); fixed. A-152 is marked superseded by 5.8 and 5.9.
+
+---
+
 ## Step 5.9c (size M), 2026-10-21: PUT /expenses/:id (D-70, OQ-08, DR-12, DR-13, A-177)
 
 **Works (verified in this session):** `updateExpense` in `server/src/expenses.ts` and `PUT /expenses/:id` in `expenses-routes.ts` (200 `{ expense }`). Needs `expenses.edit` (403 first). The field checks of `createExpense` moved into one shared `checkFields`; PUT sends every field and gets the same codes. Unknown, empty or non-text id, a deleted expense and, for Staff, someone else's expense: 404 `not_found`. Loan-linked (`loanId` set, or category Loan): 409 `not_editable` `loan_linked`; Membership Withdrawal: 409 `not_editable` `pay_off`, also for the Super Admin. Lookup, `expenses.update` and audit entry `expense.updated` (old and new category, kobo amount and method; description and narration only as changed true or false) in one `store.transaction`; `update` returning null gives 404 and no audit entry. An edit that changes nothing writes nothing. A repeat of the first create with the same key returns the edited expense. 41 logic cases in `server/test/expenses.test.ts` (with 20 `it.each` rows; 3 on real SQLite) and 9 route cases in `server/test/expenses-routes.test.ts`; the old `it.each` "answers 404 to get and put /expenses/x" became one GET case. `npm run check`: typecheck and lint clean, 43 files, 1603 passed, 0 failed, 76.48 s, exit 0 (exit code captured from `npm run check` itself, output written to a scratch file).

@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 4.13b (size S), 2026-10-21: tests close the database schema gaps (A-143)
+
+**Works (verified in this session):** 4 new tests in `server/test/db.test.ts`, no source change. (1) Drift test: the temporary database built by `prisma migrate deploy` is compared with `schema.prisma` by `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code`; it must exit 0 (flags and exit codes from the installed Prisma 7.10.0 CLI help: empty 0, error 1, not empty 2). It runs first in the file, because the A-03 test adds a table. (2) A payment with an unknown member gives P2003. (3) A payment with an unknown creator gives P2003. (4) Two lines with the same position in one payment give P2002. The file alone: 11 passed, 6.83 s. `npm run check`: 38 files, 1103 passed, 0 failed, 66.03 s; no typecheck or lint error in the output. Tests committed first (`d64e7b2`, owner approved). Rerun of `node ~/Desktop/mutate-4.13.mjs`: baseline 114 passed; 24 mutations, 24 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "files restored: yes"; `git status --short` empty.
+**Stubbed:** nothing new.
+**Tests:** 4 new (1103 - 1099).
+**Not verified:** the drift test on Windows. The live check was not run (no source change; still 120 from 4.8).
+**Found along the way:**
+1. The shadow database page (https://www.prisma.io/docs/orm/v7/prisma-migrate/understanding-prisma-migrate/shadow-database) says `migrate diff --from-migrations` needs a shadow database. The test avoids it: the migrations are applied to a temporary file and that file is diffed (A-143).
+2. Prediction held and went further: the drift test alone catches every D and C mutation, including the six "equivalent" ones of 4.13 (D5 to D9, D12, D15, C5).
+3. No decision in this step, so DECISIONS and the mirror are unchanged.
+4. The `prisma-store.ts` comment that cites A-119 instead of A-121 is still unfixed.
+
 ## Step 4.13 (size M), 2026-10-20: break-on-purpose for step 1.4, the database schema (A-143)
 
 **Works (verified in this session):** Pre-check found that the test databases are built by `prisma migrate deploy` from the migration SQL, not from `schema.prisma`, which only shapes the generated client. Owner approved the method: mutate the migration SQL (D1 to D19) and `schema.prisma` (C1 to C5; each runs `prisma generate`, the typecheck and the tests). Script `~/Desktop/mutate-4.13.mjs` (not in git), tests `db.test.ts` and `prisma-store.test.ts`. Baseline 110 passed (15.6 s alone). Result: 24 mutations, 12 caught, 12 escaped, 0 errors; "files restored: yes"; `git status --short` empty. Caught: D1 (email unique), D2 and D3 (audit actor key and RESTRICT), D4 (token hash unique), D10 (member number unique), D11 (member creator key), D17 (idempotency unique), D18 and D19 (money columns as REAL: the exact-amount test fails), C1 and C2 (typecheck and tests), C4 (role default in the schema: the client sends it, so the db test fails). Escaped: D5, D6, D7, D8, D9, D12, D13, D14, D15, D16, C3, C5. `npm run check` afterwards: 38 files, 1099 passed, 0 failed, 55.43 s; no typecheck or lint error in the output. No source file changed; no leftover process.

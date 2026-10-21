@@ -49,6 +49,6 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.8d (S, proposed at 5.8c) Three tests for L6, L27 and R2 (A-174) in `expenses.test.ts` and `expenses-routes.test.ts`, then rerun those three. Done: full rerun 63 of 66 caught (T6, T7, R1 equivalent).
 - 5.9 (M) Store methods `expenses.update` and `expenses.softDelete` in both adapters; `list` leaves out soft-deleted rows (D-68). Split at start. Done.
 - 5.9b (M) `DELETE /expenses/:id` (permission `expenses.delete`): soft-delete with its audit entry in one transaction; Loan-linked and pay-off (Membership Withdrawal) expenses refused (DR-12). Done (D-69).
-- 5.9c (M) `PUT /expenses/:id` (permission `expenses.edit`, OQ-08 default): old values in the audit log; deleted and Loan-linked expenses not editable (to confirm at the step).
+- 5.9c (M) `PUT /expenses/:id` (permission `expenses.edit`, OQ-08 default): old values in the audit log; deleted, Loan-linked and pay-off expenses not editable. Done (D-70).
 - 5.9d (S) One break-on-purpose run for 5.9, 5.9b and 5.9c.
 Exit "totals reconcile" is defined at 5.8.

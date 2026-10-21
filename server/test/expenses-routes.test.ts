@@ -226,12 +226,9 @@ describe("POST /expenses: Idempotency-Key header (5.7c)", () => {
 });
 
 describe("expense routes that do not exist yet", () => {
-  it.each([
-    { method: "get" as const, path: "/expenses/x" },
-    { method: "put" as const, path: "/expenses/x" },
-  ])("answers 404 to $method $path (edit at 5.9c)", async ({ method, path }) => {
+  it("answers 404 to GET /expenses/x", async () => {
     const { app, admin, bearer } = await build();
-    const res = await request(app)[method](path).set("Authorization", bearer(admin));
+    const res = await request(app).get("/expenses/x").set("Authorization", bearer(admin));
     expect(res.status).toBe(404);
   });
 });
@@ -450,5 +447,152 @@ describe("DELETE /expenses/:id (5.9b)", () => {
     expect(payOffRes.body).toEqual({ error: "not_deletable", code: "pay_off" });
     expect(await store.expenses.findById(loanExpense.id)).toMatchObject({ deletedAt: null });
     expect(await store.expenses.findById(payOff.id)).toMatchObject({ deletedAt: null });
+  });
+});
+
+describe("PUT /expenses/:id (5.9c)", () => {
+  /** Staff f may record and edit; f and the Super Admin each record one expense. Fictional data only (D-08). */
+  async function buildEdit() {
+    const base = await build();
+    const f = await base.store.users.create({
+      email: "staff-f@example.test",
+      passwordHash: "not-a-real-hash",
+      displayName: "staff-f",
+      role: "STAFF",
+      permissions: ["expenses.create", "expenses.edit"],
+    });
+    const post = async (u: { id: string }) => {
+      const res = await request(base.app)
+        .post("/expenses").set("Idempotency-Key", newKey())
+        .set("Authorization", base.bearer(u))
+        .send(expenseBody());
+      expect(res.status).toBe(201);
+      return res.body.expense as { id: string; createdAt: string };
+    };
+    const f1 = await post(f);
+    const ad = await post(base.admin);
+    return { ...base, f, f1, ad };
+  }
+
+  const editBody = { category: "Asset Purchase", amount: "1500.75", method: "BANK_TRANSFER", description: "chairs" };
+
+  it("answers 401 without a token", async () => {
+    const { app, f1 } = await buildEdit();
+    const res = await request(app).put(`/expenses/${f1.id}`).send(editBody);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "unauthorized" });
+  });
+
+  it("answers 403 to Staff without expenses.edit, and changes nothing", async () => {
+    const { app, store, a, f1, bearer } = await buildEdit();
+    const res = await request(app).put(`/expenses/${f1.id}`).set("Authorization", bearer(a)).send(editBody);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+    expect(await store.expenses.findById(f1.id)).toMatchObject({ category: "Allowances", amount: 500050n });
+  });
+
+  it("answers 403, not 400, to a caller without the permission who sends malformed JSON", async () => {
+    const { app, a, f1, bearer } = await buildEdit();
+    const res = await request(app)
+      .put(`/expenses/${f1.id}`)
+      .set("Authorization", bearer(a))
+      .set("Content-Type", "application/json")
+      .send("{not json");
+    expect(res.status).toBe(403);
+  });
+
+  it("answers 200 for Staff editing their own expense: no-store, exact fields, one audit entry", async () => {
+    const { app, store, f, f1, bearer } = await buildEdit();
+    const res = await request(app).put(`/expenses/${f1.id}`).set("Authorization", bearer(f)).send(editBody);
+    expect(res.status).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.body).toEqual({
+      expense: {
+        id: f1.id,
+        category: "Asset Purchase",
+        amount: "1500.75",
+        method: "BANK_TRANSFER",
+        description: "chairs",
+        narration: "",
+        createdById: f.id,
+        createdAt: f1.createdAt,
+      },
+    });
+    expect((await store.audit.listByActor(f.id)).map((x) => x.action)).toEqual(["expense.created", "expense.updated"]);
+  });
+
+  it("shows the edit in GET /expenses and its total", async () => {
+    const { app, admin, f1, bearer } = await buildEdit();
+    expect((await request(app).put(`/expenses/${f1.id}`).set("Authorization", bearer(admin)).send(editBody)).status).toBe(200);
+    const list = await request(app).get("/expenses").set("Authorization", bearer(admin));
+    expect(list.body.total).toBe("6501.25");
+  });
+
+  it("answers 400 invalid_input with the code for a bad body, and for a body that is not an object", async () => {
+    const { app, f, f1, bearer } = await buildEdit();
+    const put = (b: unknown) => request(app).put(`/expenses/${f1.id}`).set("Authorization", bearer(f)).send(b as object);
+    const sys = await put({ ...editBody, category: "Loan" });
+    expect(sys.status).toBe(400);
+    expect(sys.body).toEqual({ error: "invalid_input", code: "system_only" });
+    const list = await put([editBody]);
+    expect(list.status).toBe(400);
+    expect(list.body).toEqual({ error: "invalid_input", code: "unknown_category" });
+  });
+
+  it("answers 404 not_found to Staff for the Super Admin's expense, an unknown id and a deleted expense", async () => {
+    const { app, store, f, admin, f1, ad, bearer } = await buildEdit();
+    const put = (id: string) => request(app).put(`/expenses/${id}`).set("Authorization", bearer(f)).send(editBody);
+    const other = await put(ad.id);
+    expect(other.status).toBe(404);
+    expect(other.body).toEqual({ error: "not_found" });
+    expect(await store.expenses.findById(ad.id)).toMatchObject({ category: "Allowances" });
+    expect((await put("no-such-expense")).body).toEqual({ error: "not_found" });
+    expect((await request(app).delete(`/expenses/${f1.id}`).set("Authorization", bearer(admin))).status).toBe(204);
+    const deleted = await put(f1.id);
+    expect(deleted.status).toBe(404);
+    expect(deleted.body).toEqual({ error: "not_found" });
+  });
+
+  it("answers 409 not_editable with the code for a Loan-linked and a pay-off expense", async () => {
+    const { app, store, admin, bearer } = await buildEdit();
+    const member = await store.members.create({
+      fullName: "Route Member",
+      phone: "",
+      address: "",
+      occupation: "",
+      createdById: admin.id,
+    });
+    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loanExpense = await store.expenses.create({
+      category: "Loan",
+      amount: 100n,
+      method: "CASH",
+      loanId: loan.id,
+      createdById: admin.id,
+    });
+    const payOff = await store.expenses.create({
+      category: "Membership Withdrawal",
+      amount: 100n,
+      method: "CASH",
+      createdById: admin.id,
+    });
+    const loanRes = await request(app).put(`/expenses/${loanExpense.id}`).set("Authorization", bearer(admin)).send(editBody);
+    expect(loanRes.status).toBe(409);
+    expect(loanRes.body).toEqual({ error: "not_editable", code: "loan_linked" });
+    const payOffRes = await request(app).put(`/expenses/${payOff.id}`).set("Authorization", bearer(admin)).send(editBody);
+    expect(payOffRes.status).toBe(409);
+    expect(payOffRes.body).toEqual({ error: "not_editable", code: "pay_off" });
+    expect(await store.expenses.findById(loanExpense.id)).toMatchObject({ category: "Loan", amount: 100n });
+    expect(await store.expenses.findById(payOff.id)).toMatchObject({ category: "Membership Withdrawal", amount: 100n });
+  });
+
+  it("answers 413 too_large for a body over 10 kb", async () => {
+    const { app, f, f1, bearer } = await buildEdit();
+    const res = await request(app)
+      .put(`/expenses/${f1.id}`)
+      .set("Authorization", bearer(f))
+      .send({ ...editBody, description: "x".repeat(11 * 1024) });
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: "too_large" });
   });
 });

@@ -1,4 +1,4 @@
-// Expense routes (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b). Thin: all rules live in expenses.ts.
+// Expense routes (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b, edit in 5.9c). Thin: all rules live in expenses.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -14,6 +14,7 @@ import {
   createExpense,
   deleteExpense,
   listExpenses,
+  updateExpense,
   type ExpenseActor,
   type ExpenseFailure,
   type ExpenseFailureResult,
@@ -25,6 +26,7 @@ const STATUS: Record<ExpenseFailure, number> = {
   idempotency_conflict: 409,
   not_found: 404,
   not_deletable: 409,
+  not_editable: 409,
 };
 
 function bodyOf(req: Request): Record<string, unknown> {
@@ -99,6 +101,32 @@ export function createExpensesRouter(deps: GuardDeps): Router {
     }
     res.status(200).json(result.value);
   });
+
+  router.put(
+    "/:id",
+    requirePermission("expenses.edit"),
+    express.json({ limit: "10kb" }),
+    async (req, res) => {
+      const actor = actorOf(res);
+      if (actor === null) {
+        sendUnauthorized(res);
+        return;
+      }
+      const body = bodyOf(req);
+      const result = await updateExpense(deps.store, actor, req.params["id"], {
+        category: body["category"],
+        amount: body["amount"],
+        method: body["method"],
+        description: body["description"],
+        narration: body["narration"],
+      });
+      if (!result.ok) {
+        sendFailure(res, result);
+        return;
+      }
+      res.status(200).json({ expense: result.value });
+    },
+  );
 
   router.delete("/:id", requirePermission("expenses.delete"), async (req, res) => {
     const actor = actorOf(res);

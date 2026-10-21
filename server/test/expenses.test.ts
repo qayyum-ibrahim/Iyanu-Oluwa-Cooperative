@@ -5,6 +5,7 @@ import {
   deleteExpense,
   EXPENSE_TEXT_MAX,
   listExpenses,
+  updateExpense,
   type ExpenseActor,
   type ExpenseResult,
   type ExpenseView,
@@ -1083,5 +1084,377 @@ describe("deleteExpense on the Prisma store (real SQLite)", () => {
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect(results.filter((r) => !r.ok && r.reason === "not_found")).toHaveLength(4);
     expect((await deletedActions(store, admin.id)).filter((x) => x.entityId === e1.id)).toHaveLength(1);
+  });
+});
+
+/**
+ * For updateExpense (5.9c): Staff f and g may record and edit. f records one expense with a known
+ * key, g one. The Loan and pay-off expenses come from buildDelete. Fictional data only (D-08).
+ */
+async function buildEdit(store: Store = createMemoryStore()) {
+  const base = await buildDelete(store);
+  const editor = (name: string) =>
+    store.users.create({
+      email: `${name}-${Math.random().toString(36).slice(2)}@example.test`,
+      passwordHash: "not-a-real-hash",
+      displayName: name,
+      role: "STAFF",
+      permissions: ["expenses.create", "expenses.edit"],
+    });
+  const f = await editor("staff-f");
+  const g = await editor("staff-g");
+  const f1Body = body({ category: "Allowances", amount: "0.20" });
+  const f1 = must(await createExpense(store, actorOf(f), f1Body));
+  const g1 = must(await createExpense(store, actorOf(g), body({ amount: "0.40" })));
+  return { ...base, f, g, f1, f1Body, g1 };
+}
+
+/** A full edit body (PUT): every field is sent. */
+const edit = (over: Record<string, unknown> = {}) => ({
+  category: "Asset Purchase",
+  amount: "1500.75",
+  method: "BANK_TRANSFER",
+  description: "  chairs  ",
+  ...over,
+});
+
+const EDIT_DETAIL =
+  "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
+  "new_category=Asset Purchase new_amount_kobo=150075 new_method=BANK_TRANSFER " +
+  "description_changed=true narration_changed=false";
+
+const updatedActions = async (store: Store, actorId: string) =>
+  (await store.audit.listByActor(actorId)).filter((x) => x.action === "expense.updated");
+
+function mustEdit(r: Awaited<ReturnType<typeof updateExpense>>): ExpenseView {
+  if (!r.ok) throw new Error(`unexpected failure: ${r.reason} ${r.code ?? ""}`);
+  return r.value;
+}
+
+describe("updateExpense: who may edit what (5.9c, DR-13)", () => {
+  it("refuses Staff without expenses.edit, before checking the id and the body, and changes nothing", async () => {
+    const { store, a, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    expect(await updateExpense(store, actorOf(a), f1.id, edit())).toEqual({ ok: false, reason: "forbidden" });
+    expect(await updateExpense(store, actorOf(a), 42, {})).toEqual({ ok: false, reason: "forbidden" });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updateExpense(store, actorOf(a), "x", edit())).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("refuses an inactive Staff user", async () => {
+    const { store, f, f1 } = await buildEdit();
+    expect(await updateExpense(store, actorOf({ ...f, isActive: false }), f1.id, edit())).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+    expect(await store.expenses.findById(f1.id)).toMatchObject({ category: "Allowances", amount: 20n });
+  });
+
+  it("lets Staff edit an expense they recorded: new values, same creator, date and key, one audit entry", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    const r = mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
+    expect(r).toEqual({
+      id: f1.id,
+      category: "Asset Purchase",
+      amount: "1500.75",
+      method: "BANK_TRANSFER",
+      description: "chairs",
+      narration: "",
+      createdById: f.id,
+      createdAt: f1.createdAt,
+    });
+    const saved = await store.expenses.findById(f1.id);
+    expect(saved).toEqual({
+      ...before,
+      category: "Asset Purchase",
+      amount: 150075n,
+      method: "BANK_TRANSFER",
+      description: "chairs",
+    });
+    const entries = await updatedActions(store, f.id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      actorId: f.id,
+      action: "expense.updated",
+      entityType: "Expense",
+      entityId: f1.id,
+      detail: EDIT_DETAIL,
+    });
+  });
+
+  it("changes the list total to the edited amount", async () => {
+    const { store, admin, f, f1 } = await buildEdit();
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).total).toBe("325001.10");
+    mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
+    const listed = mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(listed.expenses.find((x) => x.id === f1.id)?.amount).toBe("1500.75");
+    expect(listed.total).toBe("326501.65");
+  });
+
+  it("gives Staff not_found for an expense someone else recorded, and changes nothing", async () => {
+    const { store, f, g1, loanExpense } = await buildEdit();
+    const before = await store.expenses.findById(g1.id);
+    expect(await updateExpense(store, actorOf(f), g1.id, edit())).toEqual({ ok: false, reason: "not_found" });
+    expect(await updateExpense(store, actorOf(f), loanExpense.id, edit())).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.expenses.findById(g1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("lets the Super Admin edit an expense Staff recorded", async () => {
+    const { store, admin, f, f1 } = await buildEdit();
+    const r = mustEdit(await updateExpense(store, actorOf(admin), f1.id, edit()));
+    expect(r.createdById).toBe(f.id);
+    expect((await updatedActions(store, admin.id)).map((x) => [x.entityId, x.detail])).toEqual([[f1.id, EDIT_DETAIL]]);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it.each([
+    { label: "an unknown id", id: "no-such-expense" },
+    { label: "an empty id", id: "" },
+    { label: "an id that is not text", id: 42 },
+    { label: "no id", id: undefined },
+  ])("gives not_found for $label", async ({ id }) => {
+    const { store, admin } = await buildEdit();
+    expect(await updateExpense(store, actorOf(admin), id, edit())).toEqual({ ok: false, reason: "not_found" });
+    expect(await updatedActions(store, admin.id)).toEqual([]);
+  });
+
+  it("gives not_found for a deleted expense, and changes nothing", async () => {
+    const { store, admin, d, d1 } = await buildEdit();
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: true });
+    const before = await store.expenses.findById(d1.id);
+    expect(await updateExpense(store, actorOf(admin), d1.id, edit())).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.expenses.findById(d1.id)).toEqual(before);
+    expect(await updatedActions(store, admin.id)).toEqual([]);
+  });
+});
+
+describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-12, A-177)", () => {
+  it("refuses a Loan-linked expense with loan_linked, even for the Super Admin", async () => {
+    const { store, admin, loanExpense } = await buildEdit();
+    const before = await store.expenses.findById(loanExpense.id);
+    expect(await updateExpense(store, actorOf(admin), loanExpense.id, edit())).toEqual({
+      ok: false,
+      reason: "not_editable",
+      code: "loan_linked",
+    });
+    expect(await store.expenses.findById(loanExpense.id)).toEqual(before);
+    expect(await updatedActions(store, admin.id)).toEqual([]);
+  });
+
+  it("refuses a Loan expense without a loan link, and another category that names a loan, with loan_linked", async () => {
+    const { store, admin } = await buildEdit();
+    const unlinked = await store.expenses.create({ category: "Loan", amount: 100n, method: "CASH", createdById: admin.id });
+    expect(await updateExpense(store, actorOf(admin), unlinked.id, edit())).toEqual({
+      ok: false,
+      reason: "not_editable",
+      code: "loan_linked",
+    });
+    const member = await store.members.create({
+      fullName: "Edit Member",
+      phone: "",
+      address: "",
+      occupation: "",
+      createdById: admin.id,
+    });
+    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const linked = await store.expenses.create({
+      category: "Allowances",
+      amount: 100n,
+      method: "CASH",
+      loanId: loan.id,
+      createdById: admin.id,
+    });
+    expect(await updateExpense(store, actorOf(admin), linked.id, edit())).toEqual({
+      ok: false,
+      reason: "not_editable",
+      code: "loan_linked",
+    });
+    expect(await store.expenses.findById(linked.id)).toMatchObject({ category: "Allowances", amount: 100n });
+  });
+
+  it("refuses a pay-off expense (Membership Withdrawal) with pay_off", async () => {
+    const { store, admin, payOff } = await buildEdit();
+    const before = await store.expenses.findById(payOff.id);
+    expect(await updateExpense(store, actorOf(admin), payOff.id, edit())).toEqual({
+      ok: false,
+      reason: "not_editable",
+      code: "pay_off",
+    });
+    expect(await store.expenses.findById(payOff.id)).toEqual(before);
+  });
+});
+
+describe("updateExpense: the fields (PUT, as createExpense)", () => {
+  it.each([
+    { label: "a system-only category (Loan)", over: { category: "Loan" }, code: "system_only" },
+    { label: "a system-only category (Membership Withdrawal)", over: { category: "Membership Withdrawal" }, code: "system_only" },
+    { label: "an unknown category", over: { category: "Party" }, code: "unknown_category" },
+    { label: "no category", over: { category: undefined }, code: "unknown_category" },
+    { label: "an unknown method", over: { method: "CHEQUE" }, code: "invalid_method" },
+    { label: "no method", over: { method: undefined }, code: "invalid_method" },
+    { label: "an amount that is not a naira string", over: { amount: 1500 }, code: "invalid_amount" },
+    { label: "no amount", over: { amount: undefined }, code: "invalid_amount" },
+    { label: "a zero amount", over: { amount: "0" }, code: "amount_not_positive" },
+    { label: "a description over 200 characters", over: { description: "x".repeat(EXPENSE_TEXT_MAX + 1) }, code: "invalid_description" },
+    { label: "a narration that is not text", over: { narration: 5 }, code: "invalid_narration" },
+    { label: "Others without a narration", over: { category: "Others" }, code: "missing_narration" },
+    { label: "a narration for another category", over: { narration: "why" }, code: "narration_not_allowed" },
+  ])("refuses $label with $code, and changes nothing", async ({ over, code }) => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    expect(await updateExpense(store, actorOf(f), f1.id, edit(over))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code,
+    });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("checks the fields before looking the expense up", async () => {
+    const { store, admin } = await buildEdit();
+    expect(await updateExpense(store, actorOf(admin), "no-such-expense", edit({ method: "CHEQUE" }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_method",
+    });
+  });
+
+  it("accepts Others with a trimmed narration, and records that the narration changed", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const r = mustEdit(
+      await updateExpense(store, actorOf(f), f1.id, edit({ category: "Others", narration: "  tent hire  ", description: undefined })),
+    );
+    expect(r).toMatchObject({ category: "Others", narration: "tent hire", description: "" });
+    expect((await updatedActions(store, f.id))[0]?.detail).toBe(
+      "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
+        "new_category=Others new_amount_kobo=150075 new_method=BANK_TRANSFER " +
+        "description_changed=false narration_changed=true",
+    );
+  });
+
+  it("records a change of description alone", async () => {
+    const { store, f, f1 } = await buildEdit();
+    mustEdit(
+      await updateExpense(store, actorOf(f), f1.id, { category: "Allowances", amount: "0.20", method: "CASH", description: "x" }),
+    );
+    expect((await updatedActions(store, f.id))[0]?.detail).toBe(
+      "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
+        "new_category=Allowances new_amount_kobo=20 new_method=CASH " +
+        "description_changed=true narration_changed=false",
+    );
+  });
+
+  it.each([
+    { label: "the category", over: { category: "Expenses" } },
+    { label: "the amount", over: { amount: "0.21" } },
+    { label: "the method", over: { method: "BANK_TRANSFER" } },
+  ])("saves a change of $label alone", async ({ over }) => {
+    const { store, f, f1 } = await buildEdit();
+    mustEdit(await updateExpense(store, actorOf(f), f1.id, { category: "Allowances", amount: "0.20", method: "CASH", ...over }));
+    expect(await updatedActions(store, f.id)).toHaveLength(1);
+  });
+
+  it("writes nothing and returns the expense for an edit that changes nothing", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    const unchanged = { category: "Allowances", amount: "0.2", method: "CASH", description: "  ", narration: null };
+    expect(await updateExpense(store, actorOf(f), f1.id, unchanged)).toEqual({ ok: true, value: f1 });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("returns the edited expense to a repeat of the first request with the same key (A-175, A-177)", async () => {
+    const { store, f, f1, f1Body } = await buildEdit();
+    const edited = mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
+    const repeat = await createExpense(store, actorOf(f), f1Body);
+    expect(repeat).toEqual({ ok: true, value: edited, replayed: true });
+    expect((await store.expenses.list({ createdById: f.id })).map((x) => x.id)).toEqual([f1.id]);
+  });
+});
+
+/** The store, with one part failing inside the transaction (update or the audit write). */
+function failingEdit(store: Store, part: "expenses" | "audit"): Store {
+  return {
+    ...store,
+    transaction: (fn) =>
+      store.transaction((tx) =>
+        fn(
+          part === "expenses"
+            ? { ...tx, expenses: { ...tx.expenses, update: () => Promise.reject(new Error("expenses down")) } }
+            : { ...tx, audit: { ...tx.audit, append: () => Promise.reject(new Error("audit down")) } },
+        ),
+      ),
+  };
+}
+
+describe("updateExpense: one transaction (D-45)", () => {
+  it("writes no audit entry when the change fails", async () => {
+    const { store, f, f1 } = await buildEdit();
+    await expect(updateExpense(failingEdit(store, "expenses"), actorOf(f), f1.id, edit())).rejects.toThrow(
+      "expenses down",
+    );
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("leaves the expense as it was when the audit write fails", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    await expect(updateExpense(failingEdit(store, "audit"), actorOf(f), f1.id, edit())).rejects.toThrow("audit down");
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+  });
+
+  it("gives not_found, with no audit entry, when another request deleted it after the lookup", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const racing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) => fn({ ...tx, expenses: { ...tx.expenses, update: () => Promise.resolve(null) } })),
+    };
+    expect(await updateExpense(racing, actorOf(f), f1.id, edit())).toEqual({ ok: false, reason: "not_found" });
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+});
+
+describe("updateExpense on the Prisma store (real SQLite)", () => {
+  let tmp: TempDb;
+  let store: Store;
+  beforeAll(() => {
+    tmp = createTempDb();
+    store = createPrismaStore(tmp.prisma);
+  }, 120_000);
+  afterAll(async () => {
+    await tmp.cleanup();
+  });
+
+  it("edits with one audit entry, reads the change back and refuses the Loan and pay-off expenses", async () => {
+    const { admin, f, f1, loanExpense, payOff } = await buildEdit(store);
+    const r = mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
+    expect(await store.expenses.findById(f1.id)).toMatchObject({
+      category: "Asset Purchase",
+      amount: 150075n,
+      method: "BANK_TRANSFER",
+      description: "chairs",
+      createdById: f.id,
+    });
+    expect(r.amount).toBe("1500.75");
+    expect((await updatedActions(store, f.id)).map((x) => x.detail)).toEqual([EDIT_DETAIL]);
+    expect(await updateExpense(store, actorOf(admin), loanExpense.id, edit())).toMatchObject({ code: "loan_linked" });
+    expect(await updateExpense(store, actorOf(admin), payOff.id, edit())).toMatchObject({ code: "pay_off" });
+  });
+
+  it("leaves the expense as it was when the audit write fails", async () => {
+    const { f, f1 } = await buildEdit(store);
+    const before = await store.expenses.findById(f1.id);
+    await expect(updateExpense(failingEdit(store, "audit"), actorOf(f), f1.id, edit())).rejects.toThrow("audit down");
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+  });
+
+  it("gives not_found for a deleted expense", async () => {
+    const { admin, d, d1 } = await buildEdit(store);
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: true });
+    expect(await updateExpense(store, actorOf(admin), d1.id, edit())).toEqual({ ok: false, reason: "not_found" });
   });
 });

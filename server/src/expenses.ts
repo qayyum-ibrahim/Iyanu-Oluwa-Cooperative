@@ -1,5 +1,5 @@
-// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b; D-54, DR-11,
-// DR-12, DR-13, DR-15, A-148, A-150, A-173, A-176). Rules over the Store: no HTTP here.
+// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b, edit in 5.9c;
+// D-54, DR-11, DR-12, DR-13, DR-15, A-148, A-150, A-173, A-176, A-177). Rules over the Store: no HTTP here.
 // Recording an expense by hand needs expenses.create. Only the categories a person may pick are
 // accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
 // The key lookup, the expense and its audit entry run inside one store transaction, so both are
@@ -39,12 +39,18 @@ export interface ExpenseView {
   createdAt: string;
 }
 
-export type ExpenseFailure = "forbidden" | "invalid_input" | "idempotency_conflict" | "not_found" | "not_deletable";
+export type ExpenseFailure =
+  | "forbidden"
+  | "invalid_input"
+  | "idempotency_conflict"
+  | "not_found"
+  | "not_deletable"
+  | "not_editable";
 
 export interface ExpenseFailureResult {
   ok: false;
   reason: ExpenseFailure;
-  /** For invalid_input and not_deletable: which check failed. Never repeats the input. */
+  /** For invalid_input, not_deletable and not_editable: which check failed. Never repeats the input. */
   code?: string;
 }
 
@@ -95,9 +101,8 @@ function toView(e: ExpenseRecord): ExpenseView {
   };
 }
 
-/** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
-export interface NewExpenseInput {
-  idempotencyKey?: unknown;
+/** Raw expense fields as they arrive from a request. Anything may be wrong; this code checks it. */
+export interface ExpenseFieldsInput {
   category?: unknown;
   amount?: unknown;
   method?: unknown;
@@ -105,28 +110,26 @@ export interface NewExpenseInput {
   narration?: unknown;
 }
 
+export interface NewExpenseInput extends ExpenseFieldsInput {
+  idempotencyKey?: unknown;
+}
+
+interface CheckedFields {
+  category: ExpenseCategory;
+  amount: Kobo;
+  method: PaymentMethod;
+  description: string;
+  narration: string;
+}
+
+type FieldsCheck = { ok: true; value: CheckedFields } | ExpenseFailureResult;
+
 /**
- * Records an expense picked by hand and one audit entry "expense.created".
- * Order: permission, idempotency key shape, category (unknown_category, system_only), method,
- * amount (a naira string above ₦0), description, narration. "Others" needs a narration; every
- * other category must leave it empty (A-169). Then one transaction looks the key up (a repeat
- * returns the first expense, a different request with the same key is refused), saves the expense
- * with its key and writes the audit entry. If either write fails, nothing is saved (D-45). A
- * refused request does not use up the key (as D-48). The expense is not linked to a loan (DR-10, A-148).
+ * Checks the fields of an expense picked by hand, for a new one and for an edit.
+ * Order: category (unknown_category, system_only), method, amount (a naira string above ₦0),
+ * description, narration. "Others" needs a narration; every other category must leave it empty (A-169).
  */
-export async function createExpense(
-  store: Store,
-  actor: ExpenseActor,
-  input: NewExpenseInput,
-): Promise<ExpenseResult> {
-  if (!hasPermission(actor.subject, "expenses.create")) return failure("forbidden");
-
-  const key = input.idempotencyKey;
-  if (key === undefined) return failure("invalid_input", "missing_idempotency_key");
-  if (typeof key !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
-    return failure("invalid_input", "invalid_idempotency_key");
-  }
-
+function checkFields(input: ExpenseFieldsInput): FieldsCheck {
   let category: ExpenseCategory;
   try {
     category = parseManualExpenseCategory(input.category);
@@ -159,7 +162,39 @@ export async function createExpense(
     return failure("invalid_input", "narration_not_allowed");
   }
 
-  const requestHash = hashRequest(category, method, amount, description.value, narration.value);
+  return {
+    ok: true,
+    value: { category, amount, method, description: description.value, narration: narration.value },
+  };
+}
+
+/**
+ * Records an expense picked by hand and one audit entry "expense.created".
+ * Order: permission, idempotency key shape, category (unknown_category, system_only), method,
+ * amount (a naira string above ₦0), description, narration. "Others" needs a narration; every
+ * other category must leave it empty (A-169). Then one transaction looks the key up (a repeat
+ * returns the first expense, a different request with the same key is refused), saves the expense
+ * with its key and writes the audit entry. If either write fails, nothing is saved (D-45). A
+ * refused request does not use up the key (as D-48). The expense is not linked to a loan (DR-10, A-148).
+ */
+export async function createExpense(
+  store: Store,
+  actor: ExpenseActor,
+  input: NewExpenseInput,
+): Promise<ExpenseResult> {
+  if (!hasPermission(actor.subject, "expenses.create")) return failure("forbidden");
+
+  const key = input.idempotencyKey;
+  if (key === undefined) return failure("invalid_input", "missing_idempotency_key");
+  if (typeof key !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    return failure("invalid_input", "invalid_idempotency_key");
+  }
+
+  const checked = checkFields(input);
+  if (!checked.ok) return checked;
+  const { category, amount, method, description, narration } = checked.value;
+
+  const requestHash = hashRequest(category, method, amount, description, narration);
 
   const attempt = (): Promise<ExpenseResult> =>
     store.transaction<ExpenseResult>(async (tx) => {
@@ -172,8 +207,8 @@ export async function createExpense(
         category,
         amount,
         method,
-        description: description.value,
-        narration: narration.value,
+        description,
+        narration,
         idempotencyKey: key,
         requestHash,
         createdById: actor.id,
@@ -321,5 +356,71 @@ export async function deleteExpense(store: Store, actor: ExpenseActor, id: unkno
       detail: `category=${deleted.category} amount_kobo=${deleted.amount.toString()}`,
     });
     return { ok: true };
+  });
+}
+
+/** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
+export type ExpenseEditInput = ExpenseFieldsInput;
+
+export type ExpenseUpdateResult = { ok: true; value: ExpenseView } | ExpenseFailureResult;
+
+/**
+ * Edits one expense (step 5.9c, OQ-08 default). PUT: every field is sent again and checked as
+ * for a new expense (checkFields); a field left out of the body counts as empty (A-177).
+ * Order: permission, id, fields, then the expense. An unknown id, a deleted expense and, for
+ * Staff, an expense someone else recorded give not_found (DR-13, as deleteExpense). A Loan-linked
+ * expense gives not_editable "loan_linked", a pay-off expense not_editable "pay_off".
+ * The lookup, the change and one audit entry "expense.updated" run in one store transaction
+ * (D-45). An edit that changes nothing writes nothing and returns the expense. The audit detail
+ * holds the old and new category, kobo amount and method, and only whether the description and
+ * the narration changed, as they may hold personal details (A-169, A-177).
+ */
+export async function updateExpense(
+  store: Store,
+  actor: ExpenseActor,
+  id: unknown,
+  input: ExpenseEditInput,
+): Promise<ExpenseUpdateResult> {
+  if (!hasPermission(actor.subject, "expenses.edit")) return failure("forbidden");
+  if (typeof id !== "string" || id.length === 0) return failure("not_found");
+
+  const checked = checkFields(input);
+  if (!checked.ok) return checked;
+  const next = checked.value;
+
+  return store.transaction<ExpenseUpdateResult>(async (tx) => {
+    const expense = await tx.expenses.findById(id);
+    if (expense === null || expense.deletedAt !== null) return failure("not_found");
+    if (actor.subject.role !== "SUPER_ADMIN" && expense.createdById !== actor.id) return failure("not_found");
+    if (expense.loanId !== null || expense.category === LOAN_EXPENSE_CATEGORY) {
+      return failure("not_editable", "loan_linked");
+    }
+    if (expense.category === PAY_OFF_EXPENSE_CATEGORY) return failure("not_editable", "pay_off");
+
+    const descriptionChanged = expense.description !== next.description;
+    const narrationChanged = expense.narration !== next.narration;
+    if (
+      expense.category === next.category &&
+      expense.amount === next.amount &&
+      expense.method === next.method &&
+      !descriptionChanged &&
+      !narrationChanged
+    ) {
+      return { ok: true, value: toView(expense) };
+    }
+
+    const updated = await tx.expenses.update(expense.id, next);
+    if (updated === null) return failure("not_found");
+    await tx.audit.append({
+      actorId: actor.id,
+      action: "expense.updated",
+      entityType: "Expense",
+      entityId: updated.id,
+      detail:
+        `old_category=${expense.category} old_amount_kobo=${expense.amount.toString()} old_method=${expense.method} ` +
+        `new_category=${updated.category} new_amount_kobo=${updated.amount.toString()} new_method=${updated.method} ` +
+        `description_changed=${String(descriptionChanged)} narration_changed=${String(narrationChanged)}`,
+    });
+    return { ok: true, value: toView(updated) };
   });
 }

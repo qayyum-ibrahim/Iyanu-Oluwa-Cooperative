@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.9c (size M), 2026-10-21: PUT /expenses/:id (D-70, OQ-08, DR-12, DR-13, A-177)
+
+**Works (verified in this session):** `updateExpense` in `server/src/expenses.ts` and `PUT /expenses/:id` in `expenses-routes.ts` (200 `{ expense }`). Needs `expenses.edit` (403 first). The field checks of `createExpense` moved into one shared `checkFields`; PUT sends every field and gets the same codes. Unknown, empty or non-text id, a deleted expense and, for Staff, someone else's expense: 404 `not_found`. Loan-linked (`loanId` set, or category Loan): 409 `not_editable` `loan_linked`; Membership Withdrawal: 409 `not_editable` `pay_off`, also for the Super Admin. Lookup, `expenses.update` and audit entry `expense.updated` (old and new category, kobo amount and method; description and narration only as changed true or false) in one `store.transaction`; `update` returning null gives 404 and no audit entry. An edit that changes nothing writes nothing. A repeat of the first create with the same key returns the edited expense. 41 logic cases in `server/test/expenses.test.ts` (with 20 `it.each` rows; 3 on real SQLite) and 9 route cases in `server/test/expenses-routes.test.ts`; the old `it.each` "answers 404 to get and put /expenses/x" became one GET case. `npm run check`: typecheck and lint clean, 43 files, 1603 passed, 0 failed, 76.48 s, exit 0 (exit code captured from `npm run check` itself, output written to a scratch file).
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 49 net (1554 to 1603).
+**Not verified:** no live check (the script has no expense checks). No break-on-purpose run yet (5.9d). Every new test passed on the first run, so none was seen failing yet; 5.9d will show whether they catch faults.
+**Found along the way:**
+1. STATUS said 5.9b was not committed; `de6e184` was HEAD and `origin/main` pointed to it. Fixed.
+2. One test I first wrote listed expenses as Staff f, who has no `expenses.view`; changed to list as the Super Admin before the run.
+3. OQ-08 wants old values in the audit log; the old description and narration are not kept (A-169 personal details). Owner to confirm (A-177).
+
+---
+
 ## Step 5.9b (size M), 2026-10-21: DELETE /expenses/:id (D-69, DR-12, A-176)
 
 **Works (verified in this session):** `deleteExpense` in `server/src/expenses.ts` and `DELETE /expenses/:id` in `expenses-routes.ts` (204, no body). Needs `expenses.delete` (403 first, before the id is looked at). Unknown id, empty or non-text id, an expense already deleted and, for Staff, someone else's expense: 404 `not_found`. Loan-linked (`loanId` set, or category Loan): 409 `not_deletable` `loan_linked`; Membership Withdrawal: 409 `not_deletable` `pay_off`, also for the Super Admin. Lookup, `softDelete` and audit entry `expense.deleted` (detail `category=… amount_kobo=…`) in one `store.transaction`; a `softDelete` that returns null (lost race) gives 404 and no audit entry. 21 logic cases in `server/test/expenses.test.ts` (3 on real SQLite: delete and refusals, audit failure rolls back, five deletes at once give one delete and one entry) and 6 route cases in `server/test/expenses-routes.test.ts`. `npm run check`: 43 files, 1554 passed, 0 failed, 72.76 s.

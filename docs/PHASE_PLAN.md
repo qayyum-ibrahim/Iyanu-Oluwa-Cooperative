@@ -39,7 +39,7 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.6 (S) `GET /loans` and one member's loans, with outstanding and status. Done (D-63): one member only, `memberId` required (A-167).
 - 5.6b (S, proposed at 5.6) Break-on-purpose for `listLoans` and `GET /loans`. Done: 30 of 32 caught (G12, R2 equivalent, A-168).
 - 5.7 (M) `POST /expenses` (only categories that can be picked by hand). Done (D-64).
-- 5.7c (M) `Idempotency-Key` header on `POST /expenses`, as D-61 for loans: nullable `idempotencyKey` and `requestHash` on `Expense`, unique on creator and key, `expenses.findByKey` in both adapters. Needs a migration. Added at 5.7 by the owner (option A).
+- 5.7c (M) `Idempotency-Key` header on `POST /expenses`, as D-61 for loans: nullable `idempotencyKey` and `requestHash` on `Expense`, unique on creator and key, `expenses.findByKey` in both adapters. Needs a migration. Added at 5.7 by the owner (option A). Done (D-65).
 - 5.7d (S) One break-on-purpose run for 5.7 and 5.7c.
 - 5.8 (M) Expense list with filters.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).

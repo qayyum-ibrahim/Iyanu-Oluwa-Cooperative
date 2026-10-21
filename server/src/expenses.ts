@@ -1,16 +1,18 @@
-// Expense logic (step 5.7; D-54, DR-11, DR-15, A-148, A-150). Rules over the Store: no HTTP here.
+// Expense logic (step 5.7, idempotency key in 5.7c; D-54, DR-11, DR-15, A-148, A-150). Rules over
+// the Store: no HTTP here.
 // Recording an expense by hand needs expenses.create. Only the categories a person may pick are
 // accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
-// The expense and its audit entry run inside one store transaction, so both are saved or neither
-// (D-45). Audit details hold the category and the amount in kobo: no description, no narration.
-// No idempotency key yet: that is step 5.7c (A-169).
+// The key lookup, the expense and its audit entry run inside one store transaction, so both are
+// saved or neither (D-45). Audit details hold the category and the amount in kobo: no description,
+// no narration, no key.
 
+import { createHash } from "node:crypto";
 import { CategoryError } from "./categories.js";
 import { parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
 import { MoneyError, parseNaira, type Kobo } from "./money.js";
-import { koboToNairaString } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
-import type { ExpenseRecord, PaymentMethod, Store } from "./store.js";
+import { DuplicateExpenseKeyError, type ExpenseRecord, type PaymentMethod, type Store } from "./store.js";
 
 /** Longest description or narration accepted (A-169: my choice, same as A-82 and A-161). */
 export const EXPENSE_TEXT_MAX = 200;
@@ -37,7 +39,7 @@ export interface ExpenseView {
   createdAt: string;
 }
 
-export type ExpenseFailure = "forbidden" | "invalid_input";
+export type ExpenseFailure = "forbidden" | "invalid_input" | "idempotency_conflict";
 
 export interface ExpenseFailureResult {
   ok: false;
@@ -46,7 +48,8 @@ export interface ExpenseFailureResult {
   code?: string;
 }
 
-export type ExpenseResult = { ok: true; value: ExpenseView } | ExpenseFailureResult;
+/** replayed is true when the key had been used before and the first expense is returned. */
+export type ExpenseResult = { ok: true; value: ExpenseView; replayed: boolean } | ExpenseFailureResult;
 
 function failure(reason: ExpenseFailure, code?: string): ExpenseFailureResult {
   return { ok: false, reason, ...(code !== undefined ? { code } : {}) };
@@ -67,6 +70,18 @@ function optionalText(value: unknown): Text {
   return { ok: true, value: trimmed };
 }
 
+/** A fingerprint of the checked request: category, method, exact kobo, trimmed texts. */
+function hashRequest(
+  category: string,
+  method: PaymentMethod,
+  amount: Kobo,
+  description: string,
+  narration: string,
+): string {
+  const canonical = JSON.stringify({ category, method, amount: amount.toString(), description, narration });
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
 function toView(e: ExpenseRecord): ExpenseView {
   return {
     id: e.id,
@@ -82,6 +97,7 @@ function toView(e: ExpenseRecord): ExpenseView {
 
 /** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
 export interface NewExpenseInput {
+  idempotencyKey?: unknown;
   category?: unknown;
   amount?: unknown;
   method?: unknown;
@@ -91,10 +107,12 @@ export interface NewExpenseInput {
 
 /**
  * Records an expense picked by hand and one audit entry "expense.created".
- * Order: permission, category (unknown_category, system_only), method, amount (a naira string
- * above ₦0), description, narration. "Others" needs a narration; every other category must leave
- * it empty (A-169). Then one transaction saves the expense and writes the audit entry. If either
- * write fails, nothing is saved (D-45). The expense is not linked to a loan (DR-10, A-148).
+ * Order: permission, idempotency key shape, category (unknown_category, system_only), method,
+ * amount (a naira string above ₦0), description, narration. "Others" needs a narration; every
+ * other category must leave it empty (A-169). Then one transaction looks the key up (a repeat
+ * returns the first expense, a different request with the same key is refused), saves the expense
+ * with its key and writes the audit entry. If either write fails, nothing is saved (D-45). A
+ * refused request does not use up the key (as D-48). The expense is not linked to a loan (DR-10, A-148).
  */
 export async function createExpense(
   store: Store,
@@ -102,6 +120,12 @@ export async function createExpense(
   input: NewExpenseInput,
 ): Promise<ExpenseResult> {
   if (!hasPermission(actor.subject, "expenses.create")) return failure("forbidden");
+
+  const key = input.idempotencyKey;
+  if (key === undefined) return failure("invalid_input", "missing_idempotency_key");
+  if (typeof key !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    return failure("invalid_input", "invalid_idempotency_key");
+  }
 
   let category: ExpenseCategory;
   try {
@@ -135,23 +159,41 @@ export async function createExpense(
     return failure("invalid_input", "narration_not_allowed");
   }
 
-  const expense = await store.transaction(async (tx) => {
-    const saved = await tx.expenses.create({
-      category,
-      amount,
-      method,
-      description: description.value,
-      narration: narration.value,
-      createdById: actor.id,
+  const requestHash = hashRequest(category, method, amount, description.value, narration.value);
+
+  const attempt = (): Promise<ExpenseResult> =>
+    store.transaction<ExpenseResult>(async (tx) => {
+      const existing = await tx.expenses.findByKey(actor.id, key);
+      if (existing !== null) {
+        if (existing.requestHash !== requestHash) return failure("idempotency_conflict");
+        return { ok: true, value: toView(existing), replayed: true };
+      }
+      const saved = await tx.expenses.create({
+        category,
+        amount,
+        method,
+        description: description.value,
+        narration: narration.value,
+        idempotencyKey: key,
+        requestHash,
+        createdById: actor.id,
+      });
+      await tx.audit.append({
+        actorId: actor.id,
+        action: "expense.created",
+        entityType: "Expense",
+        entityId: saved.id,
+        detail: `category=${category} amount_kobo=${amount.toString()}`,
+      });
+      return { ok: true, value: toView(saved), replayed: false };
     });
-    await tx.audit.append({
-      actorId: actor.id,
-      action: "expense.created",
-      entityType: "Expense",
-      entityId: saved.id,
-      detail: `category=${category} amount_kobo=${amount.toString()}`,
-    });
-    return saved;
-  });
-  return { ok: true, value: toView(expense) };
+
+  try {
+    return await attempt();
+  } catch (e) {
+    // Another request with the same key was saved between our lookup and our save. Our
+    // transaction was undone, so one more attempt finds the first expense (as A-121).
+    if (e instanceof DuplicateExpenseKeyError) return attempt();
+    throw e;
+  }
 }

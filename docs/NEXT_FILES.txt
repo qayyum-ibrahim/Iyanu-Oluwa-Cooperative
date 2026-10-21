@@ -6,14 +6,11 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
 server/prisma/schema.prisma
-server/prisma/migrations/20261021180000_loan_idempotency/migration.sql
-server/src/store.ts
-server/src/memory-store.ts
-server/src/prisma-store.ts
-server/src/loans.ts
+server/prisma/migrations/20261021200000_expense_idempotency/migration.sql
 server/src/expenses.ts
 server/src/expenses-routes.ts
+server/src/memory-store.ts
+server/src/prisma-store.ts
 server/test/helpers/expenses-contract.ts
-server/test/helpers/loans-contract.ts
 server/test/expenses.test.ts
 server/test/expenses-routes.test.ts

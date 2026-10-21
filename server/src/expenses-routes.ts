@@ -1,6 +1,6 @@
-// Expense routes (step 5.7). Thin: all rules live in expenses.ts.
+// Expense routes (step 5.7, idempotency key in 5.7c). Thin: all rules live in expenses.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
-// never reaches the parser. Never log a body.
+// never reaches the parser. Never log a body or a key.
 
 import express, { Router, type Request, type Response } from "express";
 import {
@@ -20,6 +20,7 @@ import {
 const STATUS: Record<ExpenseFailure, number> = {
   forbidden: 403,
   invalid_input: 400,
+  idempotency_conflict: 409,
 };
 
 function bodyOf(req: Request): Record<string, unknown> {
@@ -58,6 +59,7 @@ export function createExpensesRouter(deps: GuardDeps): Router {
       }
       const body = bodyOf(req);
       const result = await createExpense(deps.store, actor, {
+        idempotencyKey: req.header("idempotency-key"),
         category: body["category"],
         amount: body["amount"],
         method: body["method"],
@@ -68,6 +70,7 @@ export function createExpensesRouter(deps: GuardDeps): Router {
         sendFailure(res, result);
         return;
       }
+      if (result.replayed) res.setHeader("Idempotent-Replayed", "true");
       res.status(201).json({ expense: result.value });
     },
   );

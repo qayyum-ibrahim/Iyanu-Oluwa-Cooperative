@@ -339,6 +339,10 @@ export interface ExpenseRecord {
   narration: string;
   /** The loan this expense pays out (DR-10), or null. At most one expense per loan (A-148). */
   loanId: string | null;
+  /** The caller's idempotency key, or null (step 5.7c). Unique per user. Loan expenses have none. */
+  idempotencyKey: string | null;
+  /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
+  requestHash: string | null;
   /** The user who recorded the expense (DR-15). */
   createdById: string;
   createdAt: Date;
@@ -355,6 +359,8 @@ export interface NewExpense {
   /** Defaults to "". */
   narration?: string;
   loanId?: string;
+  idempotencyKey?: string;
+  requestHash?: string;
   createdById: string;
 }
 
@@ -370,17 +376,27 @@ export class DuplicateExpenseLoanError extends Error {
   }
 }
 
+export class DuplicateExpenseKeyError extends Error {
+  constructor() {
+    super("An expense with this idempotency key already exists for this user");
+    this.name = "DuplicateExpenseKeyError";
+  }
+}
+
 export interface ExpenseStore {
   /**
    * Saves a new expense. Throws UnknownActorError if createdById is not a user, then
    * UnknownLoanError if loanId is not a loan, then DuplicateExpenseLoanError if another expense
-   * has the same loanId. Values are saved as given:
+   * has the same loanId, then DuplicateExpenseKeyError if this user already saved an expense with
+   * the same idempotency key. Values are saved as given:
    * checking the category, amount and narration is the logic code's job (A-150).
    */
   create(input: NewExpense): Promise<ExpenseRecord>;
   findById(id: string): Promise<ExpenseRecord | null>;
   /** Expenses oldest first, narrowed by the exact filters. Equal times are in no fixed order. Returns copies. */
   list(query: ExpenseListQuery): Promise<ExpenseRecord[]>;
+  /** The expense this user saved with this key, or null. Returns a copy. */
+  findByKey(createdById: string, idempotencyKey: string): Promise<ExpenseRecord | null>;
 }
 
 /**

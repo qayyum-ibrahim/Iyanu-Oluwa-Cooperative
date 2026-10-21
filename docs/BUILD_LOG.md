@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.7c (size M), 2026-10-21: idempotency key on `POST /expenses` (D-65)
+
+**Works (verified in this session):** `POST /expenses` needs `Idempotency-Key` (same rules as payments and loans), checked right after the permission. A repeat gives 201 with the first expense and `Idempotent-Replayed: true`, nothing saved, no audit entry; the same key with another request gives 409 `idempotency_conflict`; a refused request keeps its key free; a clash at save is retried once. `Expense.idempotencyKey`, `Expense.requestHash`, unique on creator and key (migration `20261021200000_expense_idempotency`, from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; columns added only; dev database not touched). `expenses.findByKey` and `DuplicateExpenseKeyError` in both adapters. `npm run check`: 43 files, 1448 passed, 0 failed, 73.36 s. `npx vitest run test/expenses.test.ts test/expenses-routes.test.ts`: 2 files, 97 passed. Five parallel requests with one key on real SQLite: one expense, one audit entry. `npm run db:deploy` on the dev database (owner said yes): "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 53 added: 9 contract cases per adapter (18), 35 in `test/expenses.test.ts` and `test/expenses-routes.test.ts` (62 to 97). Total 1448.
+**Not verified:** no live check (the script has no expense checks). No break-on-purpose run yet (5.7d). The parallel case ran on SQLite only (as A-121).
+**Found along the way:**
+1. STATUS said 5.7 was not committed; `d077602` was HEAD and `origin/main` pointed to it. Fixed.
+2. The Prisma expense `create` read every `P2002` as a repeated `loanId`. With a second unique index that is no longer true. It now reads a repeated `loanId` before the insert, and a `P2002` with a key is read as the key clash (A-170).
+3. New decision D-65: the mirror needs it.
+
 ## Step 5.7 (size M), 2026-10-21: record an expense by hand (D-64)
 
 **Works (verified in this session):** `POST /expenses` (`createExpense` in `server/src/expenses.ts`, route in `expenses-routes.ts`, mounted in `app.ts`), permission `expenses.create`. Only hand-picked categories: Loan and Membership Withdrawal give 400 `system_only`, others not in DR-11 `unknown_category`. Method `CASH` or `BANK_TRANSFER`; amount a naira string above ₦0; optional description; "Others" needs a narration, other categories may not have one (A-169). The expense and an `expense.created` audit entry are saved in one transaction (D-45); if either write fails, nothing is saved (memory and real SQLite). Reply 201 `{ expense }` with the amount as a string with 2 decimals. `npm run check`: 43 files, 1395 passed, 0 failed, 76.16 s. `npx vitest run test/expenses.test.ts test/expenses-routes.test.ts`: 2 files, 62 passed.

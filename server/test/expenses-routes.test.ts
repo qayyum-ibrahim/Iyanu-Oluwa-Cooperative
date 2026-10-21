@@ -27,6 +27,10 @@ async function build() {
   return { store, app, admin, a, viewOnly, bearer };
 }
 
+let keyCount = 0;
+/** A new idempotency key on every call. */
+const newKey = () => `expense-route-key-${String(++keyCount).padStart(6, "0")}`;
+
 const expenseBody = (over: Record<string, unknown> = {}) => ({
   category: "Allowances",
   amount: "5000.50",
@@ -37,14 +41,14 @@ const expenseBody = (over: Record<string, unknown> = {}) => ({
 describe("POST /expenses", () => {
   it("answers 401 without a token", async () => {
     const { app } = await build();
-    const res = await request(app).post("/expenses").send(expenseBody());
+    const res = await request(app).post("/expenses").set("Idempotency-Key", newKey()).send(expenseBody());
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: "unauthorized" });
   });
 
   it("answers 403 to Staff without expenses.create, and saves nothing", async () => {
     const { app, store, viewOnly, bearer } = await build();
-    const res = await request(app).post("/expenses").set("Authorization", bearer(viewOnly)).send(expenseBody());
+    const res = await request(app).post("/expenses").set("Idempotency-Key", newKey()).set("Authorization", bearer(viewOnly)).send(expenseBody());
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "forbidden" });
     expect(await store.expenses.list({})).toEqual([]);
@@ -53,7 +57,7 @@ describe("POST /expenses", () => {
   it("answers 403, not 400, to a caller without the permission who sends malformed JSON", async () => {
     const { app, viewOnly, bearer } = await build();
     const res = await request(app)
-      .post("/expenses")
+      .post("/expenses").set("Idempotency-Key", newKey())
       .set("Authorization", bearer(viewOnly))
       .set("Content-Type", "application/json")
       .send("{bad");
@@ -64,7 +68,7 @@ describe("POST /expenses", () => {
   it("answers 201 for Staff: no-store, exact fields, exact values", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/expenses")
+      .post("/expenses").set("Idempotency-Key", newKey())
       .set("Authorization", bearer(a))
       .send(expenseBody({ description: "transport" }));
     expect(res.status).toBe(201);
@@ -93,7 +97,7 @@ describe("POST /expenses", () => {
 
   it("saves one expense and one audit entry", async () => {
     const { app, store, a, bearer } = await build();
-    const res = await request(app).post("/expenses").set("Authorization", bearer(a)).send(expenseBody());
+    const res = await request(app).post("/expenses").set("Idempotency-Key", newKey()).set("Authorization", bearer(a)).send(expenseBody());
     expect(await store.expenses.list({})).toEqual([
       expect.objectContaining({ id: res.body.expense.id, category: "Allowances", amount: 500_050n, loanId: null }),
     ]);
@@ -103,7 +107,7 @@ describe("POST /expenses", () => {
   it("answers 201 for the Super Admin", async () => {
     const { app, admin, bearer } = await build();
     const res = await request(app)
-      .post("/expenses")
+      .post("/expenses").set("Idempotency-Key", newKey())
       .set("Authorization", bearer(admin))
       .send(expenseBody({ category: "Others", narration: "fuel" }));
     expect(res.status).toBe(201);
@@ -123,7 +127,7 @@ describe("POST /expenses", () => {
     { label: "a narration on another category", over: { narration: "fuel" }, code: "narration_not_allowed" },
   ])("answers 400 with the code for $label, and saves nothing", async ({ over, code }) => {
     const { app, store, a, bearer } = await build();
-    const res = await request(app).post("/expenses").set("Authorization", bearer(a)).send(expenseBody(over));
+    const res = await request(app).post("/expenses").set("Idempotency-Key", newKey()).set("Authorization", bearer(a)).send(expenseBody(over));
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_input", code });
     expect(await store.expenses.list({})).toEqual([]);
@@ -131,7 +135,7 @@ describe("POST /expenses", () => {
 
   it("answers 400 invalid_input when the body is not an object", async () => {
     const { app, a, bearer } = await build();
-    const res = await request(app).post("/expenses").set("Authorization", bearer(a)).send([1, 2, 3]);
+    const res = await request(app).post("/expenses").set("Idempotency-Key", newKey()).set("Authorization", bearer(a)).send([1, 2, 3]);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_input", code: "unknown_category" });
   });
@@ -139,7 +143,7 @@ describe("POST /expenses", () => {
   it("answers 400 bad_request for malformed JSON from a permitted user", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/expenses")
+      .post("/expenses").set("Idempotency-Key", newKey())
       .set("Authorization", bearer(a))
       .set("Content-Type", "application/json")
       .send("{bad");
@@ -150,11 +154,74 @@ describe("POST /expenses", () => {
   it("answers 413 too_large for a body over 10 kb", async () => {
     const { app, a, bearer } = await build();
     const res = await request(app)
-      .post("/expenses")
+      .post("/expenses").set("Idempotency-Key", newKey())
       .set("Authorization", bearer(a))
       .send(expenseBody({ extra: "x".repeat(20_000) }));
     expect(res.status).toBe(413);
     expect(res.body).toEqual({ error: "too_large" });
+  });
+});
+
+describe("POST /expenses: Idempotency-Key header (5.7c)", () => {
+  it("answers 400 missing_idempotency_key without the header, and saves nothing", async () => {
+    const { app, store, a, bearer } = await build();
+    const res = await request(app).post("/expenses").set("Authorization", bearer(a)).send(expenseBody());
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code: "missing_idempotency_key" });
+    expect(await store.expenses.list({})).toEqual([]);
+  });
+
+  it("answers 400 invalid_idempotency_key for a short key", async () => {
+    const { app, a, bearer } = await build();
+    const res = await request(app)
+      .post("/expenses")
+      .set("Authorization", bearer(a))
+      .set("Idempotency-Key", "short")
+      .send(expenseBody());
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code: "invalid_idempotency_key" });
+  });
+
+  it("answers a repeat with 201, the first expense and Idempotent-Replayed: true, saving nothing more", async () => {
+    const { app, store, a, bearer } = await build();
+    const k = newKey();
+    const send = () =>
+      request(app).post("/expenses").set("Authorization", bearer(a)).set("Idempotency-Key", k).send(expenseBody());
+    const first = await send();
+    const second = await send();
+    expect(first.status).toBe(201);
+    expect(first.headers["idempotent-replayed"]).toBeUndefined();
+    expect(second.status).toBe(201);
+    expect(second.headers["idempotent-replayed"]).toBe("true");
+    expect(second.headers["cache-control"]).toBe("no-store");
+    expect(second.body).toEqual(first.body);
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("answers 409 idempotency_conflict for the same key with another amount", async () => {
+    const { app, store, a, bearer } = await build();
+    const k = newKey();
+    const send = (over: Record<string, unknown>) =>
+      request(app).post("/expenses").set("Authorization", bearer(a)).set("Idempotency-Key", k).send(expenseBody(over));
+    await send({});
+    const res = await send({ amount: "5000.51" });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "idempotency_conflict" });
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("answers 401, not 400, without a token and without a key", async () => {
+    const { app } = await build();
+    const res = await request(app).post("/expenses").send(expenseBody());
+    expect(res.status).toBe(401);
+  });
+
+  it("answers 403, not 400, to Staff without expenses.create and without a key", async () => {
+    const { app, viewOnly, bearer } = await build();
+    const res = await request(app).post("/expenses").set("Authorization", bearer(viewOnly)).send(expenseBody());
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
   });
 });
 

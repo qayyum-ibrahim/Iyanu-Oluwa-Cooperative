@@ -8,6 +8,7 @@ import {
   UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
+  DuplicateExpenseKeyError,
   DuplicateLoanKeyError,
   formatMembershipId,
   type AuditRecord,
@@ -78,6 +79,8 @@ const toExpense = (r: ExpenseRow): ExpenseRecord => ({
   description: r.description,
   narration: r.narration,
   loanId: r.loanId,
+  idempotencyKey: r.idempotencyKey,
+  requestHash: r.requestHash,
   createdById: r.createdById,
   createdAt: r.createdAt,
   deletedAt: r.deletedAt,
@@ -441,7 +444,12 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           select: { id: true },
         });
         if (actor === null) throw new UnknownActorError(input.createdById);
-        if (input.loanId !== undefined) await requireLoans(prisma, [input.loanId]);
+        if (input.loanId !== undefined) {
+          await requireLoans(prisma, [input.loanId]);
+          // Read the loan link first, so a repeated loanId wins over a repeated key (same order as memory).
+          const taken = await prisma.expense.findUnique({ where: { loanId: input.loanId }, select: { id: true } });
+          if (taken !== null) throw new DuplicateExpenseLoanError();
+        }
         try {
           const row = await prisma.expense.create({
             data: {
@@ -451,13 +459,18 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
               description: input.description ?? "",
               narration: input.narration ?? "",
               loanId: input.loanId ?? null,
+              idempotencyKey: input.idempotencyKey ?? null,
+              requestHash: input.requestHash ?? null,
               createdById: input.createdById,
             },
           });
           return toExpense(row);
         } catch (e) {
-          // loanId is the only unique column besides id.
-          if (hasCode(e, "P2002")) throw new DuplicateExpenseLoanError();
+          // Two unique indexes besides id: loanId and the user and key pair. A clash with a key is
+          // read as the key, since the loanId was read free just above (A-170).
+          if (hasCode(e, "P2002")) {
+            throw input.idempotencyKey !== undefined ? new DuplicateExpenseKeyError() : new DuplicateExpenseLoanError();
+          }
           if (hasCode(e, "P2003")) throw new UnknownActorError(input.createdById);
           throw e;
         }
@@ -472,6 +485,10 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toExpense);
+      },
+      async findByKey(createdById, idempotencyKey) {
+        const row = await prisma.expense.findFirst({ where: { createdById, idempotencyKey } });
+        return row ? toExpense(row) : null;
       },
     },
     loans: {

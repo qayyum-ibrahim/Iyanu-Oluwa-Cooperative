@@ -10,7 +10,7 @@ import {
 import { subjectOf } from "../src/guards.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { createPrismaStore } from "../src/prisma-store.js";
-import type { Role, Store, UserRecord } from "../src/store.js";
+import { DuplicateExpenseKeyError, type Role, type Store, type UserRecord } from "../src/store.js";
 import { createTempDb, type TempDb } from "./helpers/temp-db.js";
 
 // Fictional data only (D-08).
@@ -31,7 +31,12 @@ async function build(store: Store = createMemoryStore()) {
 
 const actorOf = (u: UserRecord): ExpenseActor => ({ id: u.id, subject: subjectOf(u) });
 
+let keyCount = 0;
+/** A new idempotency key on every call, so separate calls are separate requests. */
+const newKey = () => `expense-test-key-${String(++keyCount).padStart(6, "0")}`;
+
 const body = (over: Record<string, unknown> = {}) => ({
+  idempotencyKey: newKey(),
   category: "Office Maintenance",
   amount: "15000",
   method: "CASH",
@@ -191,7 +196,7 @@ describe("createExpense: refusals save nothing", () => {
 
   it("checks the category before the method and the amount", async () => {
     const { store, a } = await build();
-    const r = await createExpense(store, actorOf(a), { category: "Loan", method: "x", amount: 1 });
+    const r = await createExpense(store, actorOf(a), { idempotencyKey: newKey(), category: "Loan", method: "x", amount: 1 });
     expect(r).toEqual({ ok: false, reason: "invalid_input", code: "system_only" });
   });
 
@@ -211,6 +216,236 @@ describe("createExpense: refusals save nothing", () => {
     const { store, a } = await build();
     const r = await createExpense(store, actorOf(a), body({ category: "Secret Category 08012345678" }));
     expect(JSON.stringify(r)).not.toContain("08012345678");
+  });
+});
+
+describe("createExpense: idempotency key (5.7c)", () => {
+  it("a first request is saved and not marked as a replay", async () => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), body())).toMatchObject({ ok: true, replayed: false });
+  });
+
+  it("a repeat returns the first expense: one expense, one audit entry", async () => {
+    const { store, a } = await build();
+    const b = body({ description: "roof repair" });
+    const first = await createExpense(store, actorOf(a), b);
+    const second = await createExpense(store, actorOf(a), b);
+    expect(first).toMatchObject({ ok: true, replayed: false });
+    expect(second).toMatchObject({ ok: true, replayed: true });
+    expect(must(second)).toEqual(must(first));
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("saves the key and the request hash on the expense", async () => {
+    const { store, a } = await build();
+    const b = body();
+    const r = must(await createExpense(store, actorOf(a), b));
+    const saved = await store.expenses.findById(r.id);
+    expect(saved?.idempotencyKey).toBe(b.idempotencyKey);
+    expect(saved?.requestHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("treats the same checked request as a repeat: \"15000\" and \"15000.00\", extra spaces, null texts", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    const first = must(await createExpense(store, actorOf(a), body({ idempotencyKey: k, description: "paint" })));
+    const again = await createExpense(
+      store,
+      actorOf(a),
+      body({ idempotencyKey: k, amount: "15000.00", description: "  paint ", narration: null }),
+    );
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again)).toEqual(first);
+  });
+
+  it.each([
+    { label: "another category", over: { category: "Allowances" } },
+    { label: "another amount", over: { amount: "15000.01" } },
+    { label: "another method", over: { method: "BANK_TRANSFER" } },
+    { label: "another description", over: { description: "paint" } },
+    { label: "another narration", over: { category: "Others", narration: "fuel" } },
+  ])("refuses the same key with $label, and saves nothing more", async ({ over }) => {
+    const { store, a } = await build();
+    const k = newKey();
+    must(await createExpense(store, actorOf(a), body({ idempotencyKey: k })));
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k, ...over }))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("tells Others requests apart by their narration", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    must(await createExpense(store, actorOf(a), body({ idempotencyKey: k, category: "Others", narration: "fuel" })));
+    expect(
+      await createExpense(store, actorOf(a), body({ idempotencyKey: k, category: "Others", narration: "diesel" })),
+    ).toEqual({ ok: false, reason: "idempotency_conflict" });
+  });
+
+  it("keeps keys apart per user", async () => {
+    const { store, admin, a } = await build();
+    const k = newKey();
+    const ra = must(await createExpense(store, actorOf(a), body({ idempotencyKey: k })));
+    const rb = await createExpense(store, actorOf(admin), body({ idempotencyKey: k }));
+    expect(rb).toMatchObject({ ok: true, replayed: false });
+    expect(must(rb).id).not.toBe(ra.id);
+    expect(await store.expenses.list({})).toHaveLength(2);
+  });
+
+  it("does not use up the key when the request is refused", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k, amount: "0" }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "amount_not_positive",
+    });
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k }))).toMatchObject({
+      ok: true,
+      replayed: false,
+    });
+  });
+
+  it("does not use up the key when the audit write fails", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    await expect(createExpense(failingInside(store, "audit"), actorOf(a), body({ idempotencyKey: k }))).rejects.toThrow(
+      "audit down",
+    );
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k }))).toMatchObject({
+      ok: true,
+      replayed: false,
+    });
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("handles a lost race: the key is saved between the lookup and the save", async () => {
+    const { store, a } = await build();
+    const b = body();
+    const first = must(await createExpense(store, actorOf(a), b));
+    let lookups = 0;
+    const racing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({
+            ...tx,
+            expenses: {
+              ...tx.expenses,
+              findByKey: async (userId, k) => {
+                lookups += 1;
+                return lookups === 1 ? null : tx.expenses.findByKey(userId, k);
+              },
+            },
+          }),
+        ),
+    };
+    const r = await createExpense(racing, actorOf(a), b);
+    expect(r).toMatchObject({ ok: true, replayed: true });
+    expect(must(r).id).toBe(first.id);
+    expect(lookups).toBe(2);
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("tries only once more after a lost race", async () => {
+    const { store, a } = await build();
+    let saves = 0;
+    const alwaysClash: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({
+            ...tx,
+            expenses: {
+              ...tx.expenses,
+              create: async () => {
+                saves += 1;
+                throw new DuplicateExpenseKeyError();
+              },
+            },
+          }),
+        ),
+    };
+    await expect(createExpense(alwaysClash, actorOf(a), body())).rejects.toBeInstanceOf(DuplicateExpenseKeyError);
+    expect(saves).toBe(2);
+  });
+
+  it("saves one expense when two identical requests arrive together", async () => {
+    const { store, a } = await build();
+    const b = body();
+    const [r1, r2] = await Promise.all([createExpense(store, actorOf(a), b), createExpense(store, actorOf(a), b)]);
+    expect(must(r1).id).toBe(must(r2).id);
+    expect([r1, r2].filter((r) => r.ok && r.replayed)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("checks the permission before the key", async () => {
+    const { store, viewOnly } = await build();
+    expect(await createExpense(store, actorOf(viewOnly), body({ idempotencyKey: undefined }))).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+  });
+
+  it("checks the key before the other input", async () => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), { category: "Loan", amount: "x" })).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "missing_idempotency_key",
+    });
+  });
+
+  it("refuses a missing key and saves nothing", async () => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: undefined }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "missing_idempotency_key",
+    });
+    expect(await store.expenses.list({})).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it.each([
+    { label: "empty", value: "" },
+    { label: "null", value: null },
+    { label: "a number", value: 1234567890123456 },
+    { label: "15 characters", value: "k".repeat(15) },
+    { label: "65 characters", value: "k".repeat(65) },
+    { label: "holding a space", value: "expense key 00001" },
+  ])("refuses a key that is $label", async ({ value }) => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_idempotency_key",
+    });
+    expect(await store.expenses.list({})).toEqual([]);
+  });
+
+  it("accepts keys of 16 and 64 characters, with dashes and underscores", async () => {
+    const { store, a } = await build();
+    for (const k of ["k".repeat(16), "k".repeat(64), "a-b_C-9".padEnd(20, "x")]) {
+      expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k }))).toMatchObject({
+        ok: true,
+        replayed: false,
+      });
+    }
+  });
+
+  it("never repeats the key in a refusal or in the audit entry", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    must(await createExpense(store, actorOf(a), body({ idempotencyKey: k })));
+    const r = await createExpense(store, actorOf(a), body({ idempotencyKey: k, amount: "1" }));
+    expect(JSON.stringify(r)).not.toContain(k);
+    expect(JSON.stringify(await store.audit.listByActor(a.id))).not.toContain(k);
   });
 });
 
@@ -269,5 +504,29 @@ describe("createExpense on the Prisma store (real SQLite)", () => {
     const { a } = await build(store);
     await expect(createExpense(failingInside(store, "audit"), actorOf(a), body())).rejects.toThrow("audit down");
     expect(await store.expenses.list({ createdById: a.id })).toEqual([]);
+  });
+
+  it("gives one expense and the same answer to five requests with one key at once", async () => {
+    const { a } = await build(store);
+    const b = body();
+    const results = await Promise.all(Array.from({ length: 5 }, () => createExpense(store, actorOf(a), b)));
+    const ids = results.map((r) => must(r).id);
+    expect(new Set(ids).size).toBe(1);
+    expect(results.filter((r) => r.ok && !r.replayed)).toHaveLength(1);
+    expect(await store.expenses.list({ createdById: a.id })).toHaveLength(1);
+    expect((await store.audit.listByActor(a.id)).filter((e) => e.entityId === ids[0])).toHaveLength(1);
+  });
+
+  it("returns a repeat with the same view, read back from the database", async () => {
+    const { a } = await build(store);
+    const b = body({ category: "Others", narration: "fuel", description: "generator" });
+    const first = must(await createExpense(store, actorOf(a), b));
+    const again = await createExpense(store, actorOf(a), b);
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again)).toEqual(first);
+    expect(await createExpense(store, actorOf(a), { ...b, amount: "1" })).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
   });
 });

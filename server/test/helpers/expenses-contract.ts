@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DuplicateExpenseKeyError,
   DuplicateExpenseLoanError,
   UnknownActorError,
   UnknownLoanError,
@@ -10,6 +11,7 @@ import {
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
 const uniqueEmail = (tag: string) => `${tag}-${Date.now()}-${++counter}@example.test`;
+const uniqueKey = () => `expense-contract-key-${Date.now()}-${++counter}`;
 // Expenses with equal times have no promised order, so tests wait a little between them.
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
@@ -57,6 +59,8 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         description: "",
         narration: "",
         loanId: null,
+        idempotencyKey: null,
+        requestHash: null,
         createdById: u.id,
         deletedAt: null,
         deletedById: null,
@@ -221,6 +225,112 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         }),
       ).rejects.toThrow("stop");
       expect(await store.expenses.list({ createdById: u.id })).toEqual([before]);
+    });
+
+    // Idempotency keys (step 5.7c), as loans-contract.ts.
+    it("saves the key and the hash and reads them back by id and by key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-save");
+      const key = uniqueKey();
+      const e = await store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "hash-one" }));
+      expect(e.idempotencyKey).toBe(key);
+      expect(e.requestHash).toBe("hash-one");
+      expect(await store.expenses.findById(e.id)).toEqual(e);
+      expect(await store.expenses.findByKey(u.id, key)).toEqual(e);
+    });
+
+    it("finds nothing for an unknown key or for another user's key", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "ek-find-a");
+      const b = await newUser(store, "ek-find-b");
+      const key = uniqueKey();
+      await store.expenses.create(expense(a.id, { idempotencyKey: key, requestHash: "h" }));
+      expect(await store.expenses.findByKey(a.id, uniqueKey())).toBeNull();
+      expect(await store.expenses.findByKey(b.id, key)).toBeNull();
+    });
+
+    it("refuses a second expense with the same key for the same user, and saves only the first", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-dup");
+      const key = uniqueKey();
+      const first = await store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "h" }));
+      await expect(
+        store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "other" })),
+      ).rejects.toBeInstanceOf(DuplicateExpenseKeyError);
+      expect((await store.expenses.list({ createdById: u.id })).map((e) => e.id)).toEqual([first.id]);
+    });
+
+    it("checks the creator before the key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-order");
+      const key = uniqueKey();
+      await store.expenses.create(expense(u.id, { idempotencyKey: key }));
+      await expect(
+        store.expenses.create(expense("no-such-user", { idempotencyKey: key })),
+      ).rejects.toBeInstanceOf(UnknownActorError);
+    });
+
+    it("checks a repeated loan id before a repeated key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-loan-first");
+      const loanId = await newLoanId(store, u.id);
+      const key = uniqueKey();
+      await store.expenses.create(expense(u.id, { category: "Loan", loanId, idempotencyKey: key }));
+      await expect(
+        store.expenses.create(expense(u.id, { category: "Loan", loanId, idempotencyKey: key })),
+      ).rejects.toBeInstanceOf(DuplicateExpenseLoanError);
+    });
+
+    it("refuses a repeated key on an expense with a new loan as a key clash", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-key-loan");
+      const key = uniqueKey();
+      await store.expenses.create(expense(u.id, { idempotencyKey: key }));
+      const loanId = await newLoanId(store, u.id);
+      await expect(
+        store.expenses.create(expense(u.id, { category: "Loan", loanId, idempotencyKey: key })),
+      ).rejects.toBeInstanceOf(DuplicateExpenseKeyError);
+      expect(await store.expenses.list({ createdById: u.id })).toHaveLength(1);
+    });
+
+    it("lets two users use the same key", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "ek-two-a");
+      const b = await newUser(store, "ek-two-b");
+      const key = uniqueKey();
+      const ea = await store.expenses.create(expense(a.id, { idempotencyKey: key, requestHash: "h" }));
+      const eb = await store.expenses.create(expense(b.id, { idempotencyKey: key, requestHash: "h" }));
+      expect((await store.expenses.findByKey(a.id, key))?.id).toBe(ea.id);
+      expect((await store.expenses.findByKey(b.id, key))?.id).toBe(eb.id);
+    });
+
+    it("returns a copy from findByKey: changing it does not change the stored expense", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-copy");
+      const key = uniqueKey();
+      const saved = await store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "h" }));
+      const found = await store.expenses.findByKey(u.id, key);
+      if (found === null) throw new Error("expense not found");
+      found.requestHash = "changed";
+      found.amount = 1n;
+      found.createdAt.setTime(0);
+      expect(await store.expenses.findByKey(u.id, key)).toEqual(saved);
+    });
+
+    it("undoes earlier writes in a transaction when the key is a duplicate", { timeout: 60_000 }, async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ek-tx");
+      const key = uniqueKey();
+      await store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "h" }));
+      const other = uniqueKey();
+      await expect(
+        store.transaction(async (tx) => {
+          await tx.expenses.create(expense(u.id, { idempotencyKey: other, requestHash: "h" }));
+          await tx.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "h" }));
+        }),
+      ).rejects.toBeInstanceOf(DuplicateExpenseKeyError);
+      expect(await store.expenses.findByKey(u.id, other)).toBeNull();
+      expect(await store.expenses.list({ createdById: u.id })).toHaveLength(1);
     });
   });
 }

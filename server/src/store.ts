@@ -364,9 +364,17 @@ export interface NewExpense {
   createdById: string;
 }
 
-/** What to list. Filters match exactly. No filter means all expenses, soft-deleted ones too. */
+/**
+ * What to list (step 5.8). Every filter given must hold. Text filters match exactly. The time range
+ * is half-open: createdFrom is included, createdBefore is not. No filter means all expenses,
+ * soft-deleted ones too.
+ */
 export interface ExpenseListQuery {
   createdById?: string;
+  category?: string;
+  method?: PaymentMethod;
+  createdFrom?: Date;
+  createdBefore?: Date;
 }
 
 export class DuplicateExpenseLoanError extends Error {

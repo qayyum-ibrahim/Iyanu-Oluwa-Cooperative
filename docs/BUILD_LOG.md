@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.8 (size M), 2026-10-21: store filters for the expense list (D-66, A-172)
+
+**Works (verified in this session):** `ExpenseListQuery` in `server/src/store.ts` gained `category`, `method`, `createdFrom` and `createdBefore` (besides `createdById`). Every given filter must hold; text matches exactly; the time range is half-open (`createdFrom` included, `createdBefore` not). Both adapters (`memory-store.ts`, `prisma-store.ts`) filter the same way; the Prisma adapter builds its `where` with the same spread as `members.list`. 5 new cases in `test/helpers/expenses-contract.ts`, run on both adapters (10 tests). `npm run check`: 43 files, 1458 passed, 0 failed, 70.79 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No logic or route uses the filters yet (5.8b).
+**Tests:** 10 added. Total 1458.
+**Not verified:** no live check (no route). Prisma docs for `gte` and `lt` on DateTime were not read (not checked); the behaviour is pinned by the contract on real SQLite. No break-on-purpose run yet (5.8c).
+**Found along the way:**
+1. 5.8 was L (store, logic, route, DR-13 scope, totals), so it was split into 5.8 (store filters), 5.8b (`GET /expenses`) and 5.8c (break-on-purpose) (D-66).
+2. STATUS said 5.7d was not committed; `83d86d4` was HEAD and `origin/main` pointed to it. Fixed.
+3. An expense has no date of its own, only `createdAt`; the prototype let the user type a date. The filters use `createdAt` (A-172). Whether an expense needs a separate "date spent" is for the owner.
+4. No deleted-rows filter yet: nothing can be soft-deleted until 5.9, so it could not be tested. It comes with 5.9 (A-172).
+
 ## Step 5.7d (size S), 2026-10-21: break-on-purpose for `POST /expenses` and its key (5.7, 5.7c, D-64, D-65)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.7d.mjs` (not in git; `--dry`: all 84 find texts found once). Baselines 97 (`expenses.test.ts` and `expenses-routes.test.ts`), 29 (`expenses-routes.test.ts`), 218 (`memory-store.test.ts` and `expenses.test.ts`) and 230 (`prisma-store.test.ts`, `db.test.ts` and `expenses.test.ts`). 84 mutations: 46 in `expenses.ts` (E), 13 in `expenses-routes.ts` (R), 8 in the memory adapter expense key code (KM), 10 in the Prisma adapter (KP), 4 in the 5.7c migration (EQ), 3 in `schema.prisma` (C). 82 caught, 2 escaped (R10, KP2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 43 files, 1448 passed, 0 failed, 69.07 s.

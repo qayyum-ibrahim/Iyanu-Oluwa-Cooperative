@@ -374,8 +374,14 @@ export function createMemoryStore(): Store {
           return found ? copyExpense(found) : null;
         },
         async list(query) {
+          const from = query.createdFrom?.getTime();
+          const before = query.createdBefore?.getTime();
           return rows
             .filter((e) => query.createdById === undefined || e.createdById === query.createdById)
+            .filter((e) => query.category === undefined || e.category === query.category)
+            .filter((e) => query.method === undefined || e.method === query.method)
+            .filter((e) => from === undefined || e.createdAt.getTime() >= from)
+            .filter((e) => before === undefined || e.createdAt.getTime() < before)
             .map(copyExpense);
         },
         async findByKey(createdById, idempotencyKey) {

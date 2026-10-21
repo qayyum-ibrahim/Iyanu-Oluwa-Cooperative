@@ -481,7 +481,19 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
       },
       async list(query) {
         const rows = await prisma.expense.findMany({
-          where: query.createdById !== undefined ? { createdById: query.createdById } : {},
+          where: {
+            ...(query.createdById !== undefined ? { createdById: query.createdById } : {}),
+            ...(query.category !== undefined ? { category: query.category } : {}),
+            ...(query.method !== undefined ? { method: query.method } : {}),
+            ...(query.createdFrom !== undefined || query.createdBefore !== undefined
+              ? {
+                  createdAt: {
+                    ...(query.createdFrom !== undefined ? { gte: query.createdFrom } : {}),
+                    ...(query.createdBefore !== undefined ? { lt: query.createdBefore } : {}),
+                  },
+                }
+              : {}),
+          },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toExpense);

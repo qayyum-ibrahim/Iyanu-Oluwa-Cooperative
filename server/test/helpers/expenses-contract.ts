@@ -168,6 +168,82 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       expect(all.filter((id) => [e1.id, e2.id, e3.id].includes(id))).toEqual([e1.id, e2.id, e3.id]);
     });
 
+    // List filters (step 5.8). Each test filters by a new creator, so data kept from other tests
+    // cannot match.
+    it("filters by category exactly", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-f-cat");
+      const e1 = await store.expenses.create(expense(u.id));
+      await pause();
+      await store.expenses.create(expense(u.id, { category: "Allowances" }));
+      await pause();
+      const e3 = await store.expenses.create(expense(u.id));
+      const ids = async (category: string) =>
+        (await store.expenses.list({ createdById: u.id, category })).map((e) => e.id);
+      expect(await ids("Office Maintenance")).toEqual([e1.id, e3.id]);
+      expect(await ids("office maintenance")).toEqual([]);
+      expect(await ids("Office")).toEqual([]);
+    });
+
+    it("filters by method", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-f-method");
+      const cash = await store.expenses.create(expense(u.id));
+      await pause();
+      const bank = await store.expenses.create(expense(u.id, { method: "BANK_TRANSFER" }));
+      const ids = async (method: "CASH" | "BANK_TRANSFER") =>
+        (await store.expenses.list({ createdById: u.id, method })).map((e) => e.id);
+      expect(await ids("CASH")).toEqual([cash.id]);
+      expect(await ids("BANK_TRANSFER")).toEqual([bank.id]);
+    });
+
+    it("includes createdFrom and leaves out createdBefore, at the exact time", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-f-range");
+      const e1 = await store.expenses.create(expense(u.id));
+      await pause();
+      const e2 = await store.expenses.create(expense(u.id));
+      await pause();
+      const e3 = await store.expenses.create(expense(u.id));
+      const ids = async (range: { createdFrom?: Date; createdBefore?: Date }) =>
+        (await store.expenses.list({ createdById: u.id, ...range })).map((e) => e.id);
+      expect(await ids({ createdFrom: e2.createdAt })).toEqual([e2.id, e3.id]);
+      expect(await ids({ createdBefore: e2.createdAt })).toEqual([e1.id]);
+      expect(await ids({ createdFrom: e2.createdAt, createdBefore: e3.createdAt })).toEqual([e2.id]);
+      expect(await ids({ createdFrom: new Date(e3.createdAt.getTime() + 1) })).toEqual([]);
+      expect(await ids({ createdBefore: new Date(e3.createdAt.getTime() + 1) })).toEqual([e1.id, e2.id, e3.id]);
+    });
+
+    it("gives nothing for an empty or reversed time range", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-f-empty");
+      const e = await store.expenses.create(expense(u.id));
+      const list = (createdFrom: Date, createdBefore: Date) =>
+        store.expenses.list({ createdById: u.id, createdFrom, createdBefore });
+      expect(await list(e.createdAt, e.createdAt)).toEqual([]);
+      expect(await list(new Date(e.createdAt.getTime() + 1), e.createdAt)).toEqual([]);
+    });
+
+    it("needs every given filter to hold", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "e-f-all-a");
+      const b = await newUser(store, "e-f-all-b");
+      const start = await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER" }));
+      await pause();
+      const match = await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER" }));
+      await store.expenses.create(expense(a.id, { method: "CASH" }));
+      await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER", category: "Allowances" }));
+      await store.expenses.create(expense(b.id, { method: "BANK_TRANSFER" }));
+      const found = await store.expenses.list({
+        createdById: a.id,
+        category: "Office Maintenance",
+        method: "BANK_TRANSFER",
+        createdFrom: match.createdAt,
+      });
+      expect(found).toEqual([match]);
+      expect(found).not.toContainEqual(start);
+    });
+
     it("does not let a caller change stored data through input or returned records", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-copy");

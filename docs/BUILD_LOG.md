@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.2 (size M), 2026-10-21: expense table and store (D-55)
+
+**Works (verified in this session):** `Expense` model in `schema.prisma` and migration `20261021090000_expenses` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `ExpenseStore` (`create`, `findById`, `list`) and `DuplicateExpenseLoanError` in `store.ts`, both adapters. New `test/helpers/expenses-contract.ts`, 11 cases per adapter. Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `expenses` (owner approved). Comment in `prisma-store.ts` now cites A-121. `npm run check` (after 5.1b): 39 files, 1139 passed, 0 failed, twice.
+**Stubbed:** nothing. No route uses the store.
+**Tests:** +22 (11 per adapter). The drift test passes with the new migration.
+**Not verified:** no break-on-purpose run yet (planned as the next step). The dev database does not have the table until the owner runs `npm run db:deploy`.
+**Found along the way:** the first `npm run check` failed one start-up test (exit 143). Cause found and fixed in 5.1b before any docs.
+
+## Step 5.1b (size S), 2026-10-21: clean stop without the tsx wrapper (D-56, A-153)
+
+**Works (verified in this session):** `npm start` is now `node --import tsx src/server.ts`; `server-start.test.ts` starts the server the same way and has a new test: server paused 200 ms after SIGTERM still exits 0. Cause read from `tsx` 4.23.15 (`dist/cli.mjs`: 30 ms wait, then SIGKILL and exit 143). Reproduced first: paused 200 ms under `tsx` gave 143 twice; under `node --import tsx` 0 three times (0, 200, 2000 ms). Reverse check: with the old `tsx` start put back for a moment, the new test failed (1 failed, 5 passed); file restored (`cmp` identical). `npm run check`: 39 files, 1139 passed, 0 failed, run twice. `pgrep -fl src/server.ts` empty after each run.
+**Not verified:** the tsx docs (TLS certificate error fetching tsx.is). `npm start` itself was not run (it uses the owner's `.env`). `npm run dev` still uses the `tsx` command. Windows not tried.
+
 ## Step 5.1 (size S), 2026-10-21: expense categories (DR-11, A-148)
 
 **Works (verified in this session):** new `server/src/expense-categories.ts` holds one table of the 10 DR-11 categories in order, with a `systemOnly` flag (Loan, Membership Withdrawal). Exports: `EXPENSE_CATEGORIES`, `MANUAL_EXPENSE_CATEGORIES` (8), `SYSTEM_ONLY_EXPENSE_CATEGORIES` (2), all frozen; `isExpenseCategory`, `isSystemOnlyExpenseCategory`, `parseManualExpenseCategory` (throws `CategoryError` from `categories.ts`: `unknown`, then `system_only`). `npm run check`: 39 files, 1116 passed, 0 failed, 61.91 s.

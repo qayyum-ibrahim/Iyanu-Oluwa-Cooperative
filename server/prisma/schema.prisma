@@ -1,5 +1,5 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
-// stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2).
+// stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2).
 // Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -47,6 +47,8 @@ model User {
   refreshTokens    RefreshToken[]
   members          Member[]
   payments         Payment[]
+  expenses         Expense[]      @relation("ExpenseCreatedBy")
+  deletedExpenses  Expense[]      @relation("ExpenseDeletedBy")
 }
 
 model AuditLog {
@@ -128,4 +130,30 @@ model PaymentLine {
   amountKobo BigInt
 
   @@unique([paymentId, position])
+}
+
+// Money going out (DR-11, D-54). Soft-delete only (D-10, DR-12): deletedAt and deletedById are set
+// at step 5.9; nothing deletes a row. The category is text, checked by the logic code (A-148).
+model Expense {
+  id          String        @id @default(uuid())
+  category    String
+  // Whole kobo (D-15).
+  amountKobo  BigInt
+  method      PaymentMethod
+  description String        @default("")
+  // The free text for "Others" (DR-11). Empty for other categories.
+  narration   String        @default("")
+  // The loan this expense pays out (DR-10). At most one expense per loan (A-148).
+  // No foreign key yet: the Loan table comes at step 5.3 (A-151).
+  loanId      String?       @unique
+  // The user who recorded the expense (DR-15).
+  createdById String
+  createdBy   User          @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now())
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?         @relation("ExpenseDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
+
+  @@index([createdById])
+  @@index([createdAt])
 }

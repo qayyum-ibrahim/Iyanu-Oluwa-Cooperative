@@ -25,6 +25,7 @@ Sizes: S one change, M several files, L split it. You say "continue" to start ea
 ## Phase 5 steps (planned at 5.0, D-54)
 Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment flow waits for the screens. Each money step is followed by a break-on-purpose step. An M step may split when it starts. Steps with a migration need the owner's word before `migrate`.
 - 5.1 (S) `server/src/expense-categories.ts`: the DR-11 list; "Loan" and "Membership Withdrawal" system-only (A-148). Pure logic and tests.
+- 5.1b (S) Start the server with `node --import tsx` (D-56, A-153). Added at 5.2 after a start-up test failed. Done.
 - 5.2 (M) Expense table and store (both adapters, shared contract, migration): category, amount (BigInt kobo), method, description, "Others" narration, optional unique `loanId`, `createdById`, `createdAt`, `deletedAt`, `deletedById`.
 - 5.3 (M) Loan table and store (both adapters, shared contract, migration): `memberId`, principal (BigInt kobo), optional interest note (A-146), notes, `createdById`, `createdAt`. Plus nullable `PaymentLine.loanId`. Outstanding and status worked out on read (A-144).
 - 5.4 (M) `POST /loans` (permission `loans.disburse`, A-149): member visible and Active, no active loan; loan, its Loan expense and the audit entry in one transaction (DR-08, DR-10).
@@ -33,4 +34,5 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.7 (M) `POST /expenses` (only categories that can be picked by hand).
 - 5.8 (M) Expense list with filters.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).
+- 5.2b (S) Break-on-purpose for the expenses store and migration. Added at 5.2.
 Exit "totals reconcile" is defined at 5.8.

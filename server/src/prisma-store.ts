@@ -6,8 +6,10 @@ import {
   UnknownUserError,
   UnknownMemberError,
   DuplicateIdempotencyKeyError,
+  DuplicateExpenseLoanError,
   formatMembershipId,
   type AuditRecord,
+  type ExpenseRecord,
   type PaymentMethod,
   type PaymentRecord,
   type LockoutState,
@@ -60,6 +62,23 @@ const toPayment = (r: PaymentRow): PaymentRecord => ({
     .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo })),
   createdById: r.createdById,
   createdAt: r.createdAt,
+});
+
+/** An Expense row as the database holds it. */
+type ExpenseRow = Omit<ExpenseRecord, "amount"> & { amountKobo: bigint };
+
+const toExpense = (r: ExpenseRow): ExpenseRecord => ({
+  id: r.id,
+  category: r.category,
+  amount: r.amountKobo,
+  method: r.method,
+  description: r.description,
+  narration: r.narration,
+  loanId: r.loanId,
+  createdById: r.createdById,
+  createdAt: r.createdAt,
+  deletedAt: r.deletedAt,
+  deletedById: r.deletedById,
 });
 
 function hasCode(e: unknown, code: string): boolean {
@@ -356,7 +375,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           },
           include: { lines: true },
         }).catch((e: unknown) => {
-          // The only other unique index here is the line position, which cannot clash (A-119).
+          // The only other unique index here is the line position, which cannot clash (A-121).
           if (hasCode(e, "P2002")) throw new DuplicateIdempotencyKeyError();
           throw e;
         });
@@ -380,6 +399,46 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toPayment);
+      },
+    },
+    expenses: {
+      async create(input) {
+        // Read the creator first, so an unknown creator wins over a repeated loanId (same order as memory).
+        const actor = await prisma.user.findUnique({
+          where: { id: input.createdById },
+          select: { id: true },
+        });
+        if (actor === null) throw new UnknownActorError(input.createdById);
+        try {
+          const row = await prisma.expense.create({
+            data: {
+              category: input.category,
+              amountKobo: input.amount,
+              method: input.method,
+              description: input.description ?? "",
+              narration: input.narration ?? "",
+              loanId: input.loanId ?? null,
+              createdById: input.createdById,
+            },
+          });
+          return toExpense(row);
+        } catch (e) {
+          // loanId is the only unique column besides id.
+          if (hasCode(e, "P2002")) throw new DuplicateExpenseLoanError();
+          if (hasCode(e, "P2003")) throw new UnknownActorError(input.createdById);
+          throw e;
+        }
+      },
+      async findById(id) {
+        const row = await prisma.expense.findUnique({ where: { id } });
+        return row ? toExpense(row) : null;
+      },
+      async list(query) {
+        const rows = await prisma.expense.findMany({
+          where: query.createdById !== undefined ? { createdById: query.createdById } : {},
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toExpense);
       },
     },
     refreshTokens: {

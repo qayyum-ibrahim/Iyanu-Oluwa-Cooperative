@@ -313,12 +313,72 @@ export interface PaymentStore {
   findByKey(createdById: string, idempotencyKey: string): Promise<PaymentRecord | null>;
 }
 
+/**
+ * Money going out (DR-11, D-54). Soft-delete only (D-10): deletedAt and deletedById are set by a
+ * later step (5.9); until then they are always null.
+ */
+export interface ExpenseRecord {
+  id: string;
+  /** Stored as given. Checking it (parseManualExpenseCategory) is the logic code's job (A-150). */
+  category: string;
+  /** Whole kobo. */
+  amount: bigint;
+  method: PaymentMethod;
+  description: string;
+  /** The free text for "Others" (DR-11). Empty for other categories. */
+  narration: string;
+  /** The loan this expense pays out (DR-10), or null. At most one expense per loan (A-148). */
+  loanId: string | null;
+  /** The user who recorded the expense (DR-15). */
+  createdById: string;
+  createdAt: Date;
+  deletedAt: Date | null;
+  deletedById: string | null;
+}
+
+export interface NewExpense {
+  category: string;
+  amount: bigint;
+  method: PaymentMethod;
+  /** Defaults to "". */
+  description?: string;
+  /** Defaults to "". */
+  narration?: string;
+  loanId?: string;
+  createdById: string;
+}
+
+/** What to list. Filters match exactly. No filter means all expenses, soft-deleted ones too. */
+export interface ExpenseListQuery {
+  createdById?: string;
+}
+
+export class DuplicateExpenseLoanError extends Error {
+  constructor() {
+    super("An expense for this loan already exists");
+    this.name = "DuplicateExpenseLoanError";
+  }
+}
+
+export interface ExpenseStore {
+  /**
+   * Saves a new expense. Throws UnknownActorError if createdById is not a user, then
+   * DuplicateExpenseLoanError if another expense has the same loanId. Values are saved as given:
+   * checking the category, amount and narration is the logic code's job (A-150).
+   */
+  create(input: NewExpense): Promise<ExpenseRecord>;
+  findById(id: string): Promise<ExpenseRecord | null>;
+  /** Expenses oldest first, narrowed by the exact filters. Equal times are in no fixed order. Returns copies. */
+  list(query: ExpenseListQuery): Promise<ExpenseRecord[]>;
+}
+
 export interface Store {
   users: UserStore;
   audit: AuditStore;
   refreshTokens: RefreshTokenStore;
   members: MemberStore;
   payments: PaymentStore;
+  expenses: ExpenseStore;
   /**
    * Runs fn with a store bound to one transaction. If fn returns, every write inside it is saved.
    * If fn throws, every write inside it is undone and the same error is thrown again.

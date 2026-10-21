@@ -6,14 +6,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-// Starts the real entry file (src/server.ts) as a child process (step 4.12).
+// Starts the real entry file (src/server.ts) as a child process (step 4.12), the same way as
+// `npm start`: plain node with the tsx loader, so stop signals reach the server itself (step 5.1b).
+// The tsx command waits only 30 ms for its child to take a signal, then kills it (A-153).
 // Every run uses its own settings: a fake secret, a database file in a temporary folder and a
 // free port. The dev database and port 3000 are never used. dotenv never overrides a setting
 // that is already set, so the values in server/.env are not used for these three.
 // Fake values for tests only.
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
-const TSX = join(SERVER_DIR, "node_modules", ".bin", "tsx");
 const FAKE_SECRET = "test-only-secret-for-server-start-0123456789";
 const SLOW = { timeout: 30_000 };
 
@@ -29,8 +30,8 @@ const folders: string[] = [];
 const blockers: Server[] = [];
 
 afterEach(() => {
-  // Each child leads its own process group (detached), so this also ends the server that tsx
-  // started under it. Killing only the tsx wrapper left servers running (4.12b, A-142).
+  // Each child leads its own process group (detached), so this also ends anything it started.
+  // Killing only the old tsx wrapper left servers running (4.12b, A-142).
   for (const c of children.splice(0)) {
     if (c.pid === undefined) continue;
     try {
@@ -72,7 +73,7 @@ function start(settings: { TOKEN_SECRET: string; PORT: number }): Started {
 }
 
 function startWith(env: NodeJS.ProcessEnv): Started {
-  const child = spawn(TSX, ["src/server.ts"], {
+  const child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
     cwd: SERVER_DIR,
     env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -126,6 +127,20 @@ describe("server.ts", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
     s.child.kill("SIGTERM");
+    expect(await s.exited).toBe(0);
+  });
+
+  it("still stops with exit code 0 on SIGTERM when the server is slow to take the signal", SLOW, async () => {
+    // Under the tsx command this gave 143: it killed a server that took over 30 ms (A-153).
+    const port = await freePort();
+    const s = start({ TOKEN_SECRET: FAKE_SECRET, PORT: port });
+    await s.waitFor(`server listening on port ${port}`);
+    const pid = s.child.pid;
+    if (pid === undefined) throw new Error("no pid");
+    process.kill(pid, "SIGSTOP");
+    s.child.kill("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    process.kill(pid, "SIGCONT");
     expect(await s.exited).toBe(0);
   });
 

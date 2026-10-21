@@ -6,8 +6,11 @@ import {
   UnknownUserError,
   UnknownMemberError,
   DuplicateIdempotencyKeyError,
+  DuplicateExpenseLoanError,
   formatMembershipId,
   type AuditRecord,
+  type ExpenseRecord,
+  type ExpenseStore,
   type PaymentRecord,
   type PaymentStore,
   type LockoutState,
@@ -27,6 +30,11 @@ const copyPayment = (p: PaymentRecord): PaymentRecord => ({
 });
 
 const copyDate = (d: Date | null): Date | null => (d === null ? null : new Date(d));
+const copyExpense = (e: ExpenseRecord): ExpenseRecord => ({
+  ...e,
+  createdAt: new Date(e.createdAt),
+  deletedAt: copyDate(e.deletedAt),
+});
 const copyUser = (u: UserRecord): UserRecord => ({
   ...u,
   createdAt: new Date(u.createdAt),
@@ -55,6 +63,7 @@ export function createMemoryStore(): Store {
   const audit: AuditRecord[] = [];
   const memberRows: MemberRecord[] = [];
   const paymentRows: PaymentRecord[] = [];
+  const expenseRows: ExpenseRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
   function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
@@ -75,6 +84,7 @@ export function createMemoryStore(): Store {
       audit: audit.map((a) => copyAudit(a)),
       members: memberRows.map((m) => copyMember(m)),
       payments: paymentRows.map((p) => copyPayment(p)),
+      expenses: expenseRows.map((e) => copyExpense(e)),
       tokens: [...tokens.entries()].map(([id, t]) => [id, copyToken(t)] as const),
     };
   }
@@ -91,6 +101,8 @@ export function createMemoryStore(): Store {
     memberRows.push(...s.members);
     paymentRows.length = 0;
     paymentRows.push(...s.payments);
+    expenseRows.length = 0;
+    expenseRows.push(...s.expenses);
     tokens.clear();
     for (const [id, t] of s.tokens) tokens.set(id, t);
   }
@@ -300,6 +312,42 @@ export function createMemoryStore(): Store {
         },
         async listByMember(memberId) {
           return rows.filter((p) => p.memberId === memberId).map(copyPayment);
+        },
+      };
+    })(),
+    expenses: ((): ExpenseStore => {
+      const rows = expenseRows;
+      return {
+        async create(input) {
+          // No await in this method, so the checks and the save cannot be interleaved.
+          if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          if (input.loanId !== undefined && rows.some((e) => e.loanId === input.loanId)) {
+            throw new DuplicateExpenseLoanError();
+          }
+          const record: ExpenseRecord = {
+            id: randomUUID(),
+            category: input.category,
+            amount: input.amount,
+            method: input.method,
+            description: input.description ?? "",
+            narration: input.narration ?? "",
+            loanId: input.loanId ?? null,
+            createdById: input.createdById,
+            createdAt: new Date(),
+            deletedAt: null,
+            deletedById: null,
+          };
+          rows.push(record);
+          return copyExpense(record);
+        },
+        async findById(id) {
+          const found = rows.find((e) => e.id === id);
+          return found ? copyExpense(found) : null;
+        },
+        async list(query) {
+          return rows
+            .filter((e) => query.createdById === undefined || e.createdById === query.createdById)
+            .map(copyExpense);
         },
       };
     })(),

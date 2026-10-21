@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 5.0 (size S), 2026-10-21: Phase 5 loans and expenses plan (D-54)
+
+**Works (verified in this session):** planning only, no code. Read DR-08 to DR-12, D-02, D-03, D-10, D-17, D-44, OQ-08, `schema.prisma`, `store.ts`, `permissions.ts`, and the prototype's loan code (`legacy-prototype/src/App.jsx` lines 118 to 160, `PRODUCTION_SCHEMA_AND_API.md`). Owner approved the plan and chose `loans.disburse` for giving a loan (A-149). `npm run check` before the docs: 38 files, 1103 passed, 0 failed, 67.78 s.
+**Stubbed:** nothing.
+**Tests:** none new (1103).
+**Not verified:** nothing built; the plan's tables and rules are untested until 5.2 to 5.9.
+**Found along the way:**
+1. Conflict: the prototype stores `amountRepaid` and `outstanding` on a loan; D-17 forbids stored balances. D-17 wins (A-144).
+2. The Loan Repaid effect (R-07, DR-09) moves from Phase 4 to step 5.5.
+3. New: D-54, A-144 to A-149, OQ-16. The mirror needs D-54.
+
 ## Step 4.13b (size S), 2026-10-21: tests close the database schema gaps (A-143)
 
 **Works (verified in this session):** 4 new tests in `server/test/db.test.ts`, no source change. (1) Drift test: the temporary database built by `prisma migrate deploy` is compared with `schema.prisma` by `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code`; it must exit 0 (flags and exit codes from the installed Prisma 7.10.0 CLI help: empty 0, error 1, not empty 2). It runs first in the file, because the A-03 test adds a table. (2) A payment with an unknown member gives P2003. (3) A payment with an unknown creator gives P2003. (4) Two lines with the same position in one payment give P2002. The file alone: 11 passed, 6.83 s. `npm run check`: 38 files, 1103 passed, 0 failed, 66.03 s; no typecheck or lint error in the output. Tests committed first (`d64e7b2`, owner approved). Rerun of `node ~/Desktop/mutate-4.13.mjs`: baseline 114 passed; 24 mutations, 24 caught, 0 escaped, 0 error, 0 timeout, 0 not applied; "files restored: yes"; `git status --short` empty.

@@ -2,11 +2,9 @@ docs/STATUS.md
 docs/BUILD_LOG.md
 docs/PHASE_PLAN.md
 docs/DOMAIN_RULES.md
-docs/DATA_MODEL.md
-docs/OPEN_QUESTIONS.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/NEXT_FILES.txt
-server/prisma/schema.prisma
-server/src/store.ts
+server/src/categories.ts
+server/test/categories.test.ts

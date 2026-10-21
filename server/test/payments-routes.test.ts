@@ -161,6 +161,36 @@ describe("POST /payments", () => {
     expect(res.body).toEqual({ error: "member_inactive" });
   });
 
+  it("answers 409 no_active_loan for Loan Repaid without an active loan, and saves nothing", async () => {
+    const { app, a, bearer, addMember, store } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app)
+      .post("/payments").set("Idempotency-Key", key())
+      .set("Authorization", bearer(a))
+      .send(payBody(m.id, { total: "20000", lines: [{ category: "Loan Repaid", amount: "20000" }] }));
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "no_active_loan" });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+  });
+
+  it("answers 409 loan_overpayment above the outstanding amount, and 201 at it", async () => {
+    const { app, a, bearer, addMember, store } = await build();
+    const m = await addMember(a.id, "A One");
+    await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: a.id });
+    const send = (amount: string) =>
+      request(app)
+        .post("/payments").set("Idempotency-Key", key())
+        .set("Authorization", bearer(a))
+        .send(payBody(m.id, { total: amount, lines: [{ category: "Loan Repaid", amount }] }));
+    const over = await send("300000.01");
+    expect(over.status).toBe(409);
+    expect(over.body).toEqual({ error: "loan_overpayment" });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+    const exact = await send("300000");
+    expect(exact.status).toBe(201);
+    expect(exact.body.payment.lines).toEqual([{ category: "Loan Repaid", amount: "300000.00" }]);
+  });
+
   it("answers 400 with the code when the lines do not add up", async () => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");

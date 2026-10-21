@@ -1,21 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { subjectOf } from "../src/guards.js";
+import { isLoanActive, loanOutstanding } from "../src/loans.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import {
   createPayment,
   koboToNairaString,
+  LOAN_REPAID_CATEGORY,
   type PaymentActor,
   type PaymentResult,
   type PaymentView,
 } from "../src/payments.js";
+import { createPrismaStore } from "../src/prisma-store.js";
 import type { Role, Store, UserRecord } from "../src/store.js";
+import { createTempDb, type TempDb } from "./helpers/temp-db.js";
 
 // Fictional data only (D-08).
-async function build() {
-  const store = createMemoryStore();
+async function build(store: Store = createMemoryStore()) {
   const make = (name: string, role: Role, permissions: string[]) =>
     store.users.create({
-      email: `${name}@example.test`,
+      email: `${name}-${Math.random().toString(36).slice(2)}@example.test`,
       passwordHash: "not-a-real-hash",
       displayName: name,
       role,
@@ -309,6 +312,233 @@ describe("createPayment: audit and transaction", () => {
     };
     await expect(createPayment(failing, actorOf(a), pay(m.id))).rejects.toThrow("audit down");
     expect(await store.payments.listByMember(m.id)).toEqual([]);
+  });
+});
+
+// A payment of one Loan Repaid line, or of the given lines.
+const repay = (memberId: string, amount: string, lines = [{ category: "Loan Repaid", amount }]) =>
+  pay(memberId, { total: amount, lines });
+
+// A ₦300,000 loan saved straight into the store (DR-08 example).
+const addLoan = (store: Store, memberId: string, createdById: string, principal = 30_000_000n) =>
+  store.loans.create({ memberId, principal, createdById });
+
+describe("createPayment: Loan Repaid (DR-08, DR-09, A-145)", () => {
+  it("links a Loan Repaid line to the active loan: ₦300,000 less ₦20,000 leaves ₦280,000", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const loan = await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "20000")));
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved[0]?.lines.map((l) => [l.category, l.amount, l.loanId])).toEqual([
+      ["Loan Repaid", 2_000_000n, loan.id],
+    ]);
+    expect(loanOutstanding(loan, saved)).toBe(28_000_000n);
+  });
+
+  it("links only the Loan Repaid lines; other lines, Loan Interest too, name no loan", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const loan = await addLoan(store, m.id, a.id);
+    const lines = [
+      { category: "Savings", amount: "1000" },
+      { category: "Loan Repaid", amount: "5000" },
+      { category: "Loan Interest", amount: "500" },
+      { category: "Loan Repaid", amount: "2500" },
+    ];
+    must(await createPayment(store, actorOf(a), repay(m.id, "9000", lines)));
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved[0]?.lines.map((l) => [l.category, l.loanId])).toEqual([
+      ["Savings", null],
+      ["Loan Repaid", loan.id],
+      ["Loan Interest", null],
+      ["Loan Repaid", loan.id],
+    ]);
+    expect(loanOutstanding(loan, saved)).toBe(30_000_000n - 750_000n);
+  });
+
+  it("leaves the loan alone when a payment has no Loan Repaid line", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const loan = await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), pay(m.id)));
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved[0]?.lines.every((l) => l.loanId === null)).toBe(true);
+    expect(loanOutstanding(loan, saved)).toBe(30_000_000n);
+  });
+
+  it("accepts Loan Interest without any loan, and links nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const lines = [{ category: "Loan Interest", amount: "500" }];
+    must(await createPayment(store, actorOf(a), repay(m.id, "500", lines)));
+    expect((await store.payments.listByMember(m.id))[0]?.lines[0]?.loanId).toBeNull();
+  });
+
+  it("accepts exactly the outstanding amount; the loan is then Fully Repaid", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const loan = await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "100000")));
+    must(await createPayment(store, actorOf(a), repay(m.id, "200000")));
+    const saved = await store.payments.listByMember(m.id);
+    expect(loanOutstanding(loan, saved)).toBe(0n);
+    expect(isLoanActive(loan, saved)).toBe(false);
+  });
+
+  it("answers no_active_loan for a member with no loan, and saves nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await createPayment(store, actorOf(a), repay(m.id, "20000"))).toEqual({
+      ok: false,
+      reason: "no_active_loan",
+    });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("answers no_active_loan once the loan is Fully Repaid", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "300000")));
+    expect(await createPayment(store, actorOf(a), repay(m.id, "0.01"))).toEqual({
+      ok: false,
+      reason: "no_active_loan",
+    });
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("does not use another member's loan", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const other = await addMember(a.id, "A Two");
+    await addLoan(store, other.id, a.id);
+    expect(await createPayment(store, actorOf(a), repay(m.id, "20000"))).toEqual({
+      ok: false,
+      reason: "no_active_loan",
+    });
+  });
+
+  it("links to the new active loan, not to an old Fully Repaid one", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const first = await addLoan(store, m.id, a.id, 1_000_000n);
+    must(await createPayment(store, actorOf(a), repay(m.id, "10000")));
+    const second = await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "20000")));
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved.map((p) => p.lines[0]?.loanId)).toEqual([first.id, second.id]);
+    expect(loanOutstanding(second, saved)).toBe(28_000_000n);
+  });
+
+  it("answers loan_overpayment for 1 kobo above the outstanding amount, and saves nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "20000")));
+    expect(await createPayment(store, actorOf(a), repay(m.id, "280000.01"))).toEqual({
+      ok: false,
+      reason: "loan_overpayment",
+    });
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("adds up every Loan Repaid line before comparing with the outstanding amount", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await addLoan(store, m.id, a.id);
+    const lines = [
+      { category: "Loan Repaid", amount: "200000" },
+      { category: "Savings", amount: "50000" },
+      { category: "Loan Repaid", amount: "100000.01" },
+    ];
+    expect(await createPayment(store, actorOf(a), repay(m.id, "350000.01", lines))).toEqual({
+      ok: false,
+      reason: "loan_overpayment",
+    });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+  });
+
+  it("does not count other lines against the outstanding amount", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await addLoan(store, m.id, a.id);
+    const lines = [
+      { category: "Loan Repaid", amount: "300000" },
+      { category: "Savings", amount: "50000" },
+    ];
+    must(await createPayment(store, actorOf(a), repay(m.id, "350000", lines)));
+  });
+
+  it("checks who may see the member and that it is Active before the loan", async () => {
+    const { store, a, b, addMember } = await build();
+    const theirs = await addMember(b.id, "B One");
+    expect(await createPayment(store, actorOf(a), repay(theirs.id, "20000"))).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    const m = await addMember(a.id, "A One");
+    await store.members.setStatus(m.id, "INACTIVE");
+    expect(await createPayment(store, actorOf(a), repay(m.id, "20000"))).toEqual({
+      ok: false,
+      reason: "member_inactive",
+    });
+  });
+
+  it("returns the first payment on a repeat, even after the loan is Fully Repaid", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await addLoan(store, m.id, a.id);
+    const body = repay(m.id, "300000");
+    const first = must(await createPayment(store, actorOf(a), body));
+    const again = await createPayment(store, actorOf(a), body);
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again)).toEqual(first);
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("uses the category name of the table", () => {
+    expect(LOAN_REPAID_CATEGORY).toBe("Loan Repaid");
+  });
+});
+
+describe("createPayment with Loan Repaid on the Prisma store (real SQLite)", () => {
+  let tmp: TempDb;
+  let store: Store;
+  beforeAll(() => {
+    tmp = createTempDb();
+    store = createPrismaStore(tmp.prisma);
+  }, 120_000);
+  afterAll(async () => {
+    await tmp.cleanup();
+  });
+
+  it("saves the loan link, read back from the database", async () => {
+    const { a, addMember } = await build(store);
+    const m = await addMember(a.id, "P One");
+    const loan = await addLoan(store, m.id, a.id);
+    must(await createPayment(store, actorOf(a), repay(m.id, "20000")));
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved[0]?.lines[0]?.loanId).toBe(loan.id);
+    expect(loanOutstanding(loan, saved)).toBe(28_000_000n);
+  });
+
+  it("never repays more than the loan when five full repayments run at once", async () => {
+    const { a, addMember } = await build(store);
+    const m = await addMember(a.id, "P Two");
+    const loan = await addLoan(store, m.id, a.id);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => createPayment(store, actorOf(a), repay(m.id, "300000"))),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).map((r) => (r.ok ? "" : r.reason))).toEqual(
+      Array(4).fill("no_active_loan"),
+    );
+    const saved = await store.payments.listByMember(m.id);
+    expect(saved).toHaveLength(1);
+    expect(loanOutstanding(loan, saved)).toBe(0n);
   });
 });
 

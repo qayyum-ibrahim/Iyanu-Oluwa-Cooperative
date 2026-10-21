@@ -1,5 +1,5 @@
-// Payment logic (step 4.4, idempotency key added in 4.5, list in 4.8; D-43 to D-47, DR-02,
-// DR-13, DR-15).
+// Payment logic (step 4.4, idempotency key added in 4.5, list in 4.8, Loan Repaid in 5.5; D-43 to
+// D-47, DR-02, DR-08, DR-09, DR-13, DR-15).
 // Rules over the Store: no HTTP here.
 // The breakdown is checked first. The key lookup, the member check, the payment and the audit
 // entry then run inside one store transaction, so all of them are saved or none (D-45).
@@ -8,7 +8,8 @@
 
 import { createHash } from "node:crypto";
 import { BreakdownError, checkBreakdown } from "./breakdown.js";
-import type { Kobo } from "./money.js";
+import { isLoanActive, loanOutstanding } from "./loans.js";
+import { sumKobo, type Kobo } from "./money.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import {
   DuplicateIdempotencyKeyError,
@@ -19,6 +20,9 @@ import {
 
 /** Most lines one payment may have (A-100: my choice). There are 14 categories. */
 export const MAX_PAYMENT_LINES = 20;
+
+/** The only category whose lines pay back a loan (DR-09). */
+export const LOAN_REPAID_CATEGORY = "Loan Repaid";
 
 /** A key is 16 to 64 characters from these (A-119: my choice). A UUID fits. */
 export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -52,7 +56,9 @@ export type PaymentFailure =
   | "invalid_input"
   | "not_found"
   | "member_inactive"
-  | "idempotency_conflict";
+  | "idempotency_conflict"
+  | "no_active_loan"
+  | "loan_overpayment";
 
 export interface PaymentFailureResult {
   ok: false;
@@ -129,7 +135,10 @@ export interface NewPaymentInput {
  * Order: permission, idempotency key shape, member id and method, line count, breakdown (DR-02),
  * then one transaction: look the key up (a repeat returns the first payment, a different request
  * with the same key is refused), find the member, check who may see it, check it is Active,
- * save the payment with its key, write the audit entry.
+ * link the Loan Repaid lines to the member's active loan (A-145), save the payment with its key,
+ * write the audit entry.
+ * Loan Repaid lines need an active loan (else no_active_loan) and may add up to at most the
+ * outstanding amount (else loan_overpayment, DR-08). Other lines never name a loan (DR-09).
  * Staff may pay only into members they recorded (OQ-09); other members answer not_found.
  * If any write fails, nothing is saved (D-45). A refused request does not use up the key.
  */
@@ -182,11 +191,27 @@ export async function createPayment(
       }
       if (member.status !== "ACTIVE") return failure("member_inactive");
 
+      let loanId: string | undefined;
+      const repaid = checked.lines.filter((l) => l.category === LOAN_REPAID_CATEGORY);
+      if (repaid.length > 0) {
+        const payments = await tx.payments.listByMember(member.id);
+        const loan = (await tx.loans.listByMember(member.id)).find((l) => isLoanActive(l, payments));
+        if (loan === undefined) return failure("no_active_loan");
+        if (sumKobo(repaid.map((l) => l.amount)) > loanOutstanding(loan, payments)) {
+          return failure("loan_overpayment");
+        }
+        loanId = loan.id;
+      }
+
       const payment = await tx.payments.create({
         memberId: member.id,
         method,
         total: checked.total,
-        lines: checked.lines.map((l) => ({ category: l.category, amount: l.amount })),
+        lines: checked.lines.map((l) =>
+          l.category === LOAN_REPAID_CATEGORY && loanId !== undefined
+            ? { category: l.category, amount: l.amount, loanId }
+            : { category: l.category, amount: l.amount },
+        ),
         createdById: actor.id,
         idempotencyKey: key,
         requestHash,

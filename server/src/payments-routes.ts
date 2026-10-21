@@ -1,4 +1,4 @@
-// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7, list in 4.8). Thin: all rules
+// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7, list in 4.8, loan codes in 5.5). Thin: all rules
 // live in payments.ts and payment-sms.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
@@ -30,6 +30,8 @@ const STATUS: Record<PaymentFailure, number> = {
   not_found: 404,
   member_inactive: 409,
   idempotency_conflict: 409,
+  no_active_loan: 409,
+  loan_overpayment: 409,
 };
 
 function bodyOf(req: Request): Record<string, unknown> {

@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.5 (size M), 2026-10-21: Loan Repaid effect in `createPayment` (D-62, DR-08, DR-09, A-145)
+
+**Works (verified in this session):** `createPayment` links every Loan Repaid line to the member's active loan; no active loan gives `no_active_loan`, Loan Repaid lines above the outstanding amount give `loan_overpayment` (both 409 on `POST /payments`); nothing is saved and no audit entry is written on a refusal. Other lines, Loan Interest too, keep no loan. A repeat returns the first payment even after the loan is Fully Repaid. `npm run check`: 41 files, 1313 passed, 0 failed, 71.33 s. Five full repayments at once on real SQLite: one saved, four `no_active_loan`.
+**Works (verified on owner's machine):** `sh scripts/live-check-auth.sh`: 138 passed, 0 failed (no Loan Repaid checks in the script yet).
+**Stubbed:** nothing. No loan list (5.6).
+**Tests:** +19 (`payments.test.ts` +17: 15 on the memory store, 2 on real SQLite; `payments-routes.test.ts` +2). Total 1313.
+**Not verified:** no break-on-purpose run yet (5.5b). The parallel case ran on SQLite only (A-121). DR-08's refusal is still "proposed" (OQ-00).
+**Found along the way:**
+1. STATUS still said 5.4e was not committed; `431cdf9` was HEAD and `origin/main` pointed to it. Fixed.
+2. `payments-routes.ts` was not in NEXT_FILES, but its `STATUS` map is typed over every failure reason, so the two new codes needed it. Named in the step header after the owner's "go".
+3. `payments.ts` and `loans.ts` now import each other; neither uses the other's values at load time (A-165).
+4. The live check script has no Loan Repaid checks; adding them is a later step if the owner wants it.
+
 ## Step 5.4e (size S), 2026-10-21: one test for the loan replay expense lookup (A-164)
 
 **Works (verified in this session):** new test in `server/test/loans.test.ts`: one user gives loans to two members, then repeats both requests; each repeat returns its own loan with its own `expenseId`. `npm run check`: 41 files, 1294 passed, 0 failed, 103.28 s. L20 alone (applied by hand with `sed`, then `npx vitest run test/loans.test.ts`): 1 failed (the new test), 73 passed, so caught. `loans.ts` restored; `git diff` on it empty; `git status --short` showed only the test file.

@@ -8,6 +8,7 @@ import {
   UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
+  DuplicateLoanKeyError,
   formatMembershipId,
   type AuditRecord,
   type ExpenseRecord,
@@ -377,12 +378,22 @@ export function createMemoryStore(): Store {
             throw new UnknownMemberError(input.memberId);
           }
           if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          if (
+            input.idempotencyKey !== undefined &&
+            rows.some(
+              (l) => l.createdById === input.createdById && l.idempotencyKey === input.idempotencyKey,
+            )
+          ) {
+            throw new DuplicateLoanKeyError();
+          }
           const record: LoanRecord = {
             id: randomUUID(),
             memberId: input.memberId,
             principal: input.principal,
             interestNote: input.interestNote ?? "",
             notes: input.notes ?? "",
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
             createdById: input.createdById,
             createdAt: new Date(),
           };
@@ -395,6 +406,12 @@ export function createMemoryStore(): Store {
         },
         async listByMember(memberId) {
           return rows.filter((l) => l.memberId === memberId).map(copyLoan);
+        },
+        async findByKey(createdById, idempotencyKey) {
+          const found = rows.find(
+            (l) => l.createdById === createdById && l.idempotencyKey === idempotencyKey,
+          );
+          return found ? copyLoan(found) : null;
         },
       };
     })(),

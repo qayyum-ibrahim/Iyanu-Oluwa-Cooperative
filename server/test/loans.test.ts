@@ -50,8 +50,13 @@ async function build(store: Store = createMemoryStore()) {
 
 const actorOf = (u: UserRecord): LoanActor => ({ id: u.id, subject: subjectOf(u) });
 
+let keyCount = 0;
+/** A new idempotency key on every call, so separate calls are separate requests. */
+const newKey = () => `loan-test-key-${String(++keyCount).padStart(6, "0")}`;
+
 // The DR-08 example: a ₦300,000 loan.
 const loanBody = (memberId: unknown, over: Record<string, unknown> = {}) => ({
+  idempotencyKey: newKey(),
   memberId,
   principal: "300000",
   method: "BANK_TRANSFER",
@@ -236,6 +241,8 @@ describe("loanOutstanding and isLoanActive", () => {
     principal: 30_000_000n,
     interestNote: "",
     notes: "",
+    idempotencyKey: null,
+    requestHash: null,
     createdById: "u",
     createdAt: new Date(0),
   };
@@ -457,6 +464,273 @@ describe("disburseLoan: one transaction (D-45)", () => {
   });
 });
 
+describe("disburseLoan: idempotency key (D-60)", () => {
+  it("a first request is saved and not marked as a replay", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id))).toMatchObject({ ok: true, replayed: false });
+  });
+
+  it("a repeat returns the first loan and its expense: one loan, one expense, one audit entry", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id, { notes: "school fees" });
+    const first = await disburseLoan(store, actorOf(a), body);
+    const second = await disburseLoan(store, actorOf(a), body);
+    expect(first).toMatchObject({ ok: true, replayed: false });
+    expect(second).toMatchObject({ ok: true, replayed: true });
+    expect(must(second)).toEqual(must(first));
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("saves the key and the request hash on the loan", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    const r = must(await disburseLoan(store, actorOf(a), body));
+    const saved = await store.loans.findById(r.id);
+    expect(saved?.idempotencyKey).toBe(body.idempotencyKey);
+    expect(saved?.requestHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("treats the same amount and texts written differently as the same request", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    const first = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, notes: "rent" })));
+    const second = await disburseLoan(
+      store,
+      actorOf(a),
+      loanBody(m.id, { idempotencyKey: k, principal: "300000.00", notes: "  rent ", interestNote: null }),
+    );
+    expect(second).toMatchObject({ ok: true, replayed: true });
+    expect(must(second).id).toBe(first.id);
+  });
+
+  it.each([
+    { label: "another principal", over: { principal: "300000.01" } },
+    { label: "another method", over: { method: "CASH" } },
+    { label: "another interest note", over: { interestNote: "5%" } },
+    { label: "other notes", over: { notes: "x" } },
+  ])("refuses the same key with $label, and saves nothing more", async ({ over }) => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    must(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k })));
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, ...over }))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("refuses the same key for another member, and gives that member nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m1 = await addMember(a.id, "A One");
+    const m2 = await addMember(a.id, "A Two");
+    const k = newKey();
+    must(await disburseLoan(store, actorOf(a), loanBody(m1.id, { idempotencyKey: k })));
+    expect(await disburseLoan(store, actorOf(a), loanBody(m2.id, { idempotencyKey: k }))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    expect(await store.loans.listByMember(m2.id)).toEqual([]);
+  });
+
+  it("keeps keys apart per user", async () => {
+    const { store, admin, a, addMember } = await build();
+    const m1 = await addMember(a.id, "A One");
+    const m2 = await addMember(a.id, "A Two");
+    const k = newKey();
+    const ra = must(await disburseLoan(store, actorOf(a), loanBody(m1.id, { idempotencyKey: k })));
+    const rb = await disburseLoan(store, actorOf(admin), loanBody(m2.id, { idempotencyKey: k }));
+    expect(rb).toMatchObject({ ok: true, replayed: false });
+    expect(must(rb).id).not.toBe(ra.id);
+  });
+
+  it("does not use up the key when the request is refused", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    expect(await disburseLoan(store, actorOf(a), loanBody("no-such-id", { idempotencyKey: k }))).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    await store.members.setStatus(m.id, "INACTIVE");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k }))).toEqual({
+      ok: false,
+      reason: "member_inactive",
+    });
+    await store.members.setStatus(m.id, "ACTIVE");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k }))).toMatchObject({
+      ok: true,
+      replayed: false,
+    });
+  });
+
+  it("does not use up the key when the audit write fails", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    await expect(
+      disburseLoan(failingInside(store, "audit"), actorOf(a), loanBody(m.id, { idempotencyKey: k })),
+    ).rejects.toThrow("audit down");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k }))).toMatchObject({
+      ok: true,
+      replayed: false,
+    });
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("returns the first loan after the member became Inactive or the loan was repaid, but refuses a new key", async () => {
+    const { store, a, addMember, repay } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    const first = must(await disburseLoan(store, actorOf(a), body));
+    await store.members.setStatus(m.id, "INACTIVE");
+    const again = await disburseLoan(store, actorOf(a), body);
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again).id).toBe(first.id);
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id))).toEqual({ ok: false, reason: "member_inactive" });
+
+    await store.members.setStatus(m.id, "ACTIVE");
+    await repay(m.id, first.id, 30_000_000n, a.id);
+    expect(must(await disburseLoan(store, actorOf(a), body)).id).toBe(first.id);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("returns the first loan, not active_loan, when the Super Admin repeats a request for a Staff member", async () => {
+    const { store, admin, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    const first = must(await disburseLoan(store, actorOf(admin), body));
+    expect(must(await disburseLoan(store, actorOf(admin), body))).toEqual(first);
+    expect((await store.expenses.list({}))[0]?.createdById).toBe(admin.id);
+  });
+
+  it("handles a lost race: the key is saved between the lookup and the save", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    const first = must(await disburseLoan(store, actorOf(a), body));
+    let lookups = 0;
+    const racing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({
+            ...tx,
+            loans: {
+              ...tx.loans,
+              findByKey: async (userId, k) => {
+                lookups += 1;
+                return lookups === 1 ? null : tx.loans.findByKey(userId, k);
+              },
+            },
+          }),
+        ),
+    };
+    // The first lookup misses, so the member check runs and finds the active loan: that is an
+    // answer, not a lost race. Make the member look loan-free so the save is reached.
+    const noLoans: Store = {
+      ...racing,
+      transaction: (fn) =>
+        racing.transaction((tx) => fn({ ...tx, loans: { ...tx.loans, listByMember: async () => [] } })),
+    };
+    const r = await disburseLoan(noLoans, actorOf(a), body);
+    expect(r).toMatchObject({ ok: true, replayed: true });
+    expect(must(r).id).toBe(first.id);
+    expect(lookups).toBe(2);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("saves one loan when two identical requests arrive together", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    const [r1, r2] = await Promise.all([
+      disburseLoan(store, actorOf(a), body),
+      disburseLoan(store, actorOf(a), body),
+    ]);
+    expect(must(r1).id).toBe(must(r2).id);
+    expect([r1, r2].filter((r) => r.ok && r.replayed)).toHaveLength(1);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("fails loudly when a saved loan has lost its member or its expense", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const body = loanBody(m.id);
+    must(await disburseLoan(store, actorOf(a), body));
+    const wrap = (over: (tx: Store) => Partial<Store>): Store => ({
+      ...store,
+      transaction: (fn) => store.transaction((tx) => fn({ ...tx, ...over(tx) })),
+    });
+    const noMember = wrap((tx) => ({ members: { ...tx.members, findById: async () => null } }));
+    const noExpense = wrap((tx) => ({ expenses: { ...tx.expenses, list: async () => [] } }));
+    await expect(disburseLoan(noMember, actorOf(a), body)).rejects.toThrow("member of a saved loan");
+    await expect(disburseLoan(noExpense, actorOf(a), body)).rejects.toThrow("Loan expense of a saved loan");
+  });
+
+  it("checks the permission before the key", async () => {
+    const { store, createOnly } = await build();
+    expect(await disburseLoan(store, actorOf(createOnly), loanBody("x", { idempotencyKey: undefined }))).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+  });
+
+  it("checks the key before the other input", async () => {
+    const { store, a } = await build();
+    expect(
+      await disburseLoan(store, actorOf(a), loanBody(undefined, { idempotencyKey: undefined, principal: "x" })),
+    ).toEqual({ ok: false, reason: "invalid_input", code: "missing_idempotency_key" });
+  });
+
+  it("refuses a missing key and saves nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: undefined }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "missing_idempotency_key",
+    });
+    expect(await store.loans.listByMember(m.id)).toEqual([]);
+  });
+
+  it.each([
+    { label: "empty", value: "" },
+    { label: "null", value: null },
+    { label: "a number", value: 1234567890123456 },
+    { label: "15 characters", value: "k".repeat(15) },
+    { label: "65 characters", value: "k".repeat(65) },
+    { label: "holding a space", value: "loan key 000000001" },
+  ])("refuses a key that is $label", async ({ value }) => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_idempotency_key",
+    });
+    expect(await store.loans.listByMember(m.id)).toEqual([]);
+  });
+
+  it("accepts keys of 16 and 64 characters, with dashes and underscores", async () => {
+    const { store, a, addMember } = await build();
+    const keys = ["k".repeat(16), "k".repeat(64), "a-b_C-9".padEnd(20, "x")];
+    for (const [i, k] of keys.entries()) {
+      const m = await addMember(a.id, `A ${i}`);
+      expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k }))).toMatchObject({ ok: true });
+    }
+  });
+});
+
 describe("disburseLoan on the Prisma store (real SQLite)", () => {
   let tmp: TempDb;
   let store: Store;
@@ -497,5 +771,28 @@ describe("disburseLoan on the Prisma store (real SQLite)", () => {
     expect(results.filter((r) => !r.ok).map((r) => (r.ok ? "" : r.reason))).toEqual(Array(4).fill("active_loan"));
     expect(await store.loans.listByMember(m.id)).toHaveLength(1);
     expect(await store.expenses.list({ createdById: a.id })).toHaveLength(1);
+  });
+
+  it("gives one loan and the same answer to five requests with one key at once", async () => {
+    const { a, addMember } = await build(store);
+    const m = await addMember(a.id, "P Four");
+    const body = loanBody(m.id);
+    const results = await Promise.all(Array.from({ length: 5 }, () => disburseLoan(store, actorOf(a), body)));
+    const ids = results.map((r) => must(r).id);
+    expect(new Set(ids).size).toBe(1);
+    expect(results.filter((r) => r.ok && !r.replayed)).toHaveLength(1);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({ createdById: a.id })).toHaveLength(1);
+    expect((await store.audit.listByActor(a.id)).filter((e) => e.entityId === ids[0])).toHaveLength(1);
+  });
+
+  it("returns a repeat with the same view, read back from the database", async () => {
+    const { a, addMember } = await build(store);
+    const m = await addMember(a.id, "P Five");
+    const body = loanBody(m.id, { notes: "rent" });
+    const first = must(await disburseLoan(store, actorOf(a), body));
+    const again = await disburseLoan(store, actorOf(a), body);
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again)).toEqual(first);
   });
 });

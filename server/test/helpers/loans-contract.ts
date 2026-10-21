@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DuplicateLoanKeyError,
   UnknownActorError,
   UnknownMemberError,
   type NewLoan,
@@ -9,6 +10,7 @@ import {
 let counter = 0;
 // Unique per call, so the contract also works on a database that keeps data between tests.
 const uniqueEmail = (tag: string) => `${tag}-${Date.now()}-${++counter}@example.test`;
+const uniqueKey = () => `loan-contract-key-${Date.now()}-${++counter}`;
 // Loans with equal times have no promised order, so tests wait a little between them.
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
@@ -51,6 +53,8 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
         principal: 30_000_000n,
         interestNote: "",
         notes: "",
+        idempotencyKey: null,
+        requestHash: null,
         createdById: u.id,
       });
       expect(l.createdAt).toBeInstanceOf(Date);
@@ -182,6 +186,108 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
         }),
       ).rejects.toThrow("stop");
       expect(await store.loans.listByMember(m.id)).toEqual([before]);
+    });
+
+    // Idempotency keys (step 5.4c, D-60), as payments-key-contract.ts.
+    it("saves the key and the hash and reads them back by id and by key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-save");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      const l = await store.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "hash-one" }));
+      expect(l.idempotencyKey).toBe(key);
+      expect(l.requestHash).toBe("hash-one");
+      expect(await store.loans.findById(l.id)).toEqual(l);
+      expect(await store.loans.findByKey(u.id, key)).toEqual(l);
+    });
+
+    it("finds nothing for an unknown key or for another user's key", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "lk-find-a");
+      const b = await newUser(store, "lk-find-b");
+      const m = await newMember(store, a.id);
+      const key = uniqueKey();
+      await store.loans.create(loan(m.id, a.id, { idempotencyKey: key, requestHash: "h" }));
+      expect(await store.loans.findByKey(a.id, uniqueKey())).toBeNull();
+      expect(await store.loans.findByKey(b.id, key)).toBeNull();
+    });
+
+    it("refuses a second loan with the same key for the same user, and saves only the first", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-dup");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      await store.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "h" }));
+      await expect(
+        store.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "other" })),
+      ).rejects.toBeInstanceOf(DuplicateLoanKeyError);
+      expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    });
+
+    it("checks the member and the creator before the key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-order");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      await store.loans.create(loan(m.id, u.id, { idempotencyKey: key }));
+      await expect(
+        store.loans.create(loan("no-such-member", u.id, { idempotencyKey: key })),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+    });
+
+    it("lets two users use the same key", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "lk-two-a");
+      const b = await newUser(store, "lk-two-b");
+      const m = await newMember(store, a.id);
+      const key = uniqueKey();
+      const la = await store.loans.create(loan(m.id, a.id, { idempotencyKey: key, requestHash: "h" }));
+      const lb = await store.loans.create(loan(m.id, b.id, { idempotencyKey: key, requestHash: "h" }));
+      expect((await store.loans.findByKey(a.id, key))?.id).toBe(la.id);
+      expect((await store.loans.findByKey(b.id, key))?.id).toBe(lb.id);
+    });
+
+    it("returns a copy from findByKey: changing it does not change the stored loan", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-copy");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      const saved = await store.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "h" }));
+      const found = await store.loans.findByKey(u.id, key);
+      if (found === null) throw new Error("loan not found");
+      found.requestHash = "changed";
+      found.principal = 1n;
+      found.createdAt.setTime(0);
+      expect(await store.loans.findByKey(u.id, key)).toEqual(saved);
+    });
+
+    it("saves loans without a key, as many as wanted, with null key and hash", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-none");
+      const m = await newMember(store, u.id);
+      const l1 = await store.loans.create(loan(m.id, u.id));
+      const l2 = await store.loans.create(loan(m.id, u.id));
+      expect(l1.idempotencyKey).toBeNull();
+      expect(l1.requestHash).toBeNull();
+      expect(l2.id).not.toBe(l1.id);
+      expect(await store.loans.listByMember(m.id)).toHaveLength(2);
+    });
+
+    it("undoes earlier writes in a transaction when the key is a duplicate", { timeout: 60_000 }, async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "lk-tx");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      await store.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "h" }));
+      const other = uniqueKey();
+      await expect(
+        store.transaction(async (tx) => {
+          await tx.loans.create(loan(m.id, u.id, { idempotencyKey: other, requestHash: "h" }));
+          await tx.loans.create(loan(m.id, u.id, { idempotencyKey: key, requestHash: "h" }));
+        }),
+      ).rejects.toBeInstanceOf(DuplicateLoanKeyError);
+      expect(await store.loans.findByKey(u.id, other)).toBeNull();
+      expect(await store.loans.listByMember(m.id)).toHaveLength(1);
     });
   });
 }

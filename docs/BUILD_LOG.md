@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.4c (size M), 2026-10-21: idempotency key on `POST /loans` (D-60, D-61)
+
+**Works (verified in this session):** `POST /loans` needs `Idempotency-Key` (same rules as payments). A repeat gives 201 with the first loan and `Idempotent-Replayed: true`, nothing saved; the same key with another request gives 409 `idempotency_conflict`; a refused request keeps its key free; a clash at save is retried once. `Loan.idempotencyKey`, `Loan.requestHash`, unique on creator and key (migration `20261021180000_loan_idempotency`, from `prisma migrate diff` on a temporary database, columns added only). `loans.findByKey` and `DuplicateLoanKeyError` in both adapters. `npm run check`: 41 files, 1293 passed, 0 failed, 85.73 s. Five parallel requests with one key on real SQLite: one loan, one expense. `npm run db:deploy` on the dev database (owner said yes): "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".
+**Works (verified on owner's machine):** `sh scripts/live-check-auth.sh`: 138 passed, 0 failed (6 new loan key checks).
+**Stubbed:** nothing. No loan list (5.6).
+**Tests:** +51 (`loans.test.ts` 44 to 73, `loans-routes.test.ts` 22 to 28, `loans-contract.ts` +8 per adapter). Total 1293.
+**Not verified:** no break-on-purpose run yet (5.4d). The parallel case ran on SQLite only (A-121, A-162). The replay cost with many expenses is not measured (A-163).
+**Found along the way:**
+1. STATUS still said 5.4 was not committed and asked for its commit and push; `8e25efe` was already the head and `origin/main` pointed to it. Fixed.
+2. The 5.4c migration only adds columns, so the table-rebuild gap A-160 does not apply to it.
+3. `vitest list` shows one line per `it.each`; test counts in TRACEABILITY come from runs.
+4. A full `npm run check` took 85.73 s, longer than the 39 to 66 s noted before. STATUS updated.
+5. New: D-61, A-163. A-162 closed. The mirror needs D-61.
+
 ## Step 5.4 (size M), 2026-10-21: give a loan, `POST /loans` (D-59)
 
 **Works (verified in this session):** `server/src/loans.ts` (`disburseLoan`, `loanOutstanding`, `isLoanActive`), `server/src/loans-routes.ts` (`POST /loans`), mounted in `app.ts`. Permission `loans.disburse`; Staff only for members they recorded (404 otherwise); Inactive member 409 `member_inactive`; active loan 409 `active_loan`; loan, one Loan expense and `loan.disbursed` in one transaction. `npm run check`: 41 files, 1242 passed, 0 failed, 62.36 s. Five parallel requests for one member on real SQLite: one loan, four `active_loan`.

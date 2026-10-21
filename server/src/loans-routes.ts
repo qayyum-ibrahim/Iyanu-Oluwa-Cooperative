@@ -1,6 +1,6 @@
-// Loan routes (step 5.4). Thin: all rules live in loans.ts.
+// Loan routes (step 5.4, idempotency key in 5.4c). Thin: all rules live in loans.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
-// never reaches the parser. Never log a body.
+// never reaches the parser. Never log a body or a key.
 
 import express, { Router, type Request, type Response } from "express";
 import {
@@ -18,6 +18,7 @@ const STATUS: Record<LoanFailure, number> = {
   not_found: 404,
   member_inactive: 409,
   active_loan: 409,
+  idempotency_conflict: 409,
 };
 
 function bodyOf(req: Request): Record<string, unknown> {
@@ -56,6 +57,7 @@ export function createLoansRouter(deps: GuardDeps): Router {
       }
       const body = bodyOf(req);
       const result = await disburseLoan(deps.store, actor, {
+        idempotencyKey: req.header("idempotency-key"),
         memberId: body["memberId"],
         principal: body["principal"],
         method: body["method"],
@@ -66,6 +68,7 @@ export function createLoansRouter(deps: GuardDeps): Router {
         sendFailure(res, result);
         return;
       }
+      if (result.replayed) res.setHeader("Idempotent-Replayed", "true");
       res.status(201).json({ loan: result.value });
     },
   );

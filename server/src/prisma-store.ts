@@ -8,6 +8,7 @@ import {
   UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
+  DuplicateLoanKeyError,
   formatMembershipId,
   type AuditRecord,
   type ExpenseRecord,
@@ -92,6 +93,8 @@ const toLoan = (r: LoanRow): LoanRecord => ({
   principal: r.principalKobo,
   interestNote: r.interestNote,
   notes: r.notes,
+  idempotencyKey: r.idempotencyKey,
+  requestHash: r.requestHash,
   createdById: r.createdById,
   createdAt: r.createdAt,
 });
@@ -490,8 +493,14 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
             principalKobo: input.principal,
             interestNote: input.interestNote ?? "",
             notes: input.notes ?? "",
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
             createdById: input.createdById,
           },
+        }).catch((e: unknown) => {
+          // The user and key pair is the only unique index on Loan besides id.
+          if (hasCode(e, "P2002")) throw new DuplicateLoanKeyError();
+          throw e;
         });
         return toLoan(row);
       },
@@ -505,6 +514,10 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toLoan);
+      },
+      async findByKey(createdById, idempotencyKey) {
+        const row = await prisma.loan.findFirst({ where: { createdById, idempotencyKey } });
+        return row ? toLoan(row) : null;
       },
     },
     refreshTokens: {

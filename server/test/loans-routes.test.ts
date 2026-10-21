@@ -8,6 +8,8 @@ import { createAccessToken } from "../src/tokens.js";
 // Fake values for tests only. Fictional data only (D-08).
 const SECRET = "test-only-secret-for-loans-routes-0123456789";
 const T0 = new Date("2026-10-21T10:00:00.000Z");
+let keyCount = 0;
+const newKey = () => `loan-route-key-${String(++keyCount).padStart(6, "0")}`;
 
 async function build() {
   const store = createMemoryStore();
@@ -48,7 +50,7 @@ describe("POST /loans", () => {
   it("answers 403 to Staff with loans.create but not loans.disburse, and saves nothing", async () => {
     const { app, store, createOnly, bearer, addMember } = await build();
     const m = await addMember(createOnly.id, "C One");
-    const res = await request(app).post("/loans").set("Authorization", bearer(createOnly)).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(createOnly)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "forbidden" });
     expect(await store.loans.listByMember(m.id)).toEqual([]);
@@ -71,9 +73,11 @@ describe("POST /loans", () => {
     const res = await request(app)
       .post("/loans")
       .set("Authorization", bearer(a))
+      .set("Idempotency-Key", newKey())
       .send(loanBody(m.id, { interestNote: "5% flat", notes: "school fees" }));
     expect(res.status).toBe(201);
     expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["idempotent-replayed"]).toBeUndefined();
     expect(Object.keys(res.body as object)).toEqual(["loan"]);
     expect(Object.keys(res.body.loan as object).sort()).toEqual([
       "createdAt",
@@ -100,7 +104,7 @@ describe("POST /loans", () => {
   it("saves the loan, one Loan expense and one audit entry", async () => {
     const { app, store, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(await store.loans.listByMember(m.id)).toHaveLength(1);
     expect(await store.expenses.list({})).toEqual([
       expect.objectContaining({ id: res.body.loan.expenseId, category: "Loan", amount: 30_000_000n, loanId: res.body.loan.id }),
@@ -111,7 +115,7 @@ describe("POST /loans", () => {
   it("answers 201 for the Super Admin on another user's member", async () => {
     const { app, admin, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    const res = await request(app).post("/loans").set("Authorization", bearer(admin)).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(admin)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(res.status).toBe(201);
     expect(res.body.loan.createdById).toBe(admin.id);
   });
@@ -119,8 +123,8 @@ describe("POST /loans", () => {
   it("answers 409 active_loan for a second loan, and saves nothing more", async () => {
     const { app, store, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
+    await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: "active_loan" });
     expect(await store.loans.listByMember(m.id)).toHaveLength(1);
@@ -131,7 +135,7 @@ describe("POST /loans", () => {
     const { app, store, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
     await store.members.setStatus(m.id, "INACTIVE");
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: "member_inactive" });
   });
@@ -139,14 +143,14 @@ describe("POST /loans", () => {
   it("answers 404 when Staff give a loan to another user's member", async () => {
     const { app, a, b, bearer, addMember } = await build();
     const m = await addMember(b.id, "B One");
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "not_found" });
   });
 
   it("answers 404 for an unknown member", async () => {
     const { app, a, bearer } = await build();
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody("no-such-id"));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody("no-such-id"));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "not_found" });
   });
@@ -160,14 +164,14 @@ describe("POST /loans", () => {
   ])("answers 400 with the code for $label", async ({ over, code }) => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id, over));
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send(loanBody(m.id, over));
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_input", code });
   });
 
   it("answers 400 invalid_input when the body is not an object", async () => {
     const { app, a, bearer } = await build();
-    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send([1, 2, 3]);
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", newKey()).send([1, 2, 3]);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_input", code: "invalid_member_id" });
   });
@@ -189,9 +193,75 @@ describe("POST /loans", () => {
     const res = await request(app)
       .post("/loans")
       .set("Authorization", bearer(a))
+      .set("Idempotency-Key", newKey())
       .send(loanBody(m.id, { extra: "x".repeat(20_000) }));
     expect(res.status).toBe(413);
     expect(res.body).toEqual({ error: "too_large" });
+  });
+});
+
+describe("POST /loans: Idempotency-Key header (D-60)", () => {
+  it("answers 400 missing_idempotency_key without the header, and saves nothing", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app).post("/loans").set("Authorization", bearer(a)).send(loanBody(m.id));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code: "missing_idempotency_key" });
+    expect(await store.loans.listByMember(m.id)).toEqual([]);
+  });
+
+  it("answers 400 invalid_idempotency_key for a short key", async () => {
+    const { app, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app)
+      .post("/loans")
+      .set("Authorization", bearer(a))
+      .set("Idempotency-Key", "short")
+      .send(loanBody(m.id));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code: "invalid_idempotency_key" });
+  });
+
+  it("answers 201 with the first loan and the replay header on a repeat, not 409", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    const send = () =>
+      request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", k).send(loanBody(m.id));
+    const first = await send();
+    const second = await send();
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.headers["idempotent-replayed"]).toBe("true");
+    expect(second.headers["cache-control"]).toBe("no-store");
+    expect(second.body).toEqual(first.body);
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("answers 409 idempotency_conflict for the same key with another principal", async () => {
+    const { app, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    const send = (over: Record<string, unknown>) =>
+      request(app).post("/loans").set("Authorization", bearer(a)).set("Idempotency-Key", k).send(loanBody(m.id, over));
+    await send({});
+    const res = await send({ principal: "1000" });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "idempotency_conflict" });
+  });
+
+  it("answers 403 before looking at the key", async () => {
+    const { app, createOnly, bearer } = await build();
+    const res = await request(app).post("/loans").set("Authorization", bearer(createOnly)).send({});
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+  });
+
+  it("answers 401 without a token, whatever the key", async () => {
+    const { app } = await build();
+    const res = await request(app).post("/loans").set("Idempotency-Key", newKey()).send({});
+    expect(res.status).toBe(401);
   });
 });
 

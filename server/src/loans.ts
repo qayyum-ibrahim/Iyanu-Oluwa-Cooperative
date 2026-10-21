@@ -1,13 +1,22 @@
-// Loan logic (step 5.4, D-54, DR-08, DR-10, DR-13, DR-14, DR-15). Rules over the Store: no HTTP here.
-// Giving a loan needs loans.disburse (A-149). The member checks, the one-active-loan check, the
-// loan, its one Loan expense and the audit entry run inside one store transaction, so all of
-// them are saved or none (D-45).
-// Audit details hold the Membership ID, the principal in kobo and the expense id: no name, no phone.
+// Loan logic (step 5.4, idempotency key in 5.4c; D-54, D-59, D-60, DR-08, DR-10, DR-13, DR-14,
+// DR-15). Rules over the Store: no HTTP here.
+// Giving a loan needs loans.disburse (A-149). The key lookup, the member checks, the
+// one-active-loan check, the loan, its one Loan expense and the audit entry run inside one store
+// transaction, so all of them are saved or none (D-45).
+// Audit details hold the Membership ID, the principal in kobo and the expense id: no name, no
+// phone, no key.
 
+import { createHash } from "node:crypto";
 import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
-import { koboToNairaString } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
-import type { LoanRecord, PaymentMethod, PaymentRecord, Store } from "./store.js";
+import {
+  DuplicateLoanKeyError,
+  type LoanRecord,
+  type PaymentMethod,
+  type PaymentRecord,
+  type Store,
+} from "./store.js";
 
 /** Longest interest note or notes accepted (A-161: my choice, same as A-82). */
 export const LOAN_TEXT_MAX = 200;
@@ -41,7 +50,8 @@ export type LoanFailure =
   | "invalid_input"
   | "not_found"
   | "member_inactive"
-  | "active_loan";
+  | "active_loan"
+  | "idempotency_conflict";
 
 export interface LoanFailureResult {
   ok: false;
@@ -50,7 +60,8 @@ export interface LoanFailureResult {
   code?: string;
 }
 
-export type LoanResult = { ok: true; value: LoanView } | LoanFailureResult;
+/** replayed is true when the key had been used before and the first loan is returned. */
+export type LoanResult = { ok: true; value: LoanView; replayed: boolean } | LoanFailureResult;
 
 function failure(reason: LoanFailure, code?: string): LoanFailureResult {
   return { ok: false, reason, ...(code !== undefined ? { code } : {}) };
@@ -85,8 +96,35 @@ function optionalText(value: unknown): Text {
   return { ok: true, value: trimmed };
 }
 
+/** A fingerprint of the checked request: member, method, exact kobo, trimmed texts. */
+function hashRequest(
+  memberId: string,
+  method: PaymentMethod,
+  principal: Kobo,
+  interestNote: string,
+  notes: string,
+): string {
+  const canonical = JSON.stringify({ memberId, method, principal: principal.toString(), interestNote, notes });
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+function toView(loan: LoanRecord, membershipId: string, expenseId: string): LoanView {
+  return {
+    id: loan.id,
+    memberId: loan.memberId,
+    membershipId,
+    principal: koboToNairaString(loan.principal),
+    interestNote: loan.interestNote,
+    notes: loan.notes,
+    expenseId,
+    createdById: loan.createdById,
+    createdAt: loan.createdAt.toISOString(),
+  };
+}
+
 /** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
 export interface NewLoanInput {
+  idempotencyKey?: unknown;
   memberId?: unknown;
   principal?: unknown;
   method?: unknown;
@@ -97,11 +135,13 @@ export interface NewLoanInput {
 /**
  * Gives a loan to a member: saves the loan, its one Loan expense (DR-10) and one audit entry
  * "loan.disbursed".
- * Order: permission, member id, method, principal (a naira string above ₦0), interest note and
- * notes, then one transaction: find the member, check who may see it, check it is Active
- * (A-147), check it has no active loan (DR-08), save the loan, save the expense, write the audit
- * entry. Staff may give loans only to members they recorded (A-147); other members answer
- * not_found. If any write fails, nothing is saved (D-45).
+ * Order: permission, idempotency key shape, member id, method, principal (a naira string above
+ * ₦0), interest note and notes, then one transaction: look the key up (a repeat returns the first
+ * loan, a different request with the same key is refused), find the member, check who may see
+ * it, check it is Active (A-147), check it has no active loan (DR-08), save the loan with its key,
+ * save the expense, write the audit entry. Staff may give loans only to members they recorded
+ * (A-147); other members answer not_found. If any write fails, nothing is saved (D-45). A refused
+ * request does not use up the key (as D-48).
  */
 export async function disburseLoan(
   store: Store,
@@ -109,6 +149,12 @@ export async function disburseLoan(
   input: NewLoanInput,
 ): Promise<LoanResult> {
   if (!hasPermission(actor.subject, "loans.disburse")) return failure("forbidden");
+
+  const key = input.idempotencyKey;
+  if (key === undefined) return failure("invalid_input", "missing_idempotency_key");
+  if (typeof key !== "string" || !IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    return failure("invalid_input", "invalid_idempotency_key");
+  }
 
   const memberId = input.memberId;
   if (typeof memberId !== "string" || memberId.length === 0) {
@@ -130,55 +176,68 @@ export async function disburseLoan(
   if (!interestNote.ok) return failure("invalid_input", "invalid_interest_note");
   const notes = optionalText(input.notes);
   if (!notes.ok) return failure("invalid_input", "invalid_notes");
+  const requestHash = hashRequest(memberId, method, principal, interestNote.value, notes.value);
 
-  return store.transaction<LoanResult>(async (tx) => {
-    const member = await tx.members.findById(memberId);
-    if (member === null) return failure("not_found");
-    if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
-      return failure("not_found");
-    }
-    if (member.status !== "ACTIVE") return failure("member_inactive");
+  const attempt = (): Promise<LoanResult> =>
+    store.transaction<LoanResult>(async (tx) => {
+      const existing = await tx.loans.findByKey(actor.id, key);
+      if (existing !== null) {
+        if (existing.requestHash !== requestHash) return failure("idempotency_conflict");
+        // A repeat returns what was saved, even if the member is now Inactive or the loan repaid.
+        const original = await tx.members.findById(existing.memberId);
+        if (original === null) throw new Error("The member of a saved loan is missing");
+        const expense = (await tx.expenses.list({ createdById: existing.createdById })).find(
+          (e) => e.loanId === existing.id,
+        );
+        if (expense === undefined) throw new Error("The Loan expense of a saved loan is missing");
+        return { ok: true, value: toView(existing, original.membershipId, expense.id), replayed: true };
+      }
 
-    const loans = await tx.loans.listByMember(member.id);
-    if (loans.length > 0) {
-      const payments = await tx.payments.listByMember(member.id);
-      if (loans.some((l) => isLoanActive(l, payments))) return failure("active_loan");
-    }
+      const member = await tx.members.findById(memberId);
+      if (member === null) return failure("not_found");
+      if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) {
+        return failure("not_found");
+      }
+      if (member.status !== "ACTIVE") return failure("member_inactive");
 
-    const loan = await tx.loans.create({
-      memberId: member.id,
-      principal,
-      interestNote: interestNote.value,
-      notes: notes.value,
-      createdById: actor.id,
-    });
-    const expense = await tx.expenses.create({
-      category: LOAN_EXPENSE_CATEGORY,
-      amount: principal,
-      method,
-      loanId: loan.id,
-      createdById: actor.id,
-    });
-    await tx.audit.append({
-      actorId: actor.id,
-      action: "loan.disbursed",
-      entityType: "Loan",
-      entityId: loan.id,
-      detail: `membership_id=${member.membershipId} principal_kobo=${principal.toString()} expense_id=${expense.id}`,
-    });
-    return {
-      ok: true,
-      value: {
-        id: loan.id,
+      const loans = await tx.loans.listByMember(member.id);
+      if (loans.length > 0) {
+        const payments = await tx.payments.listByMember(member.id);
+        if (loans.some((l) => isLoanActive(l, payments))) return failure("active_loan");
+      }
+
+      const loan = await tx.loans.create({
         memberId: member.id,
-        membershipId: member.membershipId,
-        principal: koboToNairaString(loan.principal),
-        interestNote: loan.interestNote,
-        notes: loan.notes,
-        expenseId: expense.id,
-        createdById: loan.createdById,
-        createdAt: loan.createdAt.toISOString(),
-      },
-    };
-  });
+        principal,
+        interestNote: interestNote.value,
+        notes: notes.value,
+        idempotencyKey: key,
+        requestHash,
+        createdById: actor.id,
+      });
+      const expense = await tx.expenses.create({
+        category: LOAN_EXPENSE_CATEGORY,
+        amount: principal,
+        method,
+        loanId: loan.id,
+        createdById: actor.id,
+      });
+      await tx.audit.append({
+        actorId: actor.id,
+        action: "loan.disbursed",
+        entityType: "Loan",
+        entityId: loan.id,
+        detail: `membership_id=${member.membershipId} principal_kobo=${principal.toString()} expense_id=${expense.id}`,
+      });
+      return { ok: true, value: toView(loan, member.membershipId, expense.id), replayed: false };
+    });
+
+  try {
+    return await attempt();
+  } catch (e) {
+    // Another request with the same key was saved between our lookup and our save. Our
+    // transaction was undone, so one more attempt finds the first loan (as A-121).
+    if (e instanceof DuplicateLoanKeyError) return attempt();
+    throw e;
+  }
 }

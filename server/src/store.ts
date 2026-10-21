@@ -395,6 +395,10 @@ export interface LoanRecord {
   /** Information only, no formula (D-02, A-146). Empty when not given. */
   interestNote: string;
   notes: string;
+  /** The caller's idempotency key, or null (step 5.4c, D-60). Unique per user. */
+  idempotencyKey: string | null;
+  /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
+  requestHash: string | null;
   /** The user who gave the loan (DR-15). */
   createdById: string;
   createdAt: Date;
@@ -407,19 +411,31 @@ export interface NewLoan {
   interestNote?: string;
   /** Defaults to "". */
   notes?: string;
+  idempotencyKey?: string;
+  requestHash?: string;
   createdById: string;
+}
+
+export class DuplicateLoanKeyError extends Error {
+  constructor() {
+    super("A loan with this idempotency key already exists for this user");
+    this.name = "DuplicateLoanKeyError";
+  }
 }
 
 export interface LoanStore {
   /**
    * Saves a new loan. Throws UnknownMemberError if the member does not exist, then
-   * UnknownActorError if createdById is not a user. Values are saved as given: the amount, the
-   * member's status and the one-active-loan rule are the logic code's job (A-156).
+   * UnknownActorError if createdById is not a user, then DuplicateLoanKeyError if this user
+   * already saved a loan with the same idempotency key. Values are saved as given: the amount,
+   * the member's status and the one-active-loan rule are the logic code's job (A-156).
    */
   create(input: NewLoan): Promise<LoanRecord>;
   findById(id: string): Promise<LoanRecord | null>;
   /** Loans of one member, oldest first. Equal times are in no fixed order. Returns copies. */
   listByMember(memberId: string): Promise<LoanRecord[]>;
+  /** The loan this user saved with this key, or null. Returns a copy. */
+  findByKey(createdById: string, idempotencyKey: string): Promise<LoanRecord | null>;
 }
 
 export interface Store {

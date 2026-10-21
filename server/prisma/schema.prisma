@@ -1,6 +1,6 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
 // stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2),
-// loans (step 5.3), loan links on payment lines and expenses (step 5.3b).
+// loans (step 5.3), loan links on payment lines and expenses (step 5.3b), loan idempotency keys (step 5.4c).
 // Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -177,6 +177,9 @@ model Loan {
   // Information only, no formula (D-02, A-146).
   interestNote  String   @default("")
   notes         String   @default("")
+  // Set from the Idempotency-Key header (step 5.4c, D-60). Old rows have none.
+  idempotencyKey String?
+  requestHash    String?
   // The user who gave the loan (DR-15).
   createdById   String
   createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
@@ -186,4 +189,5 @@ model Loan {
 
   @@index([memberId])
   @@index([createdById])
+  @@unique([createdById, idempotencyKey])
 }

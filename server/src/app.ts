@@ -1,6 +1,7 @@
 import express from "express";
 import { createAuditRouter } from "./audit-routes.js";
 import { createAuthRouter } from "./auth-routes.js";
+import { createLoansRouter } from "./loans-routes.js";
 import { createMembersRouter } from "./members-routes.js";
 import { createPaymentsRouter } from "./payments-routes.js";
 import { FakeSmsProvider, type SmsProvider } from "./sms.js";
@@ -66,6 +67,7 @@ export function createApp(deps?: AppDeps): express.Express {
     app.use("/audit", createAuditRouter({ store: deps.store, tokenSecret, now }));
     app.use("/members", createMembersRouter({ store: deps.store, tokenSecret, now }));
     app.use("/payments", createPaymentsRouter({ store: deps.store, tokenSecret, now, sms }));
+    app.use("/loans", createLoansRouter({ store: deps.store, tokenSecret, now }));
   }
   app.use(errorHandler);
   return app;

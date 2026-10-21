@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 5.4 (size M), 2026-10-21: give a loan, `POST /loans` (D-59)
+
+**Works (verified in this session):** `server/src/loans.ts` (`disburseLoan`, `loanOutstanding`, `isLoanActive`), `server/src/loans-routes.ts` (`POST /loans`), mounted in `app.ts`. Permission `loans.disburse`; Staff only for members they recorded (404 otherwise); Inactive member 409 `member_inactive`; active loan 409 `active_loan`; loan, one Loan expense and `loan.disbursed` in one transaction. `npm run check`: 41 files, 1242 passed, 0 failed, 62.36 s. Five parallel requests for one member on real SQLite: one loan, four `active_loan`.
+**Works (verified on owner's machine):** `sh scripts/live-check-auth.sh`: 132 passed, 0 failed (12 new loan checks).
+**Stubbed:** nothing. No idempotency key yet (5.4c, D-60). No loan list (5.6).
+**Tests:** +66 (`loans.test.ts` 44, `loans-routes.test.ts` 22). Total 1242.
+**Not verified:** no break-on-purpose run yet (5.4d, after 5.4c). The parallel case ran on SQLite only (A-162).
+**Found along the way:**
+1. First `npm run check` failed: "Hook timed out in 10000ms" in the new Prisma `beforeAll` of `loans.test.ts` (building the temporary database under full load). Fixed with a 120 s hook timeout, as `prisma-store.test.ts` has. Second run passed.
+2. `npm run db:deploy` (owner asked): "No pending migrations to apply"; `prisma migrate status`: "Database schema is up to date!". STATUS had said the dev database lacked the 5.3b migration. Fixed; A-159 confirmed.
+3. STATUS still asked for the 5.3c commit and push; `0a226f4` was already on `origin/main`. Fixed.
+4. TRACEABILITY R-32 said `payments-routes.test.ts` has 21 tests; a run gives 20 (the GET route-absence test went at 4.8). Fixed. `vitest list` shows 18 lines because an `it.each` is one line there.
+5. Owner decided: idempotency key on `POST /loans` at 5.4c, then one break-on-purpose run for 5.4 and 5.4c (D-60). New: D-59, D-60, A-161, A-162. The mirror needs D-59 and D-60.
+
 ## Step 5.3c (size S), 2026-10-21: break-on-purpose for the loans store, the loan links and their migrations
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.3c.mjs` (not in git), modelled on `mutate-5.2b.mjs`. Baselines 133 passed (`memory-store.test.ts`) and 145 passed (`prisma-store.test.ts`, `db.test.ts`). 59 mutations: LM1 to LM15 (memory loans store), KM1 to KM6 (memory loan checks and `loanId` on payment lines and expenses), LP1 to LP11 (Prisma loans store), KP1 to KP8 (Prisma `requireLoans`, line `loanId`, check order), EL1 to EL7 (loans migration), EK1 to EK7 (loan links migration), C1 to C5 (`schema.prisma`, with generate and typecheck). Result: 58 caught, 1 escaped (EK7), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 39 files, 1176 passed, 0 failed, 61.23 s.

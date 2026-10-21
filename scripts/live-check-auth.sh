@@ -324,6 +324,35 @@ expect "missing member id code" "$(pick code)" missing_member_id
 code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/payments?memberId=x")
 expect "payment list without a token refused" "$code" 401
 
+# --- loans (step 5.4) ---
+# One fictional loan and its Loan expense are added to the dev database on each run (D-08).
+loan_json() { M="$1" P="$2" node -e 'process.stdout.write(JSON.stringify({memberId:process.env.M,principal:process.env.P,method:"BANK_TRANSFER",interestNote:"information only"}))' > "$REQ"; }
+loan_json "$SMID" "300000"
+code=$(authed_send POST /loans "$SAT")
+expect "loan without loans.disburse refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view","loans.disburse"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given loans.disburse" "$code" 200
+loan_json "$SMID" "0"
+code=$(authed_send POST /loans "$SAT")
+expect "zero principal refused" "$code" 400
+expect "zero principal code" "$(pick code)" principal_not_positive
+loan_json "$SMID" "300000"
+code=$(authed_send POST /loans "$SAT")
+expect "staff gives a loan" "$code" 201
+expect "loan principal" "$(pick loan.principal)" "300000.00"
+expect "loan has an expense" "$([ -n "$(pick loan.expenseId)" ] && echo yes || echo no)" yes
+code=$(authed_send POST /loans "$SAT")
+expect "second loan refused" "$code" 409
+expect "second loan error" "$(pick error)" active_loan
+loan_json "$OMID" "300000"
+code=$(authed_send POST /loans "$SAT")
+expect "staff cannot lend to the owner's member" "$code" 404
+code=$(authed_get "/audit?action=loan.disbursed&limit=1" "$AT")
+expect "audit log has loan.disbursed" "$(pick entries.0.action)" loan.disbursed
+code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/loans" -H "Content-Type: application/json" --data '{}')
+expect "loan without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

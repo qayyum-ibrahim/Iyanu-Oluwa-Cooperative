@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.9b (size M), 2026-10-21: DELETE /expenses/:id (D-69, DR-12, A-176)
+
+**Works (verified in this session):** `deleteExpense` in `server/src/expenses.ts` and `DELETE /expenses/:id` in `expenses-routes.ts` (204, no body). Needs `expenses.delete` (403 first, before the id is looked at). Unknown id, empty or non-text id, an expense already deleted and, for Staff, someone else's expense: 404 `not_found`. Loan-linked (`loanId` set, or category Loan): 409 `not_deletable` `loan_linked`; Membership Withdrawal: 409 `not_deletable` `pay_off`, also for the Super Admin. Lookup, `softDelete` and audit entry `expense.deleted` (detail `category=… amount_kobo=…`) in one `store.transaction`; a `softDelete` that returns null (lost race) gives 404 and no audit entry. 21 logic cases in `server/test/expenses.test.ts` (3 on real SQLite: delete and refusals, audit failure rolls back, five deletes at once give one delete and one entry) and 6 route cases in `server/test/expenses-routes.test.ts`. `npm run check`: 43 files, 1554 passed, 0 failed, 72.76 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 26 added (net: 27 new cases, the old 404 row for `DELETE /expenses/x` removed). Total 1554.
+**Not verified:** no live check (the script has no expense checks; it would also touch the dev database). No break-on-purpose run yet (5.9d). The exit code of `npm run check` was read through `tail`, so it is the exit code of `tail`; the output shows typecheck and lint ran and all 43 files passed.
+**Found along the way:**
+1. STATUS said 5.9 was not committed; `64bb19b` was HEAD and `origin/main` pointed to it. Fixed.
+2. The first route test I wrote checked that Staff without `expenses.view` get 403 from `GET /expenses` after a delete. That checks nothing about delete, so it was removed before the final run (1554 both times).
+
+---
+
 ## Step 5.9 (size M), 2026-10-21: soft-delete and update in the expenses store (D-68, A-175)
 
 **Works (verified in this session):** 5.9 split into 5.9 (store), 5.9b (`DELETE /expenses/:id`), 5.9c (`PUT /expenses/:id`), 5.9d (break-on-purpose) (D-68). New `ExpenseChanges` and store methods `expenses.update(id, changes)` and `expenses.softDelete(id, deletedById)` in both adapters. Both return null and change nothing for an unknown or already deleted expense; `softDelete` throws `UnknownActorError` for an unknown user, checked before the expense. Each Prisma write is one `updateMany` with `deletedAt: null` in its WHERE. `expenses.list` now leaves out soft-deleted rows; `findById` and `findByKey` still return them. 12 new contract cases per adapter (fields kept, empty change, unknown id, copies, delete once, unknown user, deleted not updated, deleted not listed, five parallel deletes give one record, rollback) and one logic test (a deleted expense leaves the list and the total). Comment fix in `expenses.ts`. `npm run check`: 43 files, 1528 passed, 0 failed, 67.75 s, exit 0.

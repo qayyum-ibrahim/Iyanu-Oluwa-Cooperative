@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MANUAL_EXPENSE_CATEGORIES } from "../src/expense-categories.js";
 import {
   createExpense,
+  deleteExpense,
   EXPENSE_TEXT_MAX,
   listExpenses,
   type ExpenseActor,
@@ -813,5 +814,274 @@ describe("listExpenses on the Prisma store (real SQLite)", () => {
       expenses: [],
       total: "0.00",
     });
+  });
+});
+
+/**
+ * For deleteExpense (5.9b): Staff d may record and delete, Staff e may record and delete too.
+ * d records one expense, e one, and the Super Admin gives a loan (its Loan expense) and saves a
+ * pay-off expense straight in the store. Fictional data only (D-08).
+ */
+async function buildDelete(store: Store = createMemoryStore()) {
+  const base = await build(store);
+  const deleter = (name: string) =>
+    store.users.create({
+      email: `${name}-${Math.random().toString(36).slice(2)}@example.test`,
+      passwordHash: "not-a-real-hash",
+      displayName: name,
+      role: "STAFF",
+      permissions: ["expenses.create", "expenses.delete"],
+    });
+  const d = await deleter("staff-d");
+  const e = await deleter("staff-e");
+  const d1 = must(await createExpense(store, actorOf(d), body({ category: "Allowances", amount: "0.20" })));
+  const e1 = must(await createExpense(store, actorOf(e), body({ amount: "0.30" })));
+  const member = await store.members.create({
+    fullName: "Delete Member",
+    phone: "",
+    address: "",
+    occupation: "",
+    createdById: base.admin.id,
+  });
+  const loan = await store.loans.create({ memberId: member.id, principal: 30_000_000n, createdById: base.admin.id });
+  const loanExpense = await store.expenses.create({
+    category: "Loan",
+    amount: 30_000_000n,
+    method: "CASH",
+    loanId: loan.id,
+    createdById: base.admin.id,
+  });
+  const payOff = await store.expenses.create({
+    category: "Membership Withdrawal",
+    amount: 2_500_000n,
+    method: "CASH",
+    createdById: base.admin.id,
+  });
+  return { ...base, d, e, d1, e1, loanExpense, payOff };
+}
+
+/** The store, with one part failing inside the transaction (softDelete or the audit write). */
+function failingDelete(store: Store, part: "expenses" | "audit"): Store {
+  return {
+    ...store,
+    transaction: (fn) =>
+      store.transaction((tx) =>
+        fn(
+          part === "expenses"
+            ? { ...tx, expenses: { ...tx.expenses, softDelete: () => Promise.reject(new Error("expenses down")) } }
+            : { ...tx, audit: { ...tx.audit, append: () => Promise.reject(new Error("audit down")) } },
+        ),
+      ),
+  };
+}
+
+const deletedActions = async (store: Store, actorId: string) =>
+  (await store.audit.listByActor(actorId)).filter((x) => x.action === "expense.deleted");
+
+describe("deleteExpense: who may delete what (5.9b, DR-13)", () => {
+  it("refuses Staff without expenses.delete, before checking the id, and changes nothing", async () => {
+    const { store, a, d1 } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(a), d1.id)).toEqual({ ok: false, reason: "forbidden" });
+    expect(await deleteExpense(store, actorOf(a), 42)).toEqual({ ok: false, reason: "forbidden" });
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect(await deletedActions(store, a.id)).toEqual([]);
+  });
+
+  it("refuses an inactive Staff user", async () => {
+    const { store, d, d1 } = await buildDelete();
+    expect(await deleteExpense(store, actorOf({ ...d, isActive: false }), d1.id)).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedAt: null });
+  });
+
+  it("lets Staff delete an expense they recorded: deleted, left out of the list, one audit entry", async () => {
+    const { store, d, d1 } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: true });
+    const saved = await store.expenses.findById(d1.id);
+    expect(saved?.deletedAt).toBeInstanceOf(Date);
+    expect(saved?.deletedById).toBe(d.id);
+    expect((await store.expenses.list({})).map((x) => x.id)).not.toContain(d1.id);
+    const entries = await deletedActions(store, d.id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      actorId: d.id,
+      action: "expense.deleted",
+      entityType: "Expense",
+      entityId: d1.id,
+      detail: "category=Allowances amount_kobo=20",
+    });
+  });
+
+  it("gives Staff not_found for an expense someone else recorded, and changes nothing", async () => {
+    const { store, d, e1, loanExpense } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(d), e1.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await deleteExpense(store, actorOf(d), loanExpense.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.expenses.findById(e1.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect(await deletedActions(store, d.id)).toEqual([]);
+  });
+
+  it("lets the Super Admin delete an expense Staff recorded", async () => {
+    const { store, admin, e1 } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(admin), e1.id)).toEqual({ ok: true });
+    expect(await store.expenses.findById(e1.id)).toMatchObject({ deletedById: admin.id });
+    expect((await deletedActions(store, admin.id)).map((x) => x.entityId)).toEqual([e1.id]);
+  });
+
+  it.each([
+    { label: "an unknown id", id: "no-such-expense" },
+    { label: "an empty id", id: "" },
+    { label: "an id that is not text", id: 42 },
+    { label: "no id", id: undefined },
+  ])("gives not_found for $label", async ({ id }) => {
+    const { store, admin } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(admin), id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await deletedActions(store, admin.id)).toEqual([]);
+  });
+
+  it("gives not_found for an expense already deleted, keeping the first time and user, with no second entry", async () => {
+    const { store, admin, d, d1 } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: true });
+    const first = await store.expenses.findById(d1.id);
+    expect(await deleteExpense(store, actorOf(admin), d1.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.expenses.findById(d1.id)).toEqual(first);
+    expect(await deletedActions(store, d.id)).toHaveLength(1);
+    expect(await deletedActions(store, admin.id)).toEqual([]);
+  });
+});
+
+describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
+  it("refuses a Loan-linked expense with loan_linked, even for the Super Admin", async () => {
+    const { store, admin, loanExpense } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(admin), loanExpense.id)).toEqual({
+      ok: false,
+      reason: "not_deletable",
+      code: "loan_linked",
+    });
+    expect(await store.expenses.findById(loanExpense.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect(await deletedActions(store, admin.id)).toEqual([]);
+  });
+
+  it("refuses a Loan expense without a loan link with loan_linked", async () => {
+    const { store, admin } = await buildDelete();
+    const unlinked = await store.expenses.create({
+      category: "Loan",
+      amount: 100n,
+      method: "CASH",
+      createdById: admin.id,
+    });
+    expect(await deleteExpense(store, actorOf(admin), unlinked.id)).toEqual({
+      ok: false,
+      reason: "not_deletable",
+      code: "loan_linked",
+    });
+    expect(await store.expenses.findById(unlinked.id)).toMatchObject({ deletedAt: null });
+  });
+
+  it("refuses an expense of another category that names a loan with loan_linked", async () => {
+    const { store, admin } = await buildDelete();
+    const member = await store.members.create({
+      fullName: "Second Member",
+      phone: "",
+      address: "",
+      occupation: "",
+      createdById: admin.id,
+    });
+    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const linked = await store.expenses.create({
+      category: "Allowances",
+      amount: 100n,
+      method: "CASH",
+      loanId: loan.id,
+      createdById: admin.id,
+    });
+    expect(await deleteExpense(store, actorOf(admin), linked.id)).toEqual({
+      ok: false,
+      reason: "not_deletable",
+      code: "loan_linked",
+    });
+  });
+
+  it("refuses a pay-off expense (Membership Withdrawal) with pay_off", async () => {
+    const { store, admin, payOff } = await buildDelete();
+    expect(await deleteExpense(store, actorOf(admin), payOff.id)).toEqual({
+      ok: false,
+      reason: "not_deletable",
+      code: "pay_off",
+    });
+    expect(await store.expenses.findById(payOff.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect(await deletedActions(store, admin.id)).toEqual([]);
+  });
+
+  it("keeps the Loan and pay-off expenses in the list total after the refusals", async () => {
+    const { store, admin, loanExpense, payOff } = await buildDelete();
+    await deleteExpense(store, actorOf(admin), loanExpense.id);
+    await deleteExpense(store, actorOf(admin), payOff.id);
+    const listed = mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(ids(listed)).toEqual(expect.arrayContaining([loanExpense.id, payOff.id]));
+    expect(listed.total).toBe("325000.50");
+  });
+});
+
+describe("deleteExpense: one transaction (D-45)", () => {
+  it("writes no audit entry when the delete fails", async () => {
+    const { store, d, d1 } = await buildDelete();
+    await expect(deleteExpense(failingDelete(store, "expenses"), actorOf(d), d1.id)).rejects.toThrow("expenses down");
+    expect(await deletedActions(store, d.id)).toEqual([]);
+  });
+
+  it("leaves the expense not deleted when the audit write fails", async () => {
+    const { store, d, d1 } = await buildDelete();
+    await expect(deleteExpense(failingDelete(store, "audit"), actorOf(d), d1.id)).rejects.toThrow("audit down");
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect((await store.expenses.list({})).map((x) => x.id)).toContain(d1.id);
+  });
+
+  it("gives not_found, with no audit entry, when another request deleted it after the lookup", async () => {
+    const { store, d, d1 } = await buildDelete();
+    const racing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) => fn({ ...tx, expenses: { ...tx.expenses, softDelete: () => Promise.resolve(null) } })),
+    };
+    expect(await deleteExpense(racing, actorOf(d), d1.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await deletedActions(store, d.id)).toEqual([]);
+  });
+});
+
+describe("deleteExpense on the Prisma store (real SQLite)", () => {
+  let tmp: TempDb;
+  let store: Store;
+  beforeAll(() => {
+    tmp = createTempDb();
+    store = createPrismaStore(tmp.prisma);
+  }, 120_000);
+  afterAll(async () => {
+    await tmp.cleanup();
+  });
+
+  it("deletes with one audit entry and refuses the Loan and pay-off expenses", async () => {
+    const { admin, d, d1, loanExpense, payOff } = await buildDelete(store);
+    expect(await deleteExpense(store, actorOf(d), d1.id)).toEqual({ ok: true });
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedById: d.id });
+    expect((await deletedActions(store, d.id)).map((x) => x.entityId)).toEqual([d1.id]);
+    expect(await deleteExpense(store, actorOf(admin), loanExpense.id)).toMatchObject({ code: "loan_linked" });
+    expect(await deleteExpense(store, actorOf(admin), payOff.id)).toMatchObject({ code: "pay_off" });
+  });
+
+  it("leaves the expense not deleted when the audit write fails", async () => {
+    const { d, d1 } = await buildDelete(store);
+    await expect(deleteExpense(failingDelete(store, "audit"), actorOf(d), d1.id)).rejects.toThrow("audit down");
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedAt: null, deletedById: null });
+  });
+
+  it("gives one delete and one audit entry to five requests at once", async () => {
+    const { admin, e1 } = await buildDelete(store);
+    const results = await Promise.all(Array.from({ length: 5 }, () => deleteExpense(store, actorOf(admin), e1.id)));
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok && r.reason === "not_found")).toHaveLength(4);
+    expect((await deletedActions(store, admin.id)).filter((x) => x.entityId === e1.id)).toHaveLength(1);
   });
 });

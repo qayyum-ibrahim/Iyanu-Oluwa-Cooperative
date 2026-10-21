@@ -1,5 +1,5 @@
-// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b; D-54, DR-11, DR-13, DR-15,
-// A-148, A-150, A-173). Rules over the Store: no HTTP here.
+// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b; D-54, DR-11,
+// DR-12, DR-13, DR-15, A-148, A-150, A-173, A-176). Rules over the Store: no HTTP here.
 // Recording an expense by hand needs expenses.create. Only the categories a person may pick are
 // accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
 // The key lookup, the expense and its audit entry run inside one store transaction, so both are
@@ -39,12 +39,12 @@ export interface ExpenseView {
   createdAt: string;
 }
 
-export type ExpenseFailure = "forbidden" | "invalid_input" | "idempotency_conflict";
+export type ExpenseFailure = "forbidden" | "invalid_input" | "idempotency_conflict" | "not_found" | "not_deletable";
 
 export interface ExpenseFailureResult {
   ok: false;
   reason: ExpenseFailure;
-  /** For invalid_input: which check failed. Never repeats the input. */
+  /** For invalid_input and not_deletable: which check failed. Never repeats the input. */
   code?: string;
 }
 
@@ -281,4 +281,45 @@ export async function listExpenses(
     ok: true,
     value: { expenses: rows.map(toView), total: koboToNairaString(sumKobo(rows.map((e) => e.amount))) },
   };
+}
+
+/** Set only by giving a loan (DR-10) and by pay-off (DR-05). */
+const LOAN_EXPENSE_CATEGORY = "Loan";
+const PAY_OFF_EXPENSE_CATEGORY = "Membership Withdrawal";
+
+export type ExpenseDeleteResult = { ok: true } | ExpenseFailureResult;
+
+/**
+ * Soft-deletes one expense and writes one audit entry "expense.deleted" (step 5.9b, DR-12).
+ * Order: permission, then the expense. An unknown id, a deleted expense and, for Staff, an expense
+ * someone else recorded all give not_found, so the answer does not reveal that it exists (DR-13,
+ * as getMember). A Loan-linked expense gives not_deletable "loan_linked", a pay-off expense
+ * (Membership Withdrawal) not_deletable "pay_off". The lookup, the delete and the audit entry run
+ * in one store transaction (D-45). If another request deleted it first, the answer is not_found.
+ * Audit details hold the category and the amount in kobo, as expense.created (A-176).
+ */
+export async function deleteExpense(store: Store, actor: ExpenseActor, id: unknown): Promise<ExpenseDeleteResult> {
+  if (!hasPermission(actor.subject, "expenses.delete")) return failure("forbidden");
+  if (typeof id !== "string" || id.length === 0) return failure("not_found");
+
+  return store.transaction<ExpenseDeleteResult>(async (tx) => {
+    const expense = await tx.expenses.findById(id);
+    if (expense === null || expense.deletedAt !== null) return failure("not_found");
+    if (actor.subject.role !== "SUPER_ADMIN" && expense.createdById !== actor.id) return failure("not_found");
+    if (expense.loanId !== null || expense.category === LOAN_EXPENSE_CATEGORY) {
+      return failure("not_deletable", "loan_linked");
+    }
+    if (expense.category === PAY_OFF_EXPENSE_CATEGORY) return failure("not_deletable", "pay_off");
+
+    const deleted = await tx.expenses.softDelete(expense.id, actor.id);
+    if (deleted === null) return failure("not_found");
+    await tx.audit.append({
+      actorId: actor.id,
+      action: "expense.deleted",
+      entityType: "Expense",
+      entityId: deleted.id,
+      detail: `category=${deleted.category} amount_kobo=${deleted.amount.toString()}`,
+    });
+    return { ok: true };
+  });
 }

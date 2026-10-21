@@ -229,8 +229,7 @@ describe("expense routes that do not exist yet", () => {
   it.each([
     { method: "get" as const, path: "/expenses/x" },
     { method: "put" as const, path: "/expenses/x" },
-    { method: "delete" as const, path: "/expenses/x" },
-  ])("answers 404 to $method $path (edit and delete at 5.9)", async ({ method, path }) => {
+  ])("answers 404 to $method $path (edit at 5.9c)", async ({ method, path }) => {
     const { app, admin, bearer } = await build();
     const res = await request(app)[method](path).set("Authorization", bearer(admin));
     expect(res.status).toBe(404);
@@ -345,5 +344,111 @@ describe("GET /expenses (5.8b)", () => {
     const res = await request(app).get(`/expenses?${query}`).set("Authorization", bearer(b));
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_input", code });
+  });
+});
+
+describe("DELETE /expenses/:id (5.9b)", () => {
+  /** Staff d may record and delete; d and the Super Admin each record one expense. Fictional data only (D-08). */
+  async function buildDelete() {
+    const base = await build();
+    const d = await base.store.users.create({
+      email: "staff-d@example.test",
+      passwordHash: "not-a-real-hash",
+      displayName: "staff-d",
+      role: "STAFF",
+      permissions: ["expenses.create", "expenses.delete"],
+    });
+    const post = async (u: { id: string }) => {
+      const res = await request(base.app)
+        .post("/expenses").set("Idempotency-Key", newKey())
+        .set("Authorization", base.bearer(u))
+        .send(expenseBody());
+      expect(res.status).toBe(201);
+      return res.body.expense as { id: string };
+    };
+    const d1 = await post(d);
+    const ad = await post(base.admin);
+    return { ...base, d, d1, ad };
+  }
+
+  it("answers 401 without a token", async () => {
+    const { app, d1 } = await buildDelete();
+    const res = await request(app).delete(`/expenses/${d1.id}`);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "unauthorized" });
+  });
+
+  it("answers 403 to Staff without expenses.delete, and deletes nothing", async () => {
+    const { app, store, a, d1, bearer } = await buildDelete();
+    const res = await request(app).delete(`/expenses/${d1.id}`).set("Authorization", bearer(a));
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedAt: null });
+  });
+
+  it("answers 204 with no body and no-store for Staff deleting their own expense", async () => {
+    const { app, store, d, d1, bearer } = await buildDelete();
+    const res = await request(app).delete(`/expenses/${d1.id}`).set("Authorization", bearer(d));
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(await store.expenses.findById(d1.id)).toMatchObject({ deletedById: d.id });
+    expect((await store.audit.listByActor(d.id)).map((x) => x.action)).toEqual(["expense.created", "expense.deleted"]);
+  });
+
+  it("leaves a deleted expense out of GET /expenses and its total", async () => {
+    const { app, admin, d1, ad, bearer } = await buildDelete();
+    const res = await request(app).delete(`/expenses/${d1.id}`).set("Authorization", bearer(admin));
+    expect(res.status).toBe(204);
+    const list = await request(app).get("/expenses").set("Authorization", bearer(admin));
+    expect(list.body.expenses.map((e: { id: string }) => e.id)).toEqual([ad.id]);
+    expect(list.body.total).toBe("5000.50");
+  });
+
+  it("answers 404 not_found to Staff for the Super Admin's expense, an unknown id and a second delete", async () => {
+    const { app, store, d, d1, ad, bearer } = await buildDelete();
+    const del = (id: string) => request(app).delete(`/expenses/${id}`).set("Authorization", bearer(d));
+    const other = await del(ad.id);
+    expect(other.status).toBe(404);
+    expect(other.body).toEqual({ error: "not_found" });
+    expect(await store.expenses.findById(ad.id)).toMatchObject({ deletedAt: null });
+    expect((await del("no-such-expense")).body).toEqual({ error: "not_found" });
+    expect((await del(d1.id)).status).toBe(204);
+    const again = await del(d1.id);
+    expect(again.status).toBe(404);
+    expect(again.body).toEqual({ error: "not_found" });
+  });
+
+  it("answers 409 not_deletable with the code for a Loan-linked and a pay-off expense", async () => {
+    const { app, store, admin, bearer } = await buildDelete();
+    const member = await store.members.create({
+      fullName: "Route Member",
+      phone: "",
+      address: "",
+      occupation: "",
+      createdById: admin.id,
+    });
+    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loanExpense = await store.expenses.create({
+      category: "Loan",
+      amount: 100n,
+      method: "CASH",
+      loanId: loan.id,
+      createdById: admin.id,
+    });
+    const payOff = await store.expenses.create({
+      category: "Membership Withdrawal",
+      amount: 100n,
+      method: "CASH",
+      createdById: admin.id,
+    });
+    const loanRes = await request(app).delete(`/expenses/${loanExpense.id}`).set("Authorization", bearer(admin));
+    expect(loanRes.status).toBe(409);
+    expect(loanRes.body).toEqual({ error: "not_deletable", code: "loan_linked" });
+    const payOffRes = await request(app).delete(`/expenses/${payOff.id}`).set("Authorization", bearer(admin));
+    expect(payOffRes.status).toBe(409);
+    expect(payOffRes.body).toEqual({ error: "not_deletable", code: "pay_off" });
+    expect(await store.expenses.findById(loanExpense.id)).toMatchObject({ deletedAt: null });
+    expect(await store.expenses.findById(payOff.id)).toMatchObject({ deletedAt: null });
   });
 });

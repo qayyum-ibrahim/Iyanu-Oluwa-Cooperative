@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,11 +9,12 @@ import type { PrismaClient } from "../src/generated/prisma/client.js";
 
 const serverDir = fileURLToPath(new URL("..", import.meta.url));
 let dir: string;
+let url: string;
 let db: PrismaClient;
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "io-db-"));
-  const url = `file:${join(dir, "test.db")}`;
+  url = `file:${join(dir, "test.db")}`;
   execFileSync("npx", ["prisma", "migrate", "deploy"], {
     cwd: serverDir,
     env: { ...process.env, DATABASE_URL: url },
@@ -31,6 +32,23 @@ const newUser = (email: string) =>
   db.user.create({
     data: { email, passwordHash: "not-a-real-hash", displayName: "Test User" },
   });
+
+const newMember = (seq: number, createdById: string) =>
+  db.member.create({ data: { seq, fullName: "Test Member", createdById } });
+
+// Runs first: a later test adds a table, which would show as drift (A-143).
+describe("schema.prisma matches the migrations (no drift, A-143)", () => {
+  it("prisma migrate diff finds nothing between the migrated database and the schema", () => {
+    // --exit-code: 0 empty, 1 error, 2 not empty (prisma 7.10.0 CLI help).
+    const r = spawnSync(
+      "npx",
+      ["prisma", "migrate", "diff", "--from-config-datasource", "--to-schema", "prisma/schema.prisma", "--exit-code"],
+      { cwd: serverDir, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8" },
+    );
+    // The diff text is in the object so a failure shows what differs.
+    expect({ status: r.status, diff: r.stdout }).toMatchObject({ status: 0 });
+  }, 60_000);
+});
 
 describe("database (real migration, temporary SQLite file)", () => {
   it("creates a user with default role STAFF and active status", async () => {
@@ -88,5 +106,42 @@ describe("database (real migration, temporary SQLite file)", () => {
     const rows = await db.$queryRaw<{ s: string }[]>`
       SELECT CAST(v AS TEXT) AS s FROM kobo_check ORDER BY v`;
     expect(rows.map((r) => r.s)).toEqual([cap.toString(), max.toString()]);
+  });
+
+  // The payment store reads the member and the creator first (A-102), so only these
+  // tests reach the database rules (A-143).
+  it("rejects a payment whose member does not exist", async () => {
+    const u = await newUser("pay-member@example.test");
+    await expect(
+      db.payment.create({
+        data: { memberId: "no-such-member", createdById: u.id, method: "CASH", totalKobo: 100n },
+      }),
+    ).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("rejects a payment whose creator does not exist", async () => {
+    const u = await newUser("pay-creator@example.test");
+    const m = await newMember(9001, u.id);
+    await expect(
+      db.payment.create({
+        data: { memberId: m.id, createdById: "no-such-user", method: "CASH", totalKobo: 100n },
+      }),
+    ).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("rejects two lines with the same position in one payment", async () => {
+    const u = await newUser("pay-lines@example.test");
+    const m = await newMember(9002, u.id);
+    const p = await db.payment.create({
+      data: { memberId: m.id, createdById: u.id, method: "CASH", totalKobo: 200n },
+    });
+    await db.paymentLine.create({
+      data: { paymentId: p.id, position: 0, category: "Savings", amountKobo: 100n },
+    });
+    await expect(
+      db.paymentLine.create({
+        data: { paymentId: p.id, position: 0, category: "Savings", amountKobo: 100n },
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
   });
 });

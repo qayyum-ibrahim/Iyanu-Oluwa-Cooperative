@@ -377,6 +377,7 @@ export function createMemoryStore(): Store {
           const from = query.createdFrom?.getTime();
           const before = query.createdBefore?.getTime();
           return rows
+            .filter((e) => e.deletedAt === null)
             .filter((e) => query.createdById === undefined || e.createdById === query.createdById)
             .filter((e) => query.category === undefined || e.category === query.category)
             .filter((e) => query.method === undefined || e.method === query.method)
@@ -389,6 +390,26 @@ export function createMemoryStore(): Store {
             (e) => e.createdById === createdById && e.idempotencyKey === idempotencyKey,
           );
           return found ? copyExpense(found) : null;
+        },
+        async update(id, changes) {
+          // No await in this method, so the check and the change cannot be interleaved.
+          const found = rows.find((e) => e.id === id);
+          if (found === undefined || found.deletedAt !== null) return null;
+          if (changes.category !== undefined) found.category = changes.category;
+          if (changes.amount !== undefined) found.amount = changes.amount;
+          if (changes.method !== undefined) found.method = changes.method;
+          if (changes.description !== undefined) found.description = changes.description;
+          if (changes.narration !== undefined) found.narration = changes.narration;
+          return copyExpense(found);
+        },
+        async softDelete(id, deletedById) {
+          // No await in this method, so the check and the change cannot be interleaved.
+          if (!users.has(deletedById)) throw new UnknownActorError(deletedById);
+          const found = rows.find((e) => e.id === id);
+          if (found === undefined || found.deletedAt !== null) return null;
+          found.deletedAt = new Date();
+          found.deletedById = deletedById;
+          return copyExpense(found);
         },
       };
     })(),

@@ -324,8 +324,8 @@ export interface PaymentStore {
 }
 
 /**
- * Money going out (DR-11, D-54). Soft-delete only (D-10): deletedAt and deletedById are set by a
- * later step (5.9); until then they are always null.
+ * Money going out (DR-11, D-54). Soft-delete only (D-10): deletedAt and deletedById are set once,
+ * by softDelete (step 5.9), and are null until then.
  */
 export interface ExpenseRecord {
   id: string;
@@ -366,8 +366,8 @@ export interface NewExpense {
 
 /**
  * What to list (step 5.8). Every filter given must hold. Text filters match exactly. The time range
- * is half-open: createdFrom is included, createdBefore is not. No filter means all expenses,
- * soft-deleted ones too.
+ * is half-open: createdFrom is included, createdBefore is not. No filter means all expenses that
+ * are not soft-deleted: deleted ones are never listed (DR-12, step 5.9).
  */
 export interface ExpenseListQuery {
   createdById?: string;
@@ -375,6 +375,18 @@ export interface ExpenseListQuery {
   method?: PaymentMethod;
   createdFrom?: Date;
   createdBefore?: Date;
+}
+
+/**
+ * The fields an edit may change (step 5.9). A field left out keeps its value. The creator, the
+ * date, the loan link, the key and the request hash never change.
+ */
+export interface ExpenseChanges {
+  category?: string;
+  amount?: bigint;
+  method?: PaymentMethod;
+  description?: string;
+  narration?: string;
 }
 
 export class DuplicateExpenseLoanError extends Error {
@@ -400,11 +412,28 @@ export interface ExpenseStore {
    * checking the category, amount and narration is the logic code's job (A-150).
    */
   create(input: NewExpense): Promise<ExpenseRecord>;
+  /** Returns a deleted expense too, with deletedAt and deletedById set. */
   findById(id: string): Promise<ExpenseRecord | null>;
-  /** Expenses oldest first, narrowed by the exact filters. Equal times are in no fixed order. Returns copies. */
+  /**
+   * Expenses that are not soft-deleted, oldest first, narrowed by the exact filters. Equal times
+   * are in no fixed order. Returns copies.
+   */
   list(query: ExpenseListQuery): Promise<ExpenseRecord[]>;
-  /** The expense this user saved with this key, or null. Returns a copy. */
+  /** The expense this user saved with this key, or null, deleted or not. Returns a copy. */
   findByKey(createdById: string, idempotencyKey: string): Promise<ExpenseRecord | null>;
+  /**
+   * Changes the given fields of an expense that is not deleted and returns it. Returns null, and
+   * changes nothing, if there is no such expense or it is deleted. Values are saved as given:
+   * who may edit and what is allowed are the logic code's job (A-150).
+   */
+  update(id: string, changes: ExpenseChanges): Promise<ExpenseRecord | null>;
+  /**
+   * Marks an expense deleted, once: deletedAt becomes now and deletedById the given user. Throws
+   * UnknownActorError if deletedById is not a user. Returns null, and changes nothing, if there is
+   * no such expense or it is already deleted, so two callers racing get one record. Whether an
+   * expense may be deleted (Loan-linked, pay-off: DR-12) is the logic code's job.
+   */
+  softDelete(id: string, deletedById: string): Promise<ExpenseRecord | null>;
 }
 
 /**

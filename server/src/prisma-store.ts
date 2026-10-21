@@ -482,6 +482,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
       async list(query) {
         const rows = await prisma.expense.findMany({
           where: {
+            deletedAt: null,
             ...(query.createdById !== undefined ? { createdById: query.createdById } : {}),
             ...(query.category !== undefined ? { category: query.category } : {}),
             ...(query.method !== undefined ? { method: query.method } : {}),
@@ -500,6 +501,38 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
       },
       async findByKey(createdById, idempotencyKey) {
         const row = await prisma.expense.findFirst({ where: { createdById, idempotencyKey } });
+        return row ? toExpense(row) : null;
+      },
+      async update(id, changes) {
+        const data = {
+          ...(changes.category !== undefined ? { category: changes.category } : {}),
+          ...(changes.amount !== undefined ? { amountKobo: changes.amount } : {}),
+          ...(changes.method !== undefined ? { method: changes.method } : {}),
+          ...(changes.description !== undefined ? { description: changes.description } : {}),
+          ...(changes.narration !== undefined ? { narration: changes.narration } : {}),
+        };
+        // An updateMany with no data reported 0 rows on SQLite (5.9, A-175), so nothing to change is a read.
+        if (Object.keys(data).length === 0) {
+          const row = await prisma.expense.findFirst({ where: { id, deletedAt: null } });
+          return row ? toExpense(row) : null;
+        }
+        // One statement whose WHERE holds "not deleted", so a deleted expense is never changed.
+        const { count } = await prisma.expense.updateMany({ where: { id, deletedAt: null }, data });
+        if (count === 0) return null;
+        const row = await prisma.expense.findUnique({ where: { id } });
+        return row ? toExpense(row) : null;
+      },
+      async softDelete(id, deletedById) {
+        // Read the user first, so an unknown user wins over an unknown expense (same order as memory).
+        const actor = await prisma.user.findUnique({ where: { id: deletedById }, select: { id: true } });
+        if (actor === null) throw new UnknownActorError(deletedById);
+        // One statement whose WHERE holds "not deleted", so two callers racing get one change (as A-35).
+        const { count } = await prisma.expense.updateMany({
+          where: { id, deletedAt: null },
+          data: { deletedAt: new Date(), deletedById },
+        });
+        if (count === 0) return null;
+        const row = await prisma.expense.findUnique({ where: { id } });
         return row ? toExpense(row) : null;
       },
     },

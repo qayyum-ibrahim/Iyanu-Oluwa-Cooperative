@@ -239,7 +239,7 @@ export type ExpenseListResult = { ok: true; value: ExpenseList } | ExpenseFailur
  * The time range is half-open on createdAt: from is included, before is not (D-66, A-172).
  * Staff: always only the expenses they recorded; a createdById filter is checked but ignored
  * (DR-13, as listMembers). Super Admin: all expenses, or the ones recorded by createdById.
- * Soft-deleted expenses do not exist until 5.9.
+ * Soft-deleted expenses are never listed, so the total leaves them out (DR-12, step 5.9).
  */
 export async function listExpenses(
   store: Store,

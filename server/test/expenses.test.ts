@@ -651,6 +651,21 @@ describe("listExpenses: who sees what (DR-13)", () => {
     expect(mustList(await listExpenses(store, actorOf(admin), {})).expenses.map((e) => e.id)).toEqual(fromStore);
   });
 
+  it("leaves a soft-deleted expense out of the list and the total (DR-12)", async () => {
+    const { store, admin, b, b2, ad } = await buildList();
+    await store.expenses.softDelete(b2.id, admin.id);
+    const all = mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(ids(all)).not.toContain(b2.id);
+    expect(all.total).toBe("1000000.15");
+    expect(mustList(await listExpenses(store, actorOf(b), { category: "Allowances" }))).toEqual({
+      expenses: [],
+      total: "0.00",
+    });
+    expect(sorted(mustList(await listExpenses(store, actorOf(admin), { createdById: admin.id })))).toEqual(
+      sameAs([ad], "1000000.05"),
+    );
+  });
+
   it("writes no audit entry", async () => {
     const { store, admin, b } = await buildList();
     const before = (await store.audit.listByActor(b.id)).length;

@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 5.9 (size M), 2026-10-21: soft-delete and update in the expenses store (D-68, A-175)
+
+**Works (verified in this session):** 5.9 split into 5.9 (store), 5.9b (`DELETE /expenses/:id`), 5.9c (`PUT /expenses/:id`), 5.9d (break-on-purpose) (D-68). New `ExpenseChanges` and store methods `expenses.update(id, changes)` and `expenses.softDelete(id, deletedById)` in both adapters. Both return null and change nothing for an unknown or already deleted expense; `softDelete` throws `UnknownActorError` for an unknown user, checked before the expense. Each Prisma write is one `updateMany` with `deletedAt: null` in its WHERE. `expenses.list` now leaves out soft-deleted rows; `findById` and `findByKey` still return them. 12 new contract cases per adapter (fields kept, empty change, unknown id, copies, delete once, unknown user, deleted not updated, deleted not listed, five parallel deletes give one record, rollback) and one logic test (a deleted expense leaves the list and the total). Comment fix in `expenses.ts`. `npm run check`: 43 files, 1528 passed, 0 failed, 67.75 s, exit 0.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No route uses the new methods yet (5.9b, 5.9c).
+**Tests:** 25 added (12 × 2 adapters, 1 logic). Total 1528.
+**Not verified:** no live check (no route changed). No break-on-purpose run yet: 5.9d covers 5.9, 5.9b and 5.9c. Prisma docs for `updateMany` were not read (A-175).
+**Found along the way:**
+1. The first `npm run check` failed 1 test ("returns the expense unchanged for an empty change", 1527 passed): the Prisma `update` sent an `updateMany` with empty `data`, which reported 0 rows on SQLite, so it returned null. Fixed in `prisma-store.ts`: an empty change is a read of a row that is not deleted.
+2. STATUS still said the 5.8d docs were not committed; `ae607eb` held them and `origin/main` pointed to it. Fixed.
+3. DATA_MODEL had not been updated since 5.3b (no key columns on `Loan` and `Expense`). Fixed.
+4. D-67 has no "Approved:" clause. Not changed: who approved it is not recorded.
+
+---
+
 ## Step 5.8d (size S), 2026-10-21: tests for the 5.8c test gaps (A-174)
 
 **Works (verified in this session):** three tests. `server/test/expenses.test.ts`: "accepts a createdById of exactly 100 characters" (Super Admin; the store gets `{ createdById }` unchanged) and "keeps the store's order, oldest first, without sorting or reversing it" (three rows, ids compared in order with `store.expenses.list({})`). `server/test/expenses-routes.test.ts`: "answers 200 to Staff with expenses.view but not expenses.create" (`{ expenses: [], total: "0.00" }`). `npm run check`: 43 files, 1503 passed, 0 failed, 63.32 s. Tests committed as `73e4524` (owner said yes) so the mutation script could run. Full rerun of `~/Desktop/mutate-5.8c.mjs`: baselines 142, 41, 256 and 268; 66 mutations, 63 caught, 3 escaped (T6, T7, R1), 0 errors, 0 timeouts, 0 not applied; L6, L27 and R2 caught (1 failed each, the new test); "files restored: yes"; `git status --short` empty.

@@ -408,5 +408,170 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       expect(await store.expenses.findByKey(u.id, other)).toBeNull();
       expect(await store.expenses.list({ createdById: u.id })).toHaveLength(1);
     });
+
+    // Edit and soft-delete (step 5.9).
+    it("updates only the given fields and keeps the rest, an amount above the largest safe integer exactly", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-fields");
+      const loanId = await newLoanId(store, u.id);
+      const key = uniqueKey();
+      const saved = await store.expenses.create(
+        expense(u.id, { description: "Paint", loanId, idempotencyKey: key, requestHash: "h" }),
+      );
+      const changed = await store.expenses.update(saved.id, {
+        category: "Others",
+        amount: 9_007_199_254_740_993n,
+        method: "BANK_TRANSFER",
+        narration: "Generator fuel",
+      });
+      const wanted = {
+        ...saved,
+        category: "Others",
+        amount: 9_007_199_254_740_993n,
+        method: "BANK_TRANSFER",
+        narration: "Generator fuel",
+      };
+      expect(changed).toEqual(wanted);
+      expect(await store.expenses.findById(saved.id)).toEqual(wanted);
+      const onlyText = await store.expenses.update(saved.id, { description: "" });
+      expect(onlyText).toEqual({ ...wanted, description: "" });
+    });
+
+    it("returns the expense unchanged for an empty change", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-empty");
+      const saved = await store.expenses.create(expense(u.id));
+      expect(await store.expenses.update(saved.id, {})).toEqual(saved);
+      expect(await store.expenses.findById(saved.id)).toEqual(saved);
+    });
+
+    it("returns null from update for an unknown id", async () => {
+      const store = await makeStore();
+      expect(await store.expenses.update("no-such-expense", { amount: 1n })).toBeNull();
+    });
+
+    it("does not let a caller change stored data through the changes or the record update returns", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-copy");
+      const saved = await store.expenses.create(expense(u.id));
+      const changes = { description: "Paint", amount: 2_000_000n };
+      const changed = await store.expenses.update(saved.id, changes);
+      if (changed === null) throw new Error("expense not found");
+      changes.description = "Changed";
+      changes.amount = 1n;
+      changed.description = "Changed";
+      changed.amount = 1n;
+      changed.createdAt.setTime(0);
+      expect(await store.expenses.findById(saved.id)).toEqual({ ...saved, description: "Paint", amount: 2_000_000n });
+    });
+
+    it("soft-deletes once: sets the time and the user, keeps every other field", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-once");
+      const admin = await newUser(store, "ed-once-admin");
+      const saved = await store.expenses.create(expense(u.id));
+      const start = Date.now();
+      const deleted = await store.expenses.softDelete(saved.id, admin.id);
+      const end = Date.now();
+      if (deleted === null) throw new Error("expense not found");
+      expect(deleted).toEqual({ ...saved, deletedAt: deleted.deletedAt, deletedById: admin.id });
+      const at = deleted.deletedAt?.getTime() ?? 0;
+      expect(at).toBeGreaterThanOrEqual(start);
+      expect(at).toBeLessThanOrEqual(end);
+      expect(await store.expenses.findById(saved.id)).toEqual(deleted);
+      // A second delete changes nothing, whoever asks.
+      expect(await store.expenses.softDelete(saved.id, u.id)).toBeNull();
+      expect(await store.expenses.findById(saved.id)).toEqual(deleted);
+    });
+
+    it("returns null from softDelete for an unknown id", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-unknown");
+      expect(await store.expenses.softDelete("no-such-expense", u.id)).toBeNull();
+    });
+
+    it("rejects an unknown deleting user with UnknownActorError, before the expense, and changes nothing", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-actor");
+      const saved = await store.expenses.create(expense(u.id));
+      await expect(store.expenses.softDelete(saved.id, "no-such-user")).rejects.toBeInstanceOf(UnknownActorError);
+      await expect(store.expenses.softDelete("no-such-expense", "no-such-user")).rejects.toBeInstanceOf(
+        UnknownActorError,
+      );
+      expect(await store.expenses.findById(saved.id)).toEqual(saved);
+    });
+
+    it("does not let a caller change stored data through the record softDelete returns", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-copy");
+      const saved = await store.expenses.create(expense(u.id));
+      const deleted = await store.expenses.softDelete(saved.id, u.id);
+      if (deleted === null || deleted.deletedAt === null) throw new Error("expense not deleted");
+      const at = deleted.deletedAt.getTime();
+      deleted.deletedAt.setTime(0);
+      deleted.amount = 1n;
+      expect((await store.expenses.findById(saved.id))?.deletedAt?.getTime()).toBe(at);
+      expect((await store.expenses.findById(saved.id))?.amount).toBe(1_500_000n);
+    });
+
+    it("does not update a deleted expense", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-deleted");
+      const saved = await store.expenses.create(expense(u.id));
+      const deleted = await store.expenses.softDelete(saved.id, u.id);
+      expect(await store.expenses.update(saved.id, { amount: 1n, description: "Changed" })).toBeNull();
+      expect(await store.expenses.findById(saved.id)).toEqual(deleted);
+    });
+
+    it("leaves deleted expenses out of every list, but findById and findByKey still find them", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-list");
+      const key = uniqueKey();
+      const kept = await store.expenses.create(expense(u.id));
+      await pause();
+      const gone = await store.expenses.create(expense(u.id, { idempotencyKey: key, requestHash: "h" }));
+      await store.expenses.softDelete(gone.id, u.id);
+      expect(await store.expenses.list({ createdById: u.id })).toEqual([kept]);
+      expect(
+        await store.expenses.list({
+          createdById: u.id,
+          category: "Office Maintenance",
+          method: "CASH",
+          createdFrom: kept.createdAt,
+          createdBefore: new Date(Date.now() + 60_000),
+        }),
+      ).toEqual([kept]);
+      expect((await store.expenses.list({})).map((e) => e.id)).not.toContain(gone.id);
+      expect((await store.expenses.findById(gone.id))?.deletedById).toBe(u.id);
+      expect((await store.expenses.findByKey(u.id, key))?.id).toBe(gone.id);
+    });
+
+    it("gives one record to five parallel deletes of one expense", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-race");
+      const saved = await store.expenses.create(expense(u.id));
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => store.expenses.softDelete(saved.id, u.id)),
+      );
+      expect(results.filter((r) => r !== null)).toHaveLength(1);
+    });
+
+    it("undoes an update and a delete when the transaction they were made in throws", { timeout: 60_000 }, async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "ed-tx");
+      const a = await store.expenses.create(expense(u.id));
+      await pause();
+      const b = await store.expenses.create(expense(u.id));
+      await expect(
+        store.transaction(async (tx) => {
+          await tx.expenses.update(a.id, { amount: 1n });
+          await tx.expenses.softDelete(b.id, u.id);
+          throw new Error("stop");
+        }),
+      ).rejects.toThrow("stop");
+      expect(await store.expenses.findById(a.id)).toEqual(a);
+      expect(await store.expenses.findById(b.id)).toEqual(b);
+      expect(await store.expenses.list({ createdById: u.id })).toEqual([a, b]);
+    });
   });
 }

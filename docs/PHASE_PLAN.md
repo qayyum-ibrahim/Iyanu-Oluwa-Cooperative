@@ -46,6 +46,6 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.8 (M) Expense list filters in the store: creator, category, method, half-open `createdAt` range (D-66). Split at start. Done.
 - 5.8b (M) `GET /expenses` (permission `expenses.view`): DR-13 scope (Staff own, Super Admin all or by creator), filters from the query, the list total (a naira string, A-18). Defines "totals reconcile". Done (D-67).
 - 5.8c (S) One break-on-purpose run for 5.8 and 5.8b. Done: 60 of 66 caught (L6, L27, R2 test gaps; T6, T7, R1 equivalent; A-174).
-- 5.8d (S, proposed at 5.8c) Three tests for L6, L27 and R2 (A-174) in `expenses.test.ts` and `expenses-routes.test.ts`, then rerun those three.
+- 5.8d (S, proposed at 5.8c) Three tests for L6, L27 and R2 (A-174) in `expenses.test.ts` and `expenses-routes.test.ts`, then rerun those three. Done: full rerun 63 of 66 caught (T6, T7, R1 equivalent).
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).
 Exit "totals reconcile" is defined at 5.8.

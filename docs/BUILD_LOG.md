@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.8d (size S), 2026-10-21: tests for the 5.8c test gaps (A-174)
+
+**Works (verified in this session):** three tests. `server/test/expenses.test.ts`: "accepts a createdById of exactly 100 characters" (Super Admin; the store gets `{ createdById }` unchanged) and "keeps the store's order, oldest first, without sorting or reversing it" (three rows, ids compared in order with `store.expenses.list({})`). `server/test/expenses-routes.test.ts`: "answers 200 to Staff with expenses.view but not expenses.create" (`{ expenses: [], total: "0.00" }`). `npm run check`: 43 files, 1503 passed, 0 failed, 63.32 s. Tests committed as `73e4524` (owner said yes) so the mutation script could run. Full rerun of `~/Desktop/mutate-5.8c.mjs`: baselines 142, 41, 256 and 268; 66 mutations, 63 caught, 3 escaped (T6, T7, R1), 0 errors, 0 timeouts, 0 not applied; L6, L27 and R2 caught (1 failed each, the new test); "files restored: yes"; `git status --short` empty.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 3 added. Total 1503.
+**Not verified:** no live check (the step has none).
+**Found along the way:**
+1. STATUS said 5.8c was not committed; `96e1fa9` was HEAD and `origin/main` pointed to it. Fixed.
+2. The first rerun stopped at once with "Working tree is not clean. Commit first" (no mutation applied). The script has no single-mutation option, so all 66 were rerun after the test commit.
+3. No new decision; the mirror needs no change for this step.
+
 ## Step 5.8c (size S), 2026-10-21: break-on-purpose for the expense list (5.8, 5.8b, D-66, D-67)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.8c.mjs` (not in git; `--dry`: all 66 find texts found once). Baselines 139 (`expenses.test.ts` and `expenses-routes.test.ts`), 40 (`expenses-routes.test.ts`), 254 (`memory-store.test.ts` and `expenses.test.ts`) and 266 (`prisma-store.test.ts`, `db.test.ts` and `expenses.test.ts`). 66 mutations: 30 in `listExpenses` (L), 7 in `parseTime` (T), 10 in the GET route (R), 9 in the memory `expenses.list` (LM), 10 in the Prisma `expenses.list` (LP). 60 caught, 6 escaped (L6, L27, T6, T7, R1, R2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 43 files, 1500 passed, 0 failed, 70.96 s.

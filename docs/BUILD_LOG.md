@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.5b (size S), 2026-10-21: break-on-purpose for the Loan Repaid effect (5.5, D-62)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.5b.mjs` (not in git; `--dry` checks the find texts: all 19 found once). Baselines 213 (`payments.test.ts`, `payments-routes.test.ts`, `payments-idempotency.test.ts`, `payment-sms.test.ts`, `loans.test.ts`) and 22 (`payments-routes.test.ts`). 19 mutations: 17 in `payments.ts` (P), 2 in `payments-routes.ts` (R). 17 caught, 2 escaped (P15, P16), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1313 passed, 0 failed, 72.18 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added. Total 1313.
+**Not verified:** why P16 does not break the SQLite race test (Prisma docs not checked, A-166). No server database run (A-121).
+**Found along the way:**
+1. STATUS still said 5.5 was not committed; `7b15e07` was HEAD and `origin/main` pointed to it. Fixed.
+2. P15 and P16 read the loans or payments through the outer store instead of `tx`. Both are equivalent on the two adapters as tested (A-166). A test that pins it is possible; not written.
+3. No new decision; the mirror needs no change for this step.
+
 ## Step 5.5 (size M), 2026-10-21: Loan Repaid effect in `createPayment` (D-62, DR-08, DR-09, A-145)
 
 **Works (verified in this session):** `createPayment` links every Loan Repaid line to the member's active loan; no active loan gives `no_active_loan`, Loan Repaid lines above the outstanding amount give `loan_overpayment` (both 409 on `POST /payments`); nothing is saved and no audit entry is written on a refusal. Other lines, Loan Interest too, keep no loan. A repeat returns the first payment even after the loan is Fully Repaid. `npm run check`: 41 files, 1313 passed, 0 failed, 71.33 s. Five full repayments at once on real SQLite: one saved, four `no_active_loan`.

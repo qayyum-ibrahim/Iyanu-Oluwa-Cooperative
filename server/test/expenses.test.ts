@@ -1228,6 +1228,16 @@ describe("updateExpense: who may edit what (5.9c, DR-13)", () => {
     expect(await store.expenses.findById(d1.id)).toEqual(before);
     expect(await updatedActions(store, admin.id)).toEqual([]);
   });
+
+  it("gives not_found for a deleted expense sent with unchanged fields, and changes nothing (A-178 U5)", async () => {
+    const { store, admin, f, f1 } = await buildEdit();
+    expect(await deleteExpense(store, actorOf(admin), f1.id)).toEqual({ ok: true });
+    const before = await store.expenses.findById(f1.id);
+    const unchanged = { category: "Allowances", amount: "0.20", method: "CASH" };
+    expect(await updateExpense(store, actorOf(f), f1.id, unchanged)).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
 });
 
 describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-12, A-177)", () => {
@@ -1344,6 +1354,20 @@ describe("updateExpense: the fields (PUT, as createExpense)", () => {
       "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
         "new_category=Allowances new_amount_kobo=20 new_method=CASH " +
         "description_changed=true narration_changed=false",
+    );
+  });
+
+  it("saves a change of the narration alone on an Others expense (A-178 U18)", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const others = { category: "Others", amount: "0.20", method: "CASH" };
+    mustEdit(await updateExpense(store, actorOf(f), f1.id, { ...others, narration: "tent hire" }));
+    const r = mustEdit(await updateExpense(store, actorOf(f), f1.id, { ...others, narration: "tables" }));
+    expect(r).toMatchObject({ category: "Others", narration: "tables" });
+    expect(await store.expenses.findById(f1.id)).toMatchObject({ narration: "tables" });
+    expect((await updatedActions(store, f.id)).map((x) => x.detail)).toContain(
+      "old_category=Others old_amount_kobo=20 old_method=CASH " +
+        "new_category=Others new_amount_kobo=20 new_method=CASH " +
+        "description_changed=false narration_changed=true",
     );
   });
 

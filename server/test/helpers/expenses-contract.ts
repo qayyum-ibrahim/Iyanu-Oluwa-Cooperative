@@ -523,6 +523,15 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       expect(await store.expenses.findById(saved.id)).toEqual(deleted);
     });
 
+    it("returns null for an empty change to a deleted expense (A-178 UP8)", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-deleted-empty");
+      const saved = await store.expenses.create(expense(u.id));
+      const deleted = await store.expenses.softDelete(saved.id, u.id);
+      expect(await store.expenses.update(saved.id, {})).toBeNull();
+      expect(await store.expenses.findById(saved.id)).toEqual(deleted);
+    });
+
     it("leaves deleted expenses out of every list, but findById and findByKey still find them", async () => {
       const store = await makeStore();
       const u = await newUser(store, "ed-list");

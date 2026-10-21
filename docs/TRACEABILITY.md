@@ -12,7 +12,7 @@ Source: PDF = Context Memory PDF section. Owner = chat 2026-10-13. Test column f
 | R-07 | Loan Repaid reduces outstanding; no over-repayment | PDF §6, §7, DR-08, DR-09, D-54 | 5 | Payments, Loans | TBD | Prototype only. Moved from Phase 4 at 5.0; planned for step 5.5 (A-145). |
 | R-08 | Loan creation, one active, On Loan badge, Fully Repaid | PDF §7, D-02, D-54 | 5 | Loans, Members | TBD | Prototype only. Planned for steps 5.3, 5.4 and 5.6 (A-144, A-147, A-149). |
 | R-09 | Loan expense counted once | PDF §4, D-03 | 5 | Loans, Expenses | TBD | Prototype only |
-| R-10 | Expense categories and fields (reference, attachment note, Others text) | PDF §8 | 5 | Expenses | TBD | Partly in prototype |
+| R-10 | Expense categories and fields (reference, attachment note, Others text) | PDF §8, DR-11, A-148 | 5 | Expenses | test/expense-categories.test.ts (13) | Category list (DR-11 order), system-only flags for Loan and Membership Withdrawal, and the hand-pick parser in `expense-categories.ts`, verified in this session (5.1: 39 files, 1116 tests). Fields, Others text, table and routes not built (5.2, 5.7). No screen. |
 | R-11 | Expense table, filters, edit, soft-delete | PDF §8, D-10 | 5 | Expenses | TBD | Missing |
 | R-12 | Pay-off: confirmation shows refundable balances; atomic; no double submit | PDF §5, D-12 | 6 | Member detail | TBD | Prototype only |
 | R-13 | Pay-off button only in member detail, at the bottom | PDF §5 | 6 | Member detail | TBD | Prototype only |

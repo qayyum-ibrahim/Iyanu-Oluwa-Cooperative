@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 5.1 (size S), 2026-10-21: expense categories (DR-11, A-148)
+
+**Works (verified in this session):** new `server/src/expense-categories.ts` holds one table of the 10 DR-11 categories in order, with a `systemOnly` flag (Loan, Membership Withdrawal). Exports: `EXPENSE_CATEGORIES`, `MANUAL_EXPENSE_CATEGORIES` (8), `SYSTEM_ONLY_EXPENSE_CATEGORIES` (2), all frozen; `isExpenseCategory`, `isSystemOnlyExpenseCategory`, `parseManualExpenseCategory` (throws `CategoryError` from `categories.ts`: `unknown`, then `system_only`). `npm run check`: 39 files, 1116 passed, 0 failed, 61.91 s.
+**Stubbed:** nothing. No route, table or store uses it yet.
+**Tests:** `test/expense-categories.test.ts` (13). Total 1116.
+**Not verified:** no break-on-purpose run (not money, security or data-loss code). The "Others" narration rule is not in this module; it comes with the expense input checks (5.7).
+**Found along the way:** STATUS still asked to approve and push the 5.0 commit, which was already pushed (`main...origin/main`). Fixed in STATUS.
+
 ## Step 5.0 (size S), 2026-10-21: Phase 5 loans and expenses plan (D-54)
 
 **Works (verified in this session):** planning only, no code. Read DR-08 to DR-12, D-02, D-03, D-10, D-17, D-44, OQ-08, `schema.prisma`, `store.ts`, `permissions.ts`, and the prototype's loan code (`legacy-prototype/src/App.jsx` lines 118 to 160, `PRODUCTION_SCHEMA_AND_API.md`). Owner approved the plan and chose `loans.disburse` for giving a loan (A-149). `npm run check` before the docs: 38 files, 1103 passed, 0 failed, 67.78 s.

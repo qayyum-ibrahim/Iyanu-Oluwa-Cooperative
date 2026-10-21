@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.2b (size S), 2026-10-21: break-on-purpose for the expenses store and migration (A-154, A-155)
+
+**Works (verified in this session):** script `~/Desktop/mutate-5.2b.mjs` (not in git), from the repo root. M1 to M17 change `memory-store.ts` (tests `memory-store.test.ts`); P1 to P14 change `prisma-store.ts`, E1 to E9 the migration SQL, C1 to C5 `schema.prisma` (tests `prisma-store.test.ts` and `db.test.ts`; C runs `prisma generate` and the typecheck first). Dry run first: every find text matched once. Baselines 116 and 125 passed. Result: 45 mutations, 43 caught, 2 escaped (M16, P3), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. The drift test caught all of E1 to E9 and C1, C3 to C5; C2 also failed the typecheck (4 errors). `npm run check` afterwards: 39 files, 1139 passed, 0 failed, 58.86 s.
+**Stubbed:** nothing.
+**Tests:** none added (1139).
+**Not verified:** the source mutations ran the tests only, not the typecheck. The live check was not run (no route uses expenses; still 120 from 4.8).
+**Found along the way:**
+1. M16 (the transaction snapshot keeps the live expense array, so a rollback would wipe every earlier expense) escaped: the rollback test starts with no expenses. Test gap, A-155, for step 5.2c. The same blind spot in the other tables' rollback tests is not checked.
+2. P3 (the P2003 mapping removed) escaped: unreachable, because the creator is read first and users are never deleted (A-154).
+3. Stale lines from 5.2: after `1d2e10f`, Claude Code ran `npm run db:deploy` at the owner's request ("All migrations have been successfully applied."), so the dev database has the `Expense` table. The 5.2 "Not verified" line about it is out of date; STATUS is fixed. This comes from the earlier session and was not rechecked here.
+4. No decision in this step, so DECISIONS and the mirror are unchanged.
+
 ## Step 5.2 (size M), 2026-10-21: expense table and store (D-55)
 
 **Works (verified in this session):** `Expense` model in `schema.prisma` and migration `20261021090000_expenses` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy`; dev database not touched). `ExpenseStore` (`create`, `findById`, `list`) and `DuplicateExpenseLoanError` in `store.ts`, both adapters. New `test/helpers/expenses-contract.ts`, 11 cases per adapter. Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `expenses` (owner approved). Comment in `prisma-store.ts` now cites A-121. `npm run check` (after 5.1b): 39 files, 1139 passed, 0 failed, twice.

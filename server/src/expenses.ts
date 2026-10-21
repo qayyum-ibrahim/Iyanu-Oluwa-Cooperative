@@ -1,0 +1,157 @@
+// Expense logic (step 5.7; D-54, DR-11, DR-15, A-148, A-150). Rules over the Store: no HTTP here.
+// Recording an expense by hand needs expenses.create. Only the categories a person may pick are
+// accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
+// The expense and its audit entry run inside one store transaction, so both are saved or neither
+// (D-45). Audit details hold the category and the amount in kobo: no description, no narration.
+// No idempotency key yet: that is step 5.7c (A-169).
+
+import { CategoryError } from "./categories.js";
+import { parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
+import { MoneyError, parseNaira, type Kobo } from "./money.js";
+import { koboToNairaString } from "./payments.js";
+import { hasPermission, type PermissionSubject } from "./permissions.js";
+import type { ExpenseRecord, PaymentMethod, Store } from "./store.js";
+
+/** Longest description or narration accepted (A-169: my choice, same as A-82 and A-161). */
+export const EXPENSE_TEXT_MAX = 200;
+
+/** The one category that needs a narration (DR-11). */
+export const OTHERS_EXPENSE_CATEGORY = "Others";
+
+/** Who is acting: the user id (the actor, DR-15) and what they may do. */
+export interface ExpenseActor {
+  id: string;
+  subject: PermissionSubject;
+}
+
+/** An expense as it may leave this module. */
+export interface ExpenseView {
+  id: string;
+  category: string;
+  /** Naira as text, always 2 decimals, for example "15000.00". */
+  amount: string;
+  method: PaymentMethod;
+  description: string;
+  narration: string;
+  createdById: string;
+  createdAt: string;
+}
+
+export type ExpenseFailure = "forbidden" | "invalid_input";
+
+export interface ExpenseFailureResult {
+  ok: false;
+  reason: ExpenseFailure;
+  /** For invalid_input: which check failed. Never repeats the input. */
+  code?: string;
+}
+
+export type ExpenseResult = { ok: true; value: ExpenseView } | ExpenseFailureResult;
+
+function failure(reason: ExpenseFailure, code?: string): ExpenseFailureResult {
+  return { ok: false, reason, ...(code !== undefined ? { code } : {}) };
+}
+
+function parseMethod(value: unknown): PaymentMethod | null {
+  return value === "CASH" || value === "BANK_TRANSFER" ? value : null;
+}
+
+type Text = { ok: true; value: string } | { ok: false };
+
+/** Optional text: missing or null gives "". Anything else must be text of at most 200 characters after trimming. */
+function optionalText(value: unknown): Text {
+  if (value === undefined || value === null) return { ok: true, value: "" };
+  if (typeof value !== "string") return { ok: false };
+  const trimmed = value.trim();
+  if (trimmed.length > EXPENSE_TEXT_MAX) return { ok: false };
+  return { ok: true, value: trimmed };
+}
+
+function toView(e: ExpenseRecord): ExpenseView {
+  return {
+    id: e.id,
+    category: e.category,
+    amount: koboToNairaString(e.amount),
+    method: e.method,
+    description: e.description,
+    narration: e.narration,
+    createdById: e.createdById,
+    createdAt: e.createdAt.toISOString(),
+  };
+}
+
+/** Raw values as they arrive from a request. Anything may be wrong; this code checks it. */
+export interface NewExpenseInput {
+  category?: unknown;
+  amount?: unknown;
+  method?: unknown;
+  description?: unknown;
+  narration?: unknown;
+}
+
+/**
+ * Records an expense picked by hand and one audit entry "expense.created".
+ * Order: permission, category (unknown_category, system_only), method, amount (a naira string
+ * above ₦0), description, narration. "Others" needs a narration; every other category must leave
+ * it empty (A-169). Then one transaction saves the expense and writes the audit entry. If either
+ * write fails, nothing is saved (D-45). The expense is not linked to a loan (DR-10, A-148).
+ */
+export async function createExpense(
+  store: Store,
+  actor: ExpenseActor,
+  input: NewExpenseInput,
+): Promise<ExpenseResult> {
+  if (!hasPermission(actor.subject, "expenses.create")) return failure("forbidden");
+
+  let category: ExpenseCategory;
+  try {
+    category = parseManualExpenseCategory(input.category);
+  } catch (e) {
+    if (e instanceof CategoryError) {
+      return failure("invalid_input", e.code === "system_only" ? "system_only" : "unknown_category");
+    }
+    throw e;
+  }
+
+  const method = parseMethod(input.method);
+  if (method === null) return failure("invalid_input", "invalid_method");
+
+  let amount: Kobo;
+  try {
+    amount = parseNaira(input.amount);
+  } catch (e) {
+    if (e instanceof MoneyError) return failure("invalid_input", "invalid_amount");
+    throw e;
+  }
+  if (amount <= 0n) return failure("invalid_input", "amount_not_positive");
+
+  const description = optionalText(input.description);
+  if (!description.ok) return failure("invalid_input", "invalid_description");
+  const narration = optionalText(input.narration);
+  if (!narration.ok) return failure("invalid_input", "invalid_narration");
+  if (category === OTHERS_EXPENSE_CATEGORY) {
+    if (narration.value.length === 0) return failure("invalid_input", "missing_narration");
+  } else if (narration.value.length > 0) {
+    return failure("invalid_input", "narration_not_allowed");
+  }
+
+  const expense = await store.transaction(async (tx) => {
+    const saved = await tx.expenses.create({
+      category,
+      amount,
+      method,
+      description: description.value,
+      narration: narration.value,
+      createdById: actor.id,
+    });
+    await tx.audit.append({
+      actorId: actor.id,
+      action: "expense.created",
+      entityType: "Expense",
+      entityId: saved.id,
+      detail: `category=${category} amount_kobo=${amount.toString()}`,
+    });
+    return saved;
+  });
+  return { ok: true, value: toView(expense) };
+}

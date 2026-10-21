@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 5.7 (size M), 2026-10-21: record an expense by hand (D-64)
+
+**Works (verified in this session):** `POST /expenses` (`createExpense` in `server/src/expenses.ts`, route in `expenses-routes.ts`, mounted in `app.ts`), permission `expenses.create`. Only hand-picked categories: Loan and Membership Withdrawal give 400 `system_only`, others not in DR-11 `unknown_category`. Method `CASH` or `BANK_TRANSFER`; amount a naira string above ₦0; optional description; "Others" needs a narration, other categories may not have one (A-169). The expense and an `expense.created` audit entry are saved in one transaction (D-45); if either write fails, nothing is saved (memory and real SQLite). Reply 201 `{ expense }` with the amount as a string with 2 decimals. `npm run check`: 43 files, 1395 passed, 0 failed, 76.16 s. `npx vitest run test/expenses.test.ts test/expenses-routes.test.ts`: 2 files, 62 passed.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** no idempotency key yet (5.7c, owner chose option A).
+**Tests:** 62 added (`test/expenses.test.ts`, `test/expenses-routes.test.ts`). Total 1395.
+**Not verified:** no live check (the script has no expense checks). No break-on-purpose run yet (5.7d, after 5.7c).
+**Found along the way:**
+1. STATUS said 5.6b was not committed; `0894c8b` was HEAD and `origin/main` pointed to it. Fixed.
+2. Conflict raised before coding: the Universal Project Rules §10 ask for an idempotency key on every money-moving request, and the 5.7 plan had none. Owner chose A: the route now, the key at 5.7c (migration), one break-on-purpose run at 5.7d. PHASE_PLAN updated.
+3. New decision D-64: the mirror needs it.
+
 ## Step 5.6b (size S), 2026-10-21: break-on-purpose for `listLoans` and `GET /loans` (5.6, D-63)
 
 **Works (verified in this session):** script `~/Desktop/mutate-5.6b.mjs` (not in git; `--dry`: all 32 find texts found once). Baselines 122 (`loans.test.ts` and `loans-routes.test.ts`) and 34 (`loans-routes.test.ts`). 32 mutations: 25 in `listLoans` in `loans.ts` (G), 7 in the GET route in `loans-routes.ts` (R). 30 caught, 2 escaped (G12, R2), 0 errors, 0 timeouts, 0 not applied. "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 41 files, 1333 passed, 0 failed, 72.80 s.

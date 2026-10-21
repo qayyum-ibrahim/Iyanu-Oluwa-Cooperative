@@ -1,4 +1,4 @@
-// Expense routes (step 5.7, idempotency key in 5.7c). Thin: all rules live in expenses.ts.
+// Expense routes (step 5.7, idempotency key in 5.7c, list in 5.8b). Thin: all rules live in expenses.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -12,6 +12,7 @@ import {
 } from "./guards.js";
 import {
   createExpense,
+  listExpenses,
   type ExpenseActor,
   type ExpenseFailure,
   type ExpenseFailureResult,
@@ -74,6 +75,27 @@ export function createExpensesRouter(deps: GuardDeps): Router {
       res.status(201).json({ expense: result.value });
     },
   );
+
+  router.get("/", requirePermission("expenses.view"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const q = req.query;
+    const result = await listExpenses(deps.store, actor, {
+      createdById: q["createdById"],
+      category: q["category"],
+      method: q["method"],
+      from: q["from"],
+      before: q["before"],
+    });
+    if (!result.ok) {
+      sendFailure(res, result);
+      return;
+    }
+    res.status(200).json(result.value);
+  });
 
   return router;
 }

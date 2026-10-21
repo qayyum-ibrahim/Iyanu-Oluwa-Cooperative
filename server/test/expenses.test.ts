@@ -3,6 +3,7 @@ import { MANUAL_EXPENSE_CATEGORIES } from "../src/expense-categories.js";
 import {
   createExpense,
   EXPENSE_TEXT_MAX,
+  listExpenses,
   type ExpenseActor,
   type ExpenseResult,
   type ExpenseView,
@@ -10,7 +11,13 @@ import {
 import { subjectOf } from "../src/guards.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { createPrismaStore } from "../src/prisma-store.js";
-import { DuplicateExpenseKeyError, type Role, type Store, type UserRecord } from "../src/store.js";
+import {
+  DuplicateExpenseKeyError,
+  type ExpenseListQuery,
+  type Role,
+  type Store,
+  type UserRecord,
+} from "../src/store.js";
 import { createTempDb, type TempDb } from "./helpers/temp-db.js";
 
 // Fictional data only (D-08).
@@ -527,6 +534,251 @@ describe("createExpense on the Prisma store (real SQLite)", () => {
     expect(await createExpense(store, actorOf(a), { ...b, amount: "1" })).toEqual({
       ok: false,
       reason: "idempotency_conflict",
+    });
+  });
+});
+
+/** A Staff user who may record and view expenses. Fictional data only (D-08). */
+const makeRecorder = (store: Store, name: string) =>
+  store.users.create({
+    email: `${name}-${Math.random().toString(36).slice(2)}@example.test`,
+    passwordHash: "not-a-real-hash",
+    displayName: name,
+    role: "STAFF",
+    permissions: ["expenses.create", "expenses.view"],
+  });
+
+/** Three expenses: two by Staff b (Others by bank, Allowances in cash), one by the Super Admin. */
+async function buildList(store: Store = createMemoryStore()) {
+  const base = await build(store);
+  const b = await makeRecorder(store, "staff-b");
+  const c = await makeRecorder(store, "staff-c");
+  const b1 = must(
+    await createExpense(store, actorOf(b), body({ category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER" })),
+  );
+  const b2 = must(await createExpense(store, actorOf(b), body({ category: "Allowances", amount: "0.20" })));
+  const ad = must(await createExpense(store, actorOf(base.admin), body({ amount: "1000000.05" })));
+  return { ...base, b, c, b1, b2, ad };
+}
+
+function mustList(r: Awaited<ReturnType<typeof listExpenses>>) {
+  if (!r.ok) throw new Error(`unexpected failure: ${r.reason} ${r.code ?? ""}`);
+  return r.value;
+}
+
+const ids = (list: { expenses: ExpenseView[] }) => list.expenses.map((e) => e.id).sort();
+
+/** The list with its expenses sorted by id: expenses saved in the same millisecond have no fixed order. */
+const sorted = (list: { expenses: ExpenseView[]; total: string }) => ({
+  expenses: [...list.expenses].sort((x, y) => x.id.localeCompare(y.id)),
+  total: list.total,
+});
+const sameAs = (expenses: ExpenseView[], total: string) => sorted({ expenses, total });
+
+/** The store with a list that records every query it gets. */
+function spying(store: Store): { store: Store; seen: ExpenseListQuery[] } {
+  const seen: ExpenseListQuery[] = [];
+  return {
+    seen,
+    store: {
+      ...store,
+      expenses: {
+        ...store.expenses,
+        list: (q) => {
+          seen.push(q);
+          return store.expenses.list(q);
+        },
+      },
+    },
+  };
+}
+
+describe("listExpenses: who sees what (DR-13)", () => {
+  it("refuses Staff without expenses.view, before checking the query", async () => {
+    const { store, a } = await buildList();
+    expect(await listExpenses(store, actorOf(a), {})).toEqual({ ok: false, reason: "forbidden" });
+    expect(await listExpenses(store, actorOf(a), { category: "Fuel", from: "x" })).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+  });
+
+  it("refuses an inactive Staff user", async () => {
+    const { store, b } = await buildList();
+    expect(await listExpenses(store, actorOf({ ...b, isActive: false }), {})).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("gives Staff only the expenses they recorded, oldest first, with views and the total", async () => {
+    const { store, b, b1, b2 } = await buildList();
+    const list = mustList(await listExpenses(store, actorOf(b), {}));
+    expect(sorted(list)).toEqual(sameAs([b1, b2], "0.30"));
+    const times = list.expenses.map((e) => e.createdAt);
+    expect(times).toEqual([...times].sort());
+    expect(Object.keys(list)).toEqual(["expenses", "total"]);
+  });
+
+  it("ignores a Staff createdById filter, even for another user", async () => {
+    const { store, admin, b } = await buildList();
+    expect(ids(mustList(await listExpenses(store, actorOf(b), { createdById: admin.id })))).toEqual(
+      ids(mustList(await listExpenses(store, actorOf(b), {}))),
+    );
+  });
+
+  it("gives Staff who recorded nothing an empty list and a zero total", async () => {
+    const { store, c, viewOnly } = await buildList();
+    expect(mustList(await listExpenses(store, actorOf(c), {}))).toEqual({ expenses: [], total: "0.00" });
+    expect(mustList(await listExpenses(store, actorOf(viewOnly), {}))).toEqual({ expenses: [], total: "0.00" });
+  });
+
+  it("gives the Super Admin every expense, or the ones of one creator", async () => {
+    const { store, admin, b, b1, b2, ad } = await buildList();
+    const all = mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(ids(all)).toEqual([b1.id, b2.id, ad.id].sort());
+    expect(all.total).toBe("1000000.35");
+    expect(sorted(mustList(await listExpenses(store, actorOf(admin), { createdById: b.id })))).toEqual(
+      sameAs([b1, b2], "0.30"),
+    );
+    expect(mustList(await listExpenses(store, actorOf(admin), { createdById: "no-such-user" }))).toEqual({
+      expenses: [],
+      total: "0.00",
+    });
+  });
+
+  it("writes no audit entry", async () => {
+    const { store, admin, b } = await buildList();
+    const before = (await store.audit.listByActor(b.id)).length;
+    mustList(await listExpenses(store, actorOf(b), {}));
+    mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(await store.audit.listByActor(b.id)).toHaveLength(before);
+    expect((await store.audit.listByActor(admin.id)).map((e) => e.action)).toEqual(["expense.created"]);
+  });
+});
+
+describe("listExpenses: filters (D-66)", () => {
+  it("filters by category and by method, and both must hold", async () => {
+    const { store, admin, b1, b2, ad } = await buildList();
+    const as = (input: Parameters<typeof listExpenses>[2]) => listExpenses(store, actorOf(admin), input);
+    expect(mustList(await as({ category: "Others" }))).toEqual({ expenses: [b1], total: "0.10" });
+    expect(ids(mustList(await as({ method: "CASH" })))).toEqual([b2.id, ad.id].sort());
+    expect(mustList(await as({ category: "Allowances", method: "CASH" }))).toEqual({ expenses: [b2], total: "0.20" });
+    expect(mustList(await as({ category: "Allowances", method: "BANK_TRANSFER" }))).toEqual({ expenses: [], total: "0.00" });
+  });
+
+  it("accepts the system-only categories as a filter", async () => {
+    const { store, admin } = await buildList();
+    expect(mustList(await listExpenses(store, actorOf(admin), { category: "Loan" }))).toEqual({ expenses: [], total: "0.00" });
+    expect(mustList(await listExpenses(store, actorOf(admin), { category: "Membership Withdrawal" })).total).toBe("0.00");
+  });
+
+  it("keeps the time range half-open: from is included, before is not", async () => {
+    const { store, admin, b1 } = await buildList();
+    const at = b1.createdAt;
+    const as = (input: Parameters<typeof listExpenses>[2]) => listExpenses(store, actorOf(admin), input);
+    expect(ids(mustList(await as({ from: at, before: at })))).toEqual([]);
+    expect(ids(mustList(await as({ from: at, category: "Others" })))).toEqual([b1.id]);
+    expect(ids(mustList(await as({ before: at, category: "Others" })))).toEqual([]);
+    expect(mustList(await as({ from: "2000-01-01T00:00:00Z", before: "2100-01-01T00:00:00.000Z" })).total).toBe("1000000.35");
+    expect(mustList(await as({ before: "2000-01-01T00:00:00Z" }))).toEqual({ expenses: [], total: "0.00" });
+  });
+
+  it("passes the checked filters to the store exactly", async () => {
+    const { store: inner, admin, b } = await buildList();
+    const { store, seen } = spying(inner);
+    mustList(
+      await listExpenses(store, actorOf(admin), {
+        createdById: b.id,
+        category: "Others",
+        method: "BANK_TRANSFER",
+        from: "2026-10-01T00:00:00Z",
+        before: "2026-11-01T00:00:00.000Z",
+      }),
+    );
+    mustList(await listExpenses(store, actorOf(b), { createdById: admin.id, method: "CASH" }));
+    mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(seen).toEqual([
+      {
+        createdById: b.id,
+        category: "Others",
+        method: "BANK_TRANSFER",
+        createdFrom: new Date("2026-10-01T00:00:00.000Z"),
+        createdBefore: new Date("2026-11-01T00:00:00.000Z"),
+      },
+      { createdById: b.id, method: "CASH" },
+      {},
+    ]);
+  });
+
+  it.each([
+    { label: "an empty createdById", input: { createdById: "" }, code: "invalid_created_by_id" },
+    { label: "a createdById over 100 characters", input: { createdById: "u".repeat(101) }, code: "invalid_created_by_id" },
+    { label: "a createdById that is not text", input: { createdById: ["a", "b"] }, code: "invalid_created_by_id" },
+    { label: "an unknown category", input: { category: "Fuel" }, code: "invalid_category" },
+    { label: "a category in the wrong case", input: { category: "others" }, code: "invalid_category" },
+    { label: "a repeated category", input: { category: ["Others", "Loan"] }, code: "invalid_category" },
+    { label: "a method in the wrong case", input: { method: "cash" }, code: "invalid_method" },
+    { label: "an empty method", input: { method: "" }, code: "invalid_method" },
+    { label: "a date without a time", input: { from: "2026-10-01" }, code: "invalid_from" },
+    { label: "a time with an offset", input: { from: "2026-10-01T00:00:00+01:00" }, code: "invalid_from" },
+    { label: "a day that does not exist", input: { from: "2026-02-30T00:00:00Z" }, code: "invalid_from" },
+    { label: "a month that does not exist", input: { from: "2026-13-01T00:00:00Z" }, code: "invalid_from" },
+    { label: "an hour that does not exist", input: { from: "2026-10-01T24:00:00Z" }, code: "invalid_from" },
+    { label: "a time with 2 decimals", input: { from: "2026-10-01T00:00:00.00Z" }, code: "invalid_from" },
+    { label: "a from that is a number", input: { from: 1_790_000_000_000 }, code: "invalid_from" },
+    { label: "a bad before", input: { before: "yesterday" }, code: "invalid_before" },
+    { label: "a before with a space", input: { before: " 2026-10-01T00:00:00Z" }, code: "invalid_before" },
+    {
+      label: "from after before",
+      input: { from: "2026-10-02T00:00:00Z", before: "2026-10-01T23:59:59.999Z" },
+      code: "invalid_range",
+    },
+  ])("refuses $label with its code, without reading the store", async ({ input, code }) => {
+    const { store: inner, b } = await buildList();
+    const { store, seen } = spying(inner);
+    expect(await listExpenses(store, actorOf(b), input)).toEqual({ ok: false, reason: "invalid_input", code });
+    expect(seen).toEqual([]);
+  });
+
+  it("checks the query in order: createdById, category, method, from, before", async () => {
+    const { store, admin } = await buildList();
+    const bad = { createdById: "", category: "x", method: "x", from: "x", before: "x" };
+    const codes: string[] = [];
+    let input: Record<string, unknown> = { ...bad };
+    for (const field of Object.keys(bad)) {
+      const r = await listExpenses(store, actorOf(admin), input);
+      if (r.ok) throw new Error("expected a refusal");
+      codes.push(r.code ?? "");
+      input = Object.fromEntries(Object.entries(input).filter(([k]) => k !== field));
+    }
+    expect(codes).toEqual(["invalid_created_by_id", "invalid_category", "invalid_method", "invalid_from", "invalid_before"]);
+  });
+});
+
+describe("listExpenses on the Prisma store (real SQLite)", () => {
+  let tmp: TempDb;
+  let store: Store;
+  beforeAll(() => {
+    tmp = createTempDb();
+    store = createPrismaStore(tmp.prisma);
+  }, 120_000);
+  afterAll(async () => {
+    await tmp.cleanup();
+  });
+
+  it("gives the same scope, filters and totals as the memory store", async () => {
+    const { admin, b, b1, b2, ad } = await buildList(store);
+    expect(sorted(mustList(await listExpenses(store, actorOf(b), { createdById: admin.id })))).toEqual(
+      sameAs([b1, b2], "0.30"),
+    );
+    expect(mustList(await listExpenses(store, actorOf(admin), { category: "Others", method: "BANK_TRANSFER" }))).toEqual({
+      expenses: [b1],
+      total: "0.10",
+    });
+    const range = { from: b1.createdAt, before: "2100-01-01T00:00:00Z" };
+    const listed = mustList(await listExpenses(store, actorOf(admin), { ...range, createdById: admin.id }));
+    expect(listed).toEqual({ expenses: [ad], total: "1000000.05" });
+    expect(mustList(await listExpenses(store, actorOf(admin), { from: b1.createdAt, before: b1.createdAt }))).toEqual({
+      expenses: [],
+      total: "0.00",
     });
   });
 });

@@ -42,7 +42,7 @@ Phase 4 leftovers: the Loan Repaid effect moves here (5.5). The first-payment fl
 - 5.7c (M) `Idempotency-Key` header on `POST /expenses`, as D-61 for loans: nullable `idempotencyKey` and `requestHash` on `Expense`, unique on creator and key, `expenses.findByKey` in both adapters. Needs a migration. Added at 5.7 by the owner (option A). Done (D-65).
 - 5.7d (S) One break-on-purpose run for 5.7 and 5.7c. Done: 82 of 84 caught (R10 unreachable, KP2 race only, A-171).
 - 5.8 (M) Expense list filters in the store: creator, category, method, half-open `createdAt` range (D-66). Split at start. Done.
-- 5.8b (M) `GET /expenses` (permission `expenses.view`): DR-13 scope (Staff own, Super Admin all or by creator), filters from the query, the list total in kobo. Defines "totals reconcile".
+- 5.8b (M) `GET /expenses` (permission `expenses.view`): DR-13 scope (Staff own, Super Admin all or by creator), filters from the query, the list total (a naira string, A-18). Defines "totals reconcile". Done (D-67).
 - 5.8c (S) One break-on-purpose run for 5.8 and 5.8b.
 - 5.9 (M) Expense edit (OQ-08 default) and soft-delete (DR-12).
 - 5.2b (S) Break-on-purpose for the expenses store and migration. Added at 5.2. Done: 43 of 45 caught.

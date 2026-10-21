@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 5.8b (size M), 2026-10-21: `GET /expenses` with DR-13 scope and the list total (D-67, A-173)
+
+**Works (verified in this session):** `listExpenses` in `server/src/expenses.ts` and `GET /expenses` in `expenses-routes.ts` (200 `{ expenses, total }`), permission `expenses.view`. Staff see only their own expenses (a `createdById` filter is checked but ignored); the Super Admin sees all or one creator's. Query `category` (any DR-11 name), `method`, `from` (included) and `before` (not included) as UTC times; refusals are 400 `invalid_input` with `invalid_created_by_id`, `invalid_category`, `invalid_method`, `invalid_from`, `invalid_before` or `invalid_range`. `total` is the sum of the listed amounts as a naira string. Read only: no audit entry. `npm run check`: 43 files, 1500 passed, 0 failed, 66.28 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No paging. Soft-deleted rows do not exist until 5.9.
+**Tests:** 42 net: 31 added in `test/expenses.test.ts` (one on real SQLite), 12 added in `test/expenses-routes.test.ts`, and the old "GET /expenses answers 404" case removed. Total 1500.
+**Not verified:** no live check (the live-check script does not cover expenses; changing it was outside this step). No break-on-purpose run yet (5.8c). Express docs on how repeated query parameters arrive were not read (not checked); a test pins that `category=Others&category=Loan` gives 400 `invalid_category`.
+**Found along the way:**
+1. STATUS said 5.8 was not committed; `d6172ae` was HEAD and `origin/main` pointed to it. Fixed.
+2. PHASE_PLAN said "the list total in kobo". Amounts cross the API as strings (A-18), so `total` is a naira string like `amount` (D-67).
+3. `Date` accepts `2026-02-30T00:00:00Z` and moves it to 2 March (seen in this session with `node -e`). `from` and `before` are compared back after parsing, so such dates are refused.
+4. Expenses saved in the same millisecond have no fixed order (store contract), so the new tests compare those lists by id, not by position.
+
 ## Step 5.8 (size M), 2026-10-21: store filters for the expense list (D-66, A-172)
 
 **Works (verified in this session):** `ExpenseListQuery` in `server/src/store.ts` gained `category`, `method`, `createdFrom` and `createdBefore` (besides `createdById`). Every given filter must hold; text matches exactly; the time range is half-open (`createdFrom` included, `createdBefore` not). Both adapters (`memory-store.ts`, `prisma-store.ts`) filter the same way; the Prisma adapter builds its `where` with the same spread as `members.list`. 5 new cases in `test/helpers/expenses-contract.ts`, run on both adapters (10 tests). `npm run check`: 43 files, 1458 passed, 0 failed, 70.79 s.

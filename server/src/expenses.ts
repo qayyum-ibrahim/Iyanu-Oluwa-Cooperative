@@ -1,5 +1,5 @@
-// Expense logic (step 5.7, idempotency key in 5.7c; D-54, DR-11, DR-15, A-148, A-150). Rules over
-// the Store: no HTTP here.
+// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b; D-54, DR-11, DR-13, DR-15,
+// A-148, A-150, A-173). Rules over the Store: no HTTP here.
 // Recording an expense by hand needs expenses.create. Only the categories a person may pick are
 // accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
 // The key lookup, the expense and its audit entry run inside one store transaction, so both are
@@ -8,8 +8,8 @@
 
 import { createHash } from "node:crypto";
 import { CategoryError } from "./categories.js";
-import { parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
-import { MoneyError, parseNaira, type Kobo } from "./money.js";
+import { isExpenseCategory, parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
+import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
 import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import { DuplicateExpenseKeyError, type ExpenseRecord, type PaymentMethod, type Store } from "./store.js";
@@ -196,4 +196,89 @@ export async function createExpense(
     if (e instanceof DuplicateExpenseKeyError) return attempt();
     throw e;
   }
+}
+
+/** Longest createdById filter accepted (as USER_FILTER_MAX in members.ts). */
+const USER_FILTER_MAX = 100;
+
+/** A UTC time such as "2026-10-01T00:00:00Z" or "2026-10-01T00:00:00.000Z" (A-173). */
+const UTC_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
+
+type TimeFilter = { ok: true; value: Date | undefined } | { ok: false };
+
+/** Missing gives no filter. Otherwise a real UTC time: "2026-02-30T00:00:00Z" is refused. */
+function parseTime(raw: unknown): TimeFilter {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (typeof raw !== "string" || !UTC_TIME_PATTERN.test(raw)) return { ok: false };
+  const date = new Date(raw);
+  const canonical = raw.length === 20 ? `${raw.slice(0, 19)}.000Z` : raw;
+  if (Number.isNaN(date.getTime()) || date.toISOString() !== canonical) return { ok: false };
+  return { ok: true, value: date };
+}
+
+/** Raw values as they arrive from a query string. Anything may be wrong; this code checks it. */
+export interface ExpenseListInput {
+  createdById?: unknown;
+  category?: unknown;
+  method?: unknown;
+  from?: unknown;
+  before?: unknown;
+}
+
+export interface ExpenseList {
+  expenses: ExpenseView[];
+  /** The sum of the listed amounts, naira as text with 2 decimals ("totals reconcile"). */
+  total: string;
+}
+
+export type ExpenseListResult = { ok: true; value: ExpenseList } | ExpenseFailureResult;
+
+/**
+ * Expenses oldest first, with their total (step 5.8b). Read only: no audit entry (as A-134).
+ * Order: permission, createdById, category (any of DR-11, Loan too), method, from, before, range.
+ * The time range is half-open on createdAt: from is included, before is not (D-66, A-172).
+ * Staff: always only the expenses they recorded; a createdById filter is checked but ignored
+ * (DR-13, as listMembers). Super Admin: all expenses, or the ones recorded by createdById.
+ * Soft-deleted expenses do not exist until 5.9.
+ */
+export async function listExpenses(
+  store: Store,
+  actor: ExpenseActor,
+  input: ExpenseListInput,
+): Promise<ExpenseListResult> {
+  if (!hasPermission(actor.subject, "expenses.view")) return failure("forbidden");
+
+  const userFilter = input.createdById;
+  if (
+    userFilter !== undefined &&
+    (typeof userFilter !== "string" || userFilter.length === 0 || userFilter.length > USER_FILTER_MAX)
+  ) {
+    return failure("invalid_input", "invalid_created_by_id");
+  }
+  const category = input.category;
+  if (category !== undefined && !isExpenseCategory(category)) {
+    return failure("invalid_input", "invalid_category");
+  }
+  const method = input.method === undefined ? undefined : parseMethod(input.method);
+  if (method === null) return failure("invalid_input", "invalid_method");
+  const from = parseTime(input.from);
+  if (!from.ok) return failure("invalid_input", "invalid_from");
+  const before = parseTime(input.before);
+  if (!before.ok) return failure("invalid_input", "invalid_before");
+  if (from.value !== undefined && before.value !== undefined && from.value.getTime() > before.value.getTime()) {
+    return failure("invalid_input", "invalid_range");
+  }
+
+  const createdById = actor.subject.role === "SUPER_ADMIN" ? userFilter : actor.id;
+  const rows = await store.expenses.list({
+    ...(createdById !== undefined ? { createdById } : {}),
+    ...(category !== undefined ? { category } : {}),
+    ...(method !== undefined ? { method } : {}),
+    ...(from.value !== undefined ? { createdFrom: from.value } : {}),
+    ...(before.value !== undefined ? { createdBefore: before.value } : {}),
+  });
+  return {
+    ok: true,
+    value: { expenses: rows.map(toView), total: koboToNairaString(sumKobo(rows.map((e) => e.amount))) },
+  };
 }

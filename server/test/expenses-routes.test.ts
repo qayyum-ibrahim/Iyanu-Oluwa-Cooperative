@@ -227,13 +227,116 @@ describe("POST /expenses: Idempotency-Key header (5.7c)", () => {
 
 describe("expense routes that do not exist yet", () => {
   it.each([
-    { method: "get" as const, path: "/expenses" },
     { method: "get" as const, path: "/expenses/x" },
     { method: "put" as const, path: "/expenses/x" },
     { method: "delete" as const, path: "/expenses/x" },
-  ])("answers 404 to $method $path (list at 5.8, edit and delete at 5.9)", async ({ method, path }) => {
+  ])("answers 404 to $method $path (edit and delete at 5.9)", async ({ method, path }) => {
     const { app, admin, bearer } = await build();
     const res = await request(app)[method](path).set("Authorization", bearer(admin));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /expenses (5.8b)", () => {
+  /** Staff b may record and view; b records two expenses, the Super Admin one. Fictional data only (D-08). */
+  async function buildList() {
+    const base = await build();
+    const b = await base.store.users.create({
+      email: "staff-b@example.test",
+      passwordHash: "not-a-real-hash",
+      displayName: "staff-b",
+      role: "STAFF",
+      permissions: ["expenses.create", "expenses.view"],
+    });
+    const post = async (u: { id: string }, over: Record<string, unknown>) => {
+      const res = await request(base.app)
+        .post("/expenses").set("Idempotency-Key", newKey())
+        .set("Authorization", base.bearer(u))
+        .send(expenseBody(over));
+      expect(res.status).toBe(201);
+      return res.body.expense as { id: string; createdAt: string };
+    };
+    const b1 = await post(b, { category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER" });
+    const b2 = await post(b, { amount: "0.20" });
+    const ad = await post(base.admin, { category: "Asset Purchase", amount: "250000" });
+    return { ...base, b, b1, b2, ad };
+  }
+
+  const ids = (body: { expenses: { id: string }[] }) => body.expenses.map((e) => e.id).sort();
+
+  it("answers 401 without a token", async () => {
+    const { app } = await buildList();
+    const res = await request(app).get("/expenses");
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "unauthorized" });
+  });
+
+  it("answers 403 to Staff without expenses.view, before checking the query", async () => {
+    const { app, a, bearer } = await buildList();
+    const res = await request(app).get("/expenses?category=Fuel").set("Authorization", bearer(a));
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+  });
+
+  it("answers 200 for Staff with only their expenses, the total, no-store and exact fields", async () => {
+    const { app, admin, b, b1, b2, bearer } = await buildList();
+    const res = await request(app).get(`/expenses?createdById=${admin.id}`).set("Authorization", bearer(b));
+    expect(res.status).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(Object.keys(res.body as object)).toEqual(["expenses", "total"]);
+    expect(ids(res.body)).toEqual([b1.id, b2.id].sort());
+    expect(res.body.total).toBe("0.30");
+    expect(res.body.expenses).toContainEqual(b1);
+    expect(Object.keys(res.body.expenses[0] as object).sort()).toEqual([
+      "amount",
+      "category",
+      "createdAt",
+      "createdById",
+      "description",
+      "id",
+      "method",
+      "narration",
+    ]);
+  });
+
+  it("answers 200 for the Super Admin with every expense, or one creator's", async () => {
+    const { app, admin, b, b1, b2, ad, bearer } = await buildList();
+    const all = await request(app).get("/expenses").set("Authorization", bearer(admin));
+    expect(all.status).toBe(200);
+    expect(ids(all.body)).toEqual([b1.id, b2.id, ad.id].sort());
+    expect(all.body.total).toBe("250000.30");
+    const one = await request(app).get(`/expenses?createdById=${b.id}`).set("Authorization", bearer(admin));
+    expect(ids(one.body)).toEqual([b1.id, b2.id].sort());
+    expect(one.body.total).toBe("0.30");
+  });
+
+  it("passes category, method and the half-open time range from the query", async () => {
+    const { app, admin, b1, b2, bearer } = await buildList();
+    const get = (query: string) => request(app).get(`/expenses?${query}`).set("Authorization", bearer(admin));
+    const others = await get("category=Others");
+    expect(others.body).toEqual({ expenses: [b1], total: "0.10" });
+    const cashAllowances = await get("category=Allowances&method=CASH");
+    expect(cashAllowances.body).toEqual({ expenses: [b2], total: "0.20" });
+    const spaced = await get("category=Asset%20Purchase");
+    expect(spaced.body.total).toBe("250000.00");
+    const from = await get(`category=Others&from=${b1.createdAt}`);
+    expect(ids(from.body)).toEqual([b1.id]);
+    const before = await get(`category=Others&before=${b1.createdAt}`);
+    expect(before.body).toEqual({ expenses: [], total: "0.00" });
+  });
+
+  it.each([
+    { label: "an unknown category", query: "category=Fuel", code: "invalid_category" },
+    { label: "a repeated category", query: "category=Others&category=Loan", code: "invalid_category" },
+    { label: "a method in the wrong case", query: "method=cash", code: "invalid_method" },
+    { label: "an empty createdById", query: "createdById=", code: "invalid_created_by_id" },
+    { label: "a date without a time", query: "from=2026-10-01", code: "invalid_from" },
+    { label: "a time with an offset", query: "before=2026-10-01T00:00:00%2B01:00", code: "invalid_before" },
+    { label: "from after before", query: "from=2026-10-02T00:00:00Z&before=2026-10-01T00:00:00Z", code: "invalid_range" },
+  ])("answers 400 with the code for $label", async ({ query, code }) => {
+    const { app, b, bearer } = await buildList();
+    const res = await request(app).get(`/expenses?${query}`).set("Authorization", bearer(b));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code });
   });
 });

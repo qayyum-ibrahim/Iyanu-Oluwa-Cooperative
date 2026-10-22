@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 6.4 (size M), 2026-10-22: pay-off logic (D-76)
+
+**Works (verified in this session):** `processPayOff` in new `server/src/payoffs.ts`: permission `payoff.process`, idempotency key, member id, method and confirmed `total` checks, then one transaction: key lookup (repeat or conflict), member found and visible (DR-13), Active, no active loan (DR-06), payout from `memberBalances`, ₦0 refused, a total that is not the payout refused (`payout_changed`, A-185), pay-off with one line per refundable category above ₦0, Membership Withdrawal expense with `payOffId`, member set Inactive (DR-07), audit entry `payoff.processed`. 41 tests in new `server/test/payoffs.test.ts` (DR-05 worked example: ₦25,000 out, ₦3,000 kept, member Inactive; every refusal saves nothing; a failed pay-off, expense, status or audit write saves nothing; key repeat, conflict, per user, not used up by a refusal, lost race; real SQLite: five parallel requests with different keys give one pay-off, five with one key give one). `npm run check`: 45 files, 1724 passed, 0 failed, 71.94 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No route yet (6.4b).
+**Tests:** 41 added (1724).
+**Not verified:** no break-on-purpose run yet (6.5). No live check (no route).
+**Found along the way:** the first `npm run check` failed 1 of 1724: the test passed `undefined` as the total to a helper whose default filled in a valid total; the test now sets `total` itself. No source change for it. Split 6.4 into logic (6.4) and route (6.4b). `deleteExpense` and `updateExpense` spot a pay-off expense by category only (`expenses.ts`), while the loan case also checks `loanId`; adding a `payOffId` check is outside this step (proposed as 6.4c, owner to decide).
+
+---
+
 ## Step 6.3c (size S), 2026-10-22: balances take off pay-offs (D-75)
 
 **Works (verified in this session):** `memberBalances(payments, payOffs)` in `balances.ts` takes each pay-off line off its category; a pay-off line in a non-refundable category, or one that takes a balance below ₦0, throws `BalanceError` (A-184). `BalanceError` takes an optional fixed message. 10 new tests in `balances.test.ts` (DR-05 worked example shows ₦0 refundable after its pay-off and keeps ₦3,000 non-refundable; one category only; each refundable category; new payments after a pay-off; several pay-offs; exactly ₦0; below ₦0; non-refundable and unknown categories; error name; input not changed); the 12 old calls now pass `[]`. `npm run check`: 44 files, 1683 passed, 0 failed, 74.02 s.

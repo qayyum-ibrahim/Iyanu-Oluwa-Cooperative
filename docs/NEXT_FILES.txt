@@ -5,13 +5,10 @@ docs/TRACEABILITY.md
 docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/DOMAIN_RULES.md
-server/src/balances.ts
-server/src/store.ts
-server/src/loans.ts
+server/src/payoffs.ts
 server/src/loans-routes.ts
-server/src/expenses.ts
-server/src/members.ts
-server/src/permissions.ts
+server/src/guards.ts
 server/src/app.ts
-server/test/loans.test.ts
+server/test/payoffs.test.ts
 server/test/loans-routes.test.ts
+scripts/live-check-auth.sh

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.2c (size S), 2026-10-22: break-on-purpose for session.ts and api.ts (A-195)
+
+**Works (verified in this session):** `~/Desktop/mutate-U.2c.mjs` (not in git): `--dry` found all 45 find texts once. Baseline 35 passed (`session.test.ts`, `api.test.ts`, `app.test.tsx`). 45 mutations (S1 to S13 in `session.ts`, A1 to A32 in `api.ts`): 38 caught, 7 escaped (A7, A8, A11, A14, A16, A25, A26), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. Every `session.ts` mutation and every lock-name, lock-use and two-tab mutation was caught. `npm run check` (web): 4 files, 42 passed. `npm run check` (server): 46 files, 1781 passed.
+**Escapes:** test gaps A7, A8, A11, A26 (fix proposed at U.2e); A14, A16, A25 equivalent (A-195).
+**Tests:** none added; web 42, server 1781 unchanged.
+**Not verified:** the app in a browser, two real tabs, the Web Lock in a real browser. No source change, no dependency, no live check, dev database not touched. Docs: A-193 "done at U.2d" corrected (jsdom not installed); STATUS "No UI code yet" corrected.
+
+---
+
 ## Step U.2b (size M), 2026-10-22: refresh token in localStorage, refresh lock, lockout hint (D-84, A-194)
 
 **Works (verified in this session):** `session.ts` keeps the refresh token in `localStorage` (`browserLocalStorage`, owner's choice). `api.ts` runs each refresh under the Web Lock `iyanu.refresh` (`browserRefreshLock`; runs at once without Web Locks); a failed lock counts as a failed refresh. `App.tsx` uses both and shows `SIGN_IN_FAILED` with the lockout rule (D-26 kept). With the lock replaced by a direct call, 3 of the new tests failed (the two-tab test among them); `api.ts` restored from a copy, `cmp` same. `npm run check` (web): typecheck and lint clean, 4 files, 42 passed. `npm run build` (web): built in 295 ms. `npm run check` (server): 46 files, 1781 passed.

@@ -75,13 +75,33 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 
 ## Phase U steps (added 2026-10-22, D-79; first look, sizes checked when each starts)
 Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (dashboard, export buttons) on this base. The screen parts of the Phase 3 and 4 exits (Members screen, first-payment flow) are met here. Each server step that touches money, security or data loss is followed by a break-on-purpose step. Installing the web dependencies needs the owner's word.
-- U.0 (S) Screen plan, docs only: every screen and the routes it calls, from TRACEABILITY and the prototype; what the prototype does that the server does not (for example "date spent", A-172); which server read routes are missing; how the web app keeps its tokens (A-45).
-- U.1 (M) Web skeleton in `web/`: build tool and UI library looked up in their official docs and pinned (the prototype uses `latest`, which is not allowed), a web `npm run check`, the dev server talking to the API.
-- U.2 (M) Sign-in, sign-out and change own password.
-- U.3 (M) Members list, add member, member detail. Needs a member balances read route (server step, with its break-on-purpose step).
-- U.4 (M) Record a payment with its breakdown and idempotency key; list a member's payments; the first-payment flow after adding a member.
-- U.5 (M) Give a loan; list a member's loans.
+- U.0 (S) Screen plan, docs only (D-81, A-191). Done: the plan below.
+- U.1 (M) Web skeleton in `web/`: React and Vite, as the prototype (README), versions looked up in the official docs and pinned (D-19); a web `npm run check` (typecheck, lint, tests); the Vite dev server forwards `/api` to the API, so the server needs no CORS code (A-191). Installing needs the owner's word.
+- U.2 (M) Sign-in screen, sign-out, change own password, token keeping and refresh (A-191 item 3). Routes exist.
+- U.3a (S) Server: `GET /members/:id/balances` (`members.view`, DR-13 scope as `GET /members/:id`): per-category balances, refundable total (the payout) and the "Retained by cooperative" amounts (OQ-14), from `memberBalances` (D-72), amounts as strings (A-18). Followed by U.3b (S) break-on-purpose.
+- U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments).
+- U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).
+- U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.
 - U.6 (M) Expenses: record, list with filters and total, edit, delete.
-- U.7 (M) Pay-off confirmation on member detail (refundable balances, payout, confirm; DR-05, A-185) and reactivation (after 6.6).
-- U.8 (M) Staff and access; audit viewer.
-- U.9 (S) Walk-through of every screen on the owner's machine.
+- U.7 (M) Pay-off confirmation at the bottom of member detail (R-13; balances from U.3a, `total` sent back, `payout_changed` shown, DR-05, A-185) and the reactivate button on an Inactive member (D-80).
+- U.8 (M) Staff and access (create, permissions, deactivate, reactivate, reset password); audit viewer.
+- U.9 (S) Walk-through of every screen on the owner's machine against the dev server.
+Sizes stay a first look; an M step may split when it starts.
+
+### Screens and the routes they call (U.0, read from the route files and `legacy-prototype/src/App.jsx`)
+| Screen | Routes | Permission | Gap |
+|---|---|---|---|
+| Sign-in | `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` | none (signed in for `/me`) | none |
+| Change own password | `POST /auth/password` | signed in | none |
+| Members list | `GET /members?status=&createdById=` | `members.view` | no name search on the server (in the browser, A-191); the list shows no balance or loan column, unlike the prototype (would need one read per member or a list route; not planned) |
+| Add member | `POST /members` | `members.create` | none |
+| Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, balances (missing) | `members.view`, `payments.view`, `loans.view` | balances route missing (U.3a); no member edit route (`members.edit` is used only by reactivation) |
+| Record payment | `POST /payments` | `payments.create` | no payment date: the server uses the time recorded (the prototype README orders the form member, date, method, total, breakdown; A-191) |
+| Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); no loan date (time recorded) |
+| Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | no "date spent" (A-172); no paging |
+| Pay-off | balances (missing), `POST /payoffs` | `payoff.process` | balances route missing (U.3a); no pay-off read (A-186) |
+| Reactivate member | `POST /members/:id/reactivate` | `members.edit` | none |
+| Staff and access | `GET /staff`, `POST /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password` | `users.manage` (Super Admin only) | none |
+| Audit | `GET /audit?actorId=&action=&limit=&offset=` | `users.manage` | none |
+
+Categories lists (payment DR-04, expense DR-11) are copied into the web code for now: there is no category route (A-191). Dashboard, Categories and Exports screens of the prototype wait for Phases 7 and 8.

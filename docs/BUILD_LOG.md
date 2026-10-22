@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.0 (size S), 2026-10-22: screen plan (D-81, A-191)
+
+**Works (verified in this session):** `docs/PHASE_PLAN.md` holds the Phase U screen table (screen, routes, permission, gap) and refined steps U.1 to U.9 with a new server step U.3a (member balances read route) and U.3b (its break-on-purpose). Routes read from `server/src/*-routes.ts` and `app.ts`; the prototype from `legacy-prototype/src/App.jsx` and its README. TRACEABILITY R-02, R-14, R-24 and R-30 brought up to date. Phase 6 exit confirmed by the owner ("continue", then "go"). `npm run check` (inside `server/`): 46 files, 1781 passed, 0 failed, 91.45 s.
+**Stubbed:** nothing.
+**Tests:** none added (docs only).
+**Not verified:** Vite and React docs not read (U.1 does that). No source change, no live check, dev database not touched.
+
+---
+
 ## Step 6.7b (size S), 2026-10-22: test for L14 (A-190)
 
 **Works (verified in this session):** One test in `server/test/members.test.ts`, "names the Super Admin, not the Staff recorder, as the actor when the Super Admin reactivates (DR-15, A-190)". `npm run check`: 46 files, 1781 passed, 0 failed, 85.51 s. L14 rerun alone by hand with the exact find and replace texts from `~/Desktop/mutate-6.7.mjs`: `members.test.ts` 1 failed (the new test), 62 passed, so L14 is caught. `src/members.ts` restored from a copy; `git diff` on it empty; `git status --short` showed only the test file.

@@ -5,10 +5,7 @@ docs/TRACEABILITY.md
 docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/DOMAIN_RULES.md
-server/src/payoffs.ts
-server/src/loans-routes.ts
-server/src/guards.ts
-server/src/app.ts
-server/test/payoffs.test.ts
-server/test/loans-routes.test.ts
-scripts/live-check-auth.sh
+server/src/expenses.ts
+server/src/store.ts
+server/test/expenses.test.ts
+server/test/expenses-routes.test.ts

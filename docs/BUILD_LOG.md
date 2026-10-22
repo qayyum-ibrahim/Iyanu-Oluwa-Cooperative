@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 6.4b (size M), 2026-10-22: pay-off route (D-77)
+
+**Works (verified in this session):** `POST /payoffs` in new `server/src/payoffs-routes.ts`, mounted in `app.ts`: 401 without a token, 403 without `payoff.process` (before the body is read), header `Idempotency-Key`, body `memberId`, `method`, `total`; 201 `{ payOff }` with no-store, `Idempotent-Replayed: true` on a repeat; 400 `invalid_input` with code, 400 `bad_request` for malformed JSON, 413 `too_large`; 404 `not_found`; 409 `member_inactive`, `active_loan`, `nothing_to_pay_off`, `payout_changed`, `idempotency_conflict`. 28 tests in new `server/test/payoffs-routes.test.ts`. `npm run check`: 46 files, 1752 passed, 0 failed, 84.72 s. `npm run db:deploy` (owner said yes): `20261022090000_pay_offs` and `20261022120000_expense_payoff_link` applied, "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".
+**Works (verified on owner's machine):** live check with 19 new pay-off checks in `scripts/live-check-auth.sh` (403 without the right, `active_loan`, 404 for another user's member, missing key, `payout_changed`, 201 ₦20,000, repeat returns the same pay-off, second pay-off `member_inactive`, member Inactive, audit `payoff.processed`, 401 without a token): 157 passed, 0 failed.
+**Stubbed:** nothing. No GET or read by id for pay-offs (A-186).
+**Tests:** 28 added (1752).
+**Not verified:** no break-on-purpose run yet (6.5). The `Expense` rows copied by the 6.3b table rebuild on the dev database were not read (A-160, A-183).
+**Found along the way:** I first told the owner the live check gained 23 checks; it gained 19 (138 + 19 = 157).
+
+---
+
 ## Step 6.4 (size M), 2026-10-22: pay-off logic (D-76)
 
 **Works (verified in this session):** `processPayOff` in new `server/src/payoffs.ts`: permission `payoff.process`, idempotency key, member id, method and confirmed `total` checks, then one transaction: key lookup (repeat or conflict), member found and visible (DR-13), Active, no active loan (DR-06), payout from `memberBalances`, ₦0 refused, a total that is not the payout refused (`payout_changed`, A-185), pay-off with one line per refundable category above ₦0, Membership Withdrawal expense with `payOffId`, member set Inactive (DR-07), audit entry `payoff.processed`. 41 tests in new `server/test/payoffs.test.ts` (DR-05 worked example: ₦25,000 out, ₦3,000 kept, member Inactive; every refusal saves nothing; a failed pay-off, expense, status or audit write saves nothing; key repeat, conflict, per user, not used up by a refusal, lost race; real SQLite: five parallel requests with different keys give one pay-off, five with one key give one). `npm run check`: 45 files, 1724 passed, 0 failed, 71.94 s.

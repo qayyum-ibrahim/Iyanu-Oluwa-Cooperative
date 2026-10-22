@@ -365,6 +365,50 @@ expect "audit log has loan.disbursed" "$(pick entries.0.action)" loan.disbursed
 code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/loans" -H "Content-Type: application/json" --data '{}')
 expect "loan without a token refused" "$code" 401
 
+# --- pay-off (step 6.4b) ---
+# The owner's member from this run is paid out once: ₦20,000 (all refundable), then Inactive (D-08).
+# The staff member's member has the active loan from above, so its pay-off is refused (DR-06).
+payoff_json() { M="$1" T="$2" node -e 'process.stdout.write(JSON.stringify({memberId:process.env.M,method:"CASH",total:process.env.T}))' > "$REQ"; }
+payoff_json "$SMID" "20000"
+code=$(authed_send POST /payoffs "$SAT" "$(new_key)")
+expect "pay-off without payoff.process refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view","loans.disburse","payoff.process"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given payoff.process" "$code" 200
+payoff_json "$SMID" "20000"
+code=$(authed_send POST /payoffs "$SAT" "$(new_key)")
+expect "pay-off with an active loan refused" "$code" 409
+expect "active loan error" "$(pick error)" active_loan
+payoff_json "$OMID" "20000"
+code=$(authed_send POST /payoffs "$SAT" "$(new_key)")
+expect "staff cannot pay out the owner's member" "$code" 404
+code=$(authed_send POST /payoffs "$AT")
+expect "pay-off without a key refused" "$code" 400
+expect "pay-off missing key code" "$(pick code)" missing_idempotency_key
+payoff_json "$OMID" "19999"
+code=$(authed_send POST /payoffs "$AT" "$(new_key)")
+expect "pay-off with a wrong total refused" "$code" 409
+expect "wrong total error" "$(pick error)" payout_changed
+payoff_json "$OMID" "20000"
+POKEY=$(new_key)
+code=$(authed_send POST /payoffs "$AT" "$POKEY")
+expect "owner pays out a member" "$code" 201
+expect "pay-off total" "$(pick payOff.total)" "20000.00"
+expect "pay-off has an expense" "$([ -n "$(pick payOff.expenseId)" ] && echo yes || echo no)" yes
+POID=$(pick payOff.id)
+code=$(authed_send POST /payoffs "$AT" "$POKEY")
+expect "pay-off repeat with the same key answers 201" "$code" 201
+expect "pay-off repeat returns the same pay-off" "$(pick payOff.id)" "$POID"
+code=$(authed_send POST /payoffs "$AT" "$(new_key)")
+expect "second pay-off refused" "$code" 409
+expect "second pay-off error" "$(pick error)" member_inactive
+code=$(authed_get "/members/$OMID" "$AT")
+expect "paid-out member is Inactive" "$(pick member.status)" INACTIVE
+code=$(authed_get "/audit?action=payoff.processed&limit=1" "$AT")
+expect "audit log has payoff.processed" "$(pick entries.0.action)" payoff.processed
+code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/payoffs" -H "Content-Type: application/json" --data '{}')
+expect "pay-off without a token refused" "$code" 401
+
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200
 R2=$(field refreshToken)

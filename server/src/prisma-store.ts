@@ -10,10 +10,12 @@ import {
   DuplicateExpenseLoanError,
   DuplicateExpenseKeyError,
   DuplicateLoanKeyError,
+  DuplicatePayOffKeyError,
   formatMembershipId,
   type AuditRecord,
   type ExpenseRecord,
   type LoanRecord,
+  type PayOffRecord,
   type PaymentMethod,
   type PaymentRecord,
   type LockoutState,
@@ -96,6 +98,33 @@ const toLoan = (r: LoanRow): LoanRecord => ({
   principal: r.principalKobo,
   interestNote: r.interestNote,
   notes: r.notes,
+  idempotencyKey: r.idempotencyKey,
+  requestHash: r.requestHash,
+  createdById: r.createdById,
+  createdAt: r.createdAt,
+});
+
+/** A PayOff row with its lines, as the database holds it. */
+interface PayOffRow {
+  id: string;
+  memberId: string;
+  method: PaymentMethod;
+  totalKobo: bigint;
+  idempotencyKey: string | null;
+  requestHash: string | null;
+  createdById: string;
+  createdAt: Date;
+  lines: { id: string; position: number; category: string; amountKobo: bigint }[];
+}
+
+const toPayOff = (r: PayOffRow): PayOffRecord => ({
+  id: r.id,
+  memberId: r.memberId,
+  method: r.method,
+  total: r.totalKobo,
+  lines: [...r.lines]
+    .sort((a, b) => a.position - b.position)
+    .map((l) => ({ id: l.id, category: l.category, amount: l.amountKobo })),
   idempotencyKey: r.idempotencyKey,
   requestHash: r.requestHash,
   createdById: r.createdById,
@@ -580,6 +609,64 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
       async findByKey(createdById, idempotencyKey) {
         const row = await prisma.loan.findFirst({ where: { createdById, idempotencyKey } });
         return row ? toLoan(row) : null;
+      },
+    },
+    payOffs: {
+      async create(input) {
+        // Read the member, then the creator, so the error order is the same as in memory.
+        const member = await prisma.member.findUnique({
+          where: { id: input.memberId },
+          select: { id: true },
+        });
+        if (member === null) throw new UnknownMemberError(input.memberId);
+        const actor = await prisma.user.findUnique({
+          where: { id: input.createdById },
+          select: { id: true },
+        });
+        if (actor === null) throw new UnknownActorError(input.createdById);
+        // One nested create: the pay-off and its lines are saved together or not at all.
+        const row = await prisma.payOff.create({
+          data: {
+            memberId: input.memberId,
+            method: input.method,
+            totalKobo: input.total,
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
+            createdById: input.createdById,
+            lines: {
+              create: input.lines.map((l, position) => ({
+                position,
+                category: l.category,
+                amountKobo: l.amount,
+              })),
+            },
+          },
+          include: { lines: true },
+        }).catch((e: unknown) => {
+          // The only other unique index here is the line position, which cannot clash (as A-121).
+          if (hasCode(e, "P2002")) throw new DuplicatePayOffKeyError();
+          throw e;
+        });
+        return toPayOff(row);
+      },
+      async findById(id) {
+        const row = await prisma.payOff.findUnique({ where: { id }, include: { lines: true } });
+        return row ? toPayOff(row) : null;
+      },
+      async listByMember(memberId) {
+        const rows = await prisma.payOff.findMany({
+          where: { memberId },
+          include: { lines: true },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toPayOff);
+      },
+      async findByKey(createdById, idempotencyKey) {
+        const row = await prisma.payOff.findFirst({
+          where: { createdById, idempotencyKey },
+          include: { lines: true },
+        });
+        return row ? toPayOff(row) : null;
       },
     },
     refreshTokens: {

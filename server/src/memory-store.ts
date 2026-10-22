@@ -10,12 +10,15 @@ import {
   DuplicateExpenseLoanError,
   DuplicateExpenseKeyError,
   DuplicateLoanKeyError,
+  DuplicatePayOffKeyError,
   formatMembershipId,
   type AuditRecord,
   type ExpenseRecord,
   type ExpenseStore,
   type LoanRecord,
   type LoanStore,
+  type PayOffRecord,
+  type PayOffStore,
   type PaymentRecord,
   type PaymentStore,
   type LockoutState,
@@ -41,6 +44,11 @@ const copyExpense = (e: ExpenseRecord): ExpenseRecord => ({
   deletedAt: copyDate(e.deletedAt),
 });
 const copyLoan = (l: LoanRecord): LoanRecord => ({ ...l, createdAt: new Date(l.createdAt) });
+const copyPayOff = (p: PayOffRecord): PayOffRecord => ({
+  ...p,
+  createdAt: new Date(p.createdAt),
+  lines: p.lines.map((l) => ({ ...l })),
+});
 const copyUser = (u: UserRecord): UserRecord => ({
   ...u,
   createdAt: new Date(u.createdAt),
@@ -71,6 +79,7 @@ export function createMemoryStore(): Store {
   const paymentRows: PaymentRecord[] = [];
   const expenseRows: ExpenseRecord[] = [];
   const loanRows: LoanRecord[] = [];
+  const payOffRows: PayOffRecord[] = [];
   const tokens = new Map<string, RefreshTokenRecord>();
 
   function revokeWhere(match: (t: RefreshTokenRecord) => boolean, now: Date): number {
@@ -93,6 +102,7 @@ export function createMemoryStore(): Store {
       payments: paymentRows.map((p) => copyPayment(p)),
       expenses: expenseRows.map((e) => copyExpense(e)),
       loans: loanRows.map((l) => copyLoan(l)),
+      payOffs: payOffRows.map((p) => copyPayOff(p)),
       tokens: [...tokens.entries()].map(([id, t]) => [id, copyToken(t)] as const),
     };
   }
@@ -113,6 +123,8 @@ export function createMemoryStore(): Store {
     expenseRows.push(...s.expenses);
     loanRows.length = 0;
     loanRows.push(...s.loans);
+    payOffRows.length = 0;
+    payOffRows.push(...s.payOffs);
     tokens.clear();
     for (const [id, t] of s.tokens) tokens.set(id, t);
   }
@@ -456,6 +468,52 @@ export function createMemoryStore(): Store {
             (l) => l.createdById === createdById && l.idempotencyKey === idempotencyKey,
           );
           return found ? copyLoan(found) : null;
+        },
+      };
+    })(),
+    payOffs: ((): PayOffStore => {
+      const rows = payOffRows;
+      return {
+        async create(input) {
+          // No await in this method, so the checks and the save cannot be interleaved.
+          if (!memberRows.some((m) => m.id === input.memberId)) {
+            throw new UnknownMemberError(input.memberId);
+          }
+          if (!users.has(input.createdById)) throw new UnknownActorError(input.createdById);
+          if (
+            input.idempotencyKey !== undefined &&
+            rows.some(
+              (p) => p.createdById === input.createdById && p.idempotencyKey === input.idempotencyKey,
+            )
+          ) {
+            throw new DuplicatePayOffKeyError();
+          }
+          const record: PayOffRecord = {
+            id: randomUUID(),
+            memberId: input.memberId,
+            method: input.method,
+            total: input.total,
+            lines: input.lines.map((l) => ({ id: randomUUID(), category: l.category, amount: l.amount })),
+            idempotencyKey: input.idempotencyKey ?? null,
+            requestHash: input.requestHash ?? null,
+            createdById: input.createdById,
+            createdAt: new Date(),
+          };
+          rows.push(record);
+          return copyPayOff(record);
+        },
+        async findById(id) {
+          const found = rows.find((p) => p.id === id);
+          return found ? copyPayOff(found) : null;
+        },
+        async listByMember(memberId) {
+          return rows.filter((p) => p.memberId === memberId).map(copyPayOff);
+        },
+        async findByKey(createdById, idempotencyKey) {
+          const found = rows.find(
+            (p) => p.createdById === createdById && p.idempotencyKey === idempotencyKey,
+          );
+          return found ? copyPayOff(found) : null;
         },
       };
     })(),

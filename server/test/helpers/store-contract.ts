@@ -11,6 +11,7 @@ import { runActiveContract } from "./active-contract.js";
 import { runAuditListContract } from "./audit-list-contract.js";
 import { runExpensesContract } from "./expenses-contract.js";
 import { runLoansContract } from "./loans-contract.js";
+import { runPayOffsContract } from "./payoffs-contract.js";
 import { runMembersContract } from "./members-contract.js";
 import { runPasswordContract } from "./password-contract.js";
 import { runPaymentsContract } from "./payments-contract.js";
@@ -380,6 +381,7 @@ export function runStoreContract(
     runPaymentsKeyContract(makeStore);
     runExpensesContract(makeStore);
     runLoansContract(makeStore);
+    runPayOffsContract(makeStore);
     runTransactionContract(makeStore);
   });
 }

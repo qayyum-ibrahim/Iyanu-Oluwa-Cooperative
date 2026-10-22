@@ -1,7 +1,7 @@
 // Database schema. Users, the audit log and refresh tokens (step 2.3c), sign-in lockout (step 2.3e),
 // stored staff permissions (step 2.5b), members (step 3.1), payments (step 4.2), expenses (step 5.2),
 // loans (step 5.3), loan links on payment lines and expenses (step 5.3b), loan idempotency keys (step 5.4c),
-// expense idempotency keys (step 5.7c).
+// expense idempotency keys (step 5.7c), pay-offs (step 6.3).
 // Money columns are BigInt kobo (D-15).
 // All timestamps are stored in UTC (D-16).
 
@@ -52,6 +52,7 @@ model User {
   expenses         Expense[]      @relation("ExpenseCreatedBy")
   deletedExpenses  Expense[]      @relation("ExpenseDeletedBy")
   loans            Loan[]
+  payOffs          PayOff[]
 }
 
 model AuditLog {
@@ -98,6 +99,7 @@ model Member {
   createdAt   DateTime     @default(now())
   payments    Payment[]
   loans       Loan[]
+  payOffs     PayOff[]
 
   @@index([createdById])
 }
@@ -195,4 +197,39 @@ model Loan {
   @@index([memberId])
   @@index([createdById])
   @@unique([createdById, idempotencyKey])
+}
+
+// A pay-off (DR-05, step 6.3). Append-only (D-17): no update or delete exists in the store. The
+// lines hold what was paid out of each refundable category, so balances can take it off (A-180).
+model PayOff {
+  id             String        @id @default(uuid())
+  memberId       String
+  member         Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  method         PaymentMethod
+  // Whole kobo (D-15). The lines add up to this; the logic code checks it.
+  totalKobo      BigInt
+  // Set from the Idempotency-Key header of the pay-off route (step 6.4).
+  idempotencyKey String?
+  requestHash    String?
+  // The user who processed the pay-off (DR-15).
+  createdById    String
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+  lines          PayOffLine[]
+
+  @@index([memberId])
+  @@index([createdById])
+  @@unique([createdById, idempotencyKey])
+}
+
+model PayOffLine {
+  id         String @id @default(uuid())
+  payOffId   String
+  payOff     PayOff @relation(fields: [payOffId], references: [id], onDelete: Restrict)
+  // Order of the line inside the pay-off, first line is 0.
+  position   Int
+  category   String
+  amountKobo BigInt
+
+  @@unique([payOffId, position])
 }

@@ -491,6 +491,67 @@ export interface LoanStore {
   findByKey(createdById: string, idempotencyKey: string): Promise<LoanRecord | null>;
 }
 
+/** What a pay-off paid out of one refundable category. The amount is whole kobo. */
+export interface PayOffLineRecord {
+  id: string;
+  category: string;
+  amount: bigint;
+}
+
+/**
+ * A saved pay-off (DR-05, step 6.3). Append-only: nothing changes it after it is saved (D-17).
+ * The lines let the balances take off what was paid out (A-180).
+ */
+export interface PayOffRecord {
+  id: string;
+  memberId: string;
+  method: PaymentMethod;
+  /** Whole kobo: the payout. */
+  total: bigint;
+  /** In the order given when the pay-off was saved. */
+  lines: PayOffLineRecord[];
+  /** The caller's idempotency key, or null. Unique per user. */
+  idempotencyKey: string | null;
+  /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
+  requestHash: string | null;
+  /** The user who processed the pay-off (DR-15). */
+  createdById: string;
+  createdAt: Date;
+}
+
+export interface NewPayOff {
+  memberId: string;
+  method: PaymentMethod;
+  total: bigint;
+  lines: { category: string; amount: bigint }[];
+  idempotencyKey?: string;
+  requestHash?: string;
+  createdById: string;
+}
+
+export class DuplicatePayOffKeyError extends Error {
+  constructor() {
+    super("A pay-off with this idempotency key already exists for this user");
+    this.name = "DuplicatePayOffKeyError";
+  }
+}
+
+export interface PayOffStore {
+  /**
+   * Saves a pay-off and all its lines together, or nothing. Throws UnknownMemberError if the
+   * member does not exist, then UnknownActorError if createdById is not a user, then
+   * DuplicatePayOffKeyError if this user already saved a pay-off with the same idempotency key.
+   * Values are saved as given: the amounts, the categories, the member's status and the active
+   * loan rule (DR-06) are the logic code's job.
+   */
+  create(input: NewPayOff): Promise<PayOffRecord>;
+  findById(id: string): Promise<PayOffRecord | null>;
+  /** Pay-offs of one member, oldest first. Equal times are in no fixed order. Returns copies. */
+  listByMember(memberId: string): Promise<PayOffRecord[]>;
+  /** The pay-off this user saved with this key, or null. Returns a copy. */
+  findByKey(createdById: string, idempotencyKey: string): Promise<PayOffRecord | null>;
+}
+
 export interface Store {
   users: UserStore;
   audit: AuditStore;
@@ -499,6 +560,7 @@ export interface Store {
   payments: PaymentStore;
   expenses: ExpenseStore;
   loans: LoanStore;
+  payOffs: PayOffStore;
   /**
    * Runs fn with a store bound to one transaction. If fn returns, every write inside it is saved.
    * If fn throws, every write inside it is undone and the same error is thrown again.

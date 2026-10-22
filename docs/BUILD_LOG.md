@@ -1,5 +1,19 @@
 # Build log (newest first)
 
+## Step 6.3 (size M), 2026-10-22: pay-off table and store (D-73)
+
+**Works (verified in this session):** models `PayOff` (member, method, `totalKobo`, `idempotencyKey`, `requestHash`, creator, `createdAt`; indexes on `memberId` and `createdById`; unique on creator and key) and `PayOffLine` (`payOffId`, `position`, `category`, `amountKobo`; unique on pay-off and position), all relations `onDelete: Restrict`. Migration `20261022090000_pay_offs` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy` in the scratchpad; two `CREATE TABLE` and four indexes; dev database not touched). `PayOffRecord`, `PayOffLineRecord`, `NewPayOff`, `PayOffStore` and `DuplicatePayOffKeyError` in `store.ts`; both adapters; the memory transaction snapshot copies pay-offs. New `test/helpers/payoffs-contract.ts`, 20 cases per adapter (DR-05 worked example as data). Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `payOffs` (owner approved). `npm run check`: 44 files, 1659 passed, 0 failed, 72.06 s. `npx vitest run test/memory-store.test.ts test/prisma-store.test.ts -t "pay-offs"`: 40 passed, 334 skipped.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No route uses the store (6.4).
+**Tests:** 40 added (1659).
+**Not verified:** the migration on the dev database (owner runs `db:deploy`). No break-on-purpose run yet (6.5).
+**Found along the way:**
+1. Owner approved the split at the start: 6.3 table and store, 6.3b `Expense.payOffId`, 6.3c balances (A-182).
+2. Name conflict, not fixed (DOMAIN_RULES not in this step): DR-05, GLOSSARY, OQ-11 and R-16 say "Member Withdrawal"; DR-11, A-148 and the code (`expense-categories.ts`, per A-148) say "Membership Withdrawal". The code wins; the docs rows need a wording fix.
+3. A-148 still says DR-11 waits on OQ-00; D-71 confirmed it. Left as is (logged here).
+
+---
+
 ## Step 6.2b (size S), 2026-10-22: test for the BalanceError name (A-181)
 
 **Works (verified in this session):** one test added to `server/test/balances.test.ts` (12 tests): `names the error BalanceError, so the server log shows it`. `npm run check`: 44 files, 1619 passed, 0 failed, 80.90 s. Test file committed alone as `19e6ad7` (owner said yes), because the mutation script needs a clean tree. Rerun of `~/Desktop/mutate-6.1.mjs` (output in `~/Desktop/mutate-6.2b.out`): 26 mutations `{"caught":26,"escaped":0,"error":0,"timeout":0,"notApplied":0}`; B5 CAUGHT by the new test ("names the error BalanceError, so the server log shows it"); "files restored: yes"; `git status --short` empty.

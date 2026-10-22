@@ -57,7 +57,7 @@ Exit "totals reconcile" is defined at 5.8.
 ## Phase 6 steps (first look, at 6.0; sizes checked when each starts)
 Each money step is followed by a break-on-purpose step. An M step may split when it starts. Steps with a migration need the owner's word before `migrate`.
 - 6.0 (S) Record the owner's answers to OQ-00, OQ-06 and OQ-07 (D-71, DR-16, A-179). Docs only. Done.
-- 6.1 (S) Member balances from payment lines, pure logic: balance per category, refundable total (DR-03), payout (DR-05). Tests include the DR-05 worked example.
+- 6.1 (S) Member balances from payment lines, pure logic: balance per category, refundable total (DR-03), payout (DR-05). Tests include the DR-05 worked example. Done (D-72): `memberBalances` in `balances.ts`; pay-offs counted from 6.3 (A-180).
 - 6.2 (S) Break-on-purpose for 6.1.
 - 6.3 (M) How a pay-off is stored (PAY_OFF record and its Membership Withdrawal expense, DR-05, A-148); store in both adapters; may need a migration.
 - 6.4 (M) Pay-off route (`payoff.process`, DR-14): blocked by an active loan (DR-06); payout, Membership Withdrawal expense, automatic Inactive (DR-07) and audit in one transaction; idempotency key as D-48.

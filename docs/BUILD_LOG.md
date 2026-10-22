@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 6.1 (size S), 2026-10-22: member balances from payment lines (D-72)
+
+**Works (verified in this session):** new `server/src/balances.ts` (`memberBalances`, `BalanceError`) and `server/test/balances.test.ts` (11 tests, including the DR-05 worked example: payout ₦25,000, ₦3,000 kept). `npm run check`: 44 files, 1618 passed, 0 failed, 78.78 s, exit 0.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. Nothing calls `memberBalances` yet.
+**Tests:** 11 added (1618).
+**Not verified:** balances after a pay-off (not stored until 6.3, A-180). No break-on-purpose run yet (6.2).
+**Found along the way:**
+1. STATUS did not say 6.0 was pushed; `origin/main` pointed to `0a842e3`. Fixed.
+2. The step 6.1 files were not in NEXT_FILES; the step header named them.
+
+---
+
 ## Step 6.0 (size S), 2026-10-22: owner answers OQ-00, OQ-06 and OQ-07 (D-71)
 
 **Works (verified in this session):** docs only. OQ-00, OQ-06 and OQ-07 closed in OPEN_QUESTIONS. DOMAIN_RULES: the money rules confirmed (DR-01, DR-02, DR-04, DR-05 rest, DR-06, DR-08 example and rejection, DR-09, DR-11); DR-15 stays requested; new DR-16 (reactivation). DECISIONS: D-71. ASSUMPTIONS: A-179. PHASE_PLAN: Phase 6 first look (6.0 to 6.7). TRACEABILITY: R-35. `npm run check` (run before the docs, no code changed): 43 files, 1607 passed, 0 failed, 79.08 s, exit 0.

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.1 (size M), 2026-10-22: web skeleton (D-82, A-192)
+
+**Works (verified in this session):** `web/` holds a React and Vite app in TypeScript with exact versions (react 19.3.1, vite 8.3.4, @vitejs/plugin-react 6.1.2, eslint-plugin-react-hooks 7.1.1; typescript 6.0.3, eslint 10.12.0, typescript-eslint 8.71.2, vitest 5.0.4, @types/node 22.20.5 as the server). Versions from `npm view`; Vite proxy form from https://vite.dev/config/server-options. `src/api-proxy.ts` forwards `/api` to `http://localhost:3000` (or `API_TARGET`) and removes `/api`. First `npm run check` failed at the tests: rolldown's Intel Mac binding was missing after `npm install` (npm/cli#4828); owner said yes to deleting `web/node_modules` and `npm ci`, which installed it. Vite then warned that `vite.config.ts` imported without a file extension; fixed (`.ts` extension, `allowImportingTsExtensions`). `npm run check` (web): typecheck and lint clean, 2 files, 8 passed. `npm run build` (web): 15 modules, built. `npm run check` (server): 46 files, 1781 passed, 89.92 s.
+**Stubbed:** `App.tsx` shows only the system name; screens come at U.2 to U.8.
+**Tests:** 8 added in `web/test/` (7 proxy, 1 render). Server 1781 unchanged.
+**Not verified:** the dev server and proxy against a running API; the `fsevents` install script was not run (A-192 item 7). No server change, no live check, dev database not touched.
+
+---
+
 ## Step U.0 (size S), 2026-10-22: screen plan (D-81, A-191)
 
 **Works (verified in this session):** `docs/PHASE_PLAN.md` holds the Phase U screen table (screen, routes, permission, gap) and refined steps U.1 to U.9 with a new server step U.3a (member balances read route) and U.3b (its break-on-purpose). Routes read from `server/src/*-routes.ts` and `app.ts`; the prototype from `legacy-prototype/src/App.jsx` and its README. TRACEABILITY R-02, R-14, R-24 and R-30 brought up to date. Phase 6 exit confirmed by the owner ("continue", then "go"). `npm run check` (inside `server/`): 46 files, 1781 passed, 0 failed, 91.45 s.

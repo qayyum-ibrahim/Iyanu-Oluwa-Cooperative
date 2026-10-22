@@ -10,7 +10,7 @@
 | Category | A named type of contribution, such as Shares |
 | Refundable category | A category paid out at exit: Shares, Savings, Special Savings, Special Deposit, Building Funds |
 | Pay-off | Paying a member their refundable balances and closing the account |
-| Member Withdrawal | The expense category used for pay-off outflows |
+| Membership Withdrawal | The expense category used for pay-off outflows (DR-11; system-only, A-148) |
 | Active / Inactive | Member status. Inactive members are kept but hidden from the default list. |
 | Loan | Money given to a member. One active loan per member. |
 | Outstanding | Loan amount minus the amount repaid |

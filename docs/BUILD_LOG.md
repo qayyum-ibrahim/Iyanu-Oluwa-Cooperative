@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 6.3c (size S), 2026-10-22: balances take off pay-offs (D-75)
+
+**Works (verified in this session):** `memberBalances(payments, payOffs)` in `balances.ts` takes each pay-off line off its category; a pay-off line in a non-refundable category, or one that takes a balance below ₦0, throws `BalanceError` (A-184). `BalanceError` takes an optional fixed message. 10 new tests in `balances.test.ts` (DR-05 worked example shows ₦0 refundable after its pay-off and keeps ₦3,000 non-refundable; one category only; each refundable category; new payments after a pay-off; several pay-offs; exactly ₦0; below ₦0; non-refundable and unknown categories; error name; input not changed); the 12 old calls now pass `[]`. `npm run check`: 44 files, 1683 passed, 0 failed, 74.02 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No caller yet (6.4).
+**Tests:** 10 added (1683).
+**Not verified:** no break-on-purpose run yet (6.5).
+**Found along the way:** owner said "fix inconsistencies": DR-05, GLOSSARY, OQ-11 and R-16 now say "Membership Withdrawal", as the code and DR-11 (the code wins, as logged at 6.3); A-148 no longer says DR-11 waits on OQ-00; TRACEABILITY R-05 and R-28 no longer say DR-02 and DR-04 await sign-off; A-182 status set to "verify", as A-180 and A-183; the stale 6.3 comment in `balances.ts` is replaced. The `mirror/` copy of DOMAIN_RULES needs the DR-05 wording (owner, by hand).
+
+---
+
 ## Step 6.3b (size S), 2026-10-22: pay-off link on expenses (D-74)
 
 **Works (verified in this session):** `Expense.payOffId` (nullable, `@unique`, foreign key to `PayOff`, `onDelete: Restrict`) and the back relation `PayOff.expense` in `schema.prisma`. Migration `20261022120000_expense_payoff_link` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy` in the scratchpad; SQLite rebuilds `Expense`: the `INSERT ... SELECT` copies every old column, including `loanId`, `idempotencyKey` and `requestHash`, read in this session; dev database not touched). `ExpenseRecord.payOffId`, `NewExpense.payOffId`, `UnknownPayOffError` and `DuplicateExpensePayOffError` in `store.ts`; both adapters check the creator, the loan, a repeated loan, the pay-off, a repeated pay-off, then the key. Prisma reads a unique clash in the write as the key when a key is given, else the pay-off when one is given, else the loan (A-170, A-183). Six contract cases per adapter in `expenses-contract.ts` (keeps the id; unknown pay-off; repeated pay-off; creator before pay-off; loan before pay-off; repeated loan before repeated pay-off before repeated key); first case now also expects `payOffId: null`. Two `db.test.ts` cases (unknown pay-off P2003; second expense for one pay-off P2002 and pay-off delete refused P2003). `npm run check`: 44 files, 1673 passed, 0 failed, 74.23 s. `npx vitest run test/memory-store.test.ts test/prisma-store.test.ts test/db.test.ts -t "pay-off"`: 56 passed, 346 skipped.

@@ -115,6 +115,15 @@ describe("memberBalances", () => {
     }
   });
 
+  it("names the error BalanceError, so the server log shows it", () => {
+    try {
+      memberBalances([payment(["Loan", 1n])]);
+      expect.unreachable("should have thrown");
+    } catch (e) {
+      expect((e as Error).name).toBe("BalanceError");
+    }
+  });
+
   it("does not change the payments it is given", () => {
     const payments = [payment(["Shares", 10n], ["Savings", 20n])];
     const copy = structuredClone(payments);

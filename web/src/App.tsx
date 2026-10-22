@@ -1,8 +1,8 @@
 // Sign-in, sign-out and change own password (U.2, D-81). Other screens come in U.3 to U.8.
 import { useEffect, useState } from "react";
-import { createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
+import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import ChangePassword from "./ChangePassword.tsx";
-import { browserSessionStorage, createSessionKeeper } from "./session.ts";
+import { browserLocalStorage, createSessionKeeper } from "./session.ts";
 import SignIn from "./SignIn.tsx";
 
 export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
@@ -14,12 +14,13 @@ type View =
   | { kind: "signed-out"; notice?: string }
   | { kind: "signed-in"; me: Me; page: "home" | "password" };
 
-/** Every sign-in failure reads the same (D-26). */
+/** Every sign-in refusal reads the same (D-26), with the lockout rule (D-30) for everyone. */
+export const SIGN_IN_FAILED =
+  "Sign-in failed. Check your email and password. After 5 failed tries an account is locked for 15 minutes.";
+
 export function loginMessage(result: LoginResult): string | null {
   if (result.ok) return null;
-  if (result.reason === "invalid_credentials") {
-    return "Sign-in failed. Check your email and password.";
-  }
+  if (result.reason === "invalid_credentials") return SIGN_IN_FAILED;
   if (result.reason === "network") return "Cannot reach the server. Try again.";
   return "Something went wrong. Try again.";
 }
@@ -43,7 +44,8 @@ export function changePasswordMessage(result: ChangePasswordResult): string | nu
 function browserApi(onSignedOut: () => void): Api {
   return createApi({
     fetch: (input, init) => fetch(input, init),
-    keeper: createSessionKeeper(browserSessionStorage()),
+    keeper: createSessionKeeper(browserLocalStorage()),
+    lock: browserRefreshLock(),
     onSignedOut,
   });
 }

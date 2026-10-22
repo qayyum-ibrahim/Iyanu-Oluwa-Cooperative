@@ -7,5 +7,6 @@ docs/PHASE_PLAN.md
 web/package.json
 web/src/session.ts
 web/src/api.ts
+web/src/App.tsx
 web/test/session.test.ts
 web/test/api.test.ts

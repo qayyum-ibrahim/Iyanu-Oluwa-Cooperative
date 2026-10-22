@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.2b (size M), 2026-10-22: refresh token in localStorage, refresh lock, lockout hint (D-84, A-194)
+
+**Works (verified in this session):** `session.ts` keeps the refresh token in `localStorage` (`browserLocalStorage`, owner's choice). `api.ts` runs each refresh under the Web Lock `iyanu.refresh` (`browserRefreshLock`; runs at once without Web Locks); a failed lock counts as a failed refresh. `App.tsx` uses both and shows `SIGN_IN_FAILED` with the lockout rule (D-26 kept). With the lock replaced by a direct call, 3 of the new tests failed (the two-tab test among them); `api.ts` restored from a copy, `cmp` same. `npm run check` (web): typecheck and lint clean, 4 files, 42 passed. `npm run build` (web): built in 295 ms. `npm run check` (server): 46 files, 1781 passed.
+**Stubbed:** no `storage` event listener: other tabs are not signed out at once (A-194 item 3).
+**Tests:** 6 added (2 `session.test.ts`, 4 `api.test.ts`); 1 changed in `app.test.tsx`; web total 42. Server 1781 unchanged.
+**Not verified:** the app in a browser, two real tabs, the Web Lock in a real browser. jsdom not installed yet (U.2d). No server change, no live check, dev database not touched. No dependency installed. Break-on-purpose owed at U.2c.
+
+---
+
 ## Step U.2 (size M), 2026-10-22: sign-in, sign-out, change own password (D-83, A-193)
 
 **Works (verified in this session):** `web/src/session.ts` (access token in memory, refresh token in `sessionStorage`), `web/src/api.ts` (login, restore, me, logout, change password; one refresh and one retry on 401, one refresh at a time), `SignIn.tsx`, `ChangePassword.tsx`, `App.tsx`, `styles.css`. First `npm run check` (web) failed at the typecheck: TS2882, no type for the side-effect import `./styles.css`; fixed with `/// <reference types="vite/client" />` in `main.tsx` (`node_modules/vite/client.d.ts` line 43 declares `*.css`). Then one test failed: it expected `autocomplete=` but React 19.3.1's server render writes `autoComplete=`; the test was corrected. `npm run check` (web): typecheck and lint clean, 4 files, 36 passed. `npm run build` (web): built in 1.58 s. `npm run check` (server): 46 files, 1781 passed, 95.76 s.

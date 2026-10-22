@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createApi } from "../src/api.ts";
+import {
+  REFRESH_LOCK_NAME,
+  browserRefreshLock,
+  createApi,
+  type LockRequester,
+  type RefreshLock,
+} from "../src/api.ts";
 import { createSessionKeeper, type TokenStorage } from "../src/session.ts";
 
 interface Call {
@@ -41,9 +47,26 @@ function memoryStorage(): TokenStorage {
   };
 }
 
-function setup(handler: Handler, refreshToken?: string) {
+/** A lock that runs one callback at a time, like a Web Lock shared by tabs. */
+function mutex(): RefreshLock & { uses: () => number } {
+  let tail: Promise<unknown> = Promise.resolve();
+  let uses = 0;
+  const lock = <T,>(run: () => Promise<T>): Promise<T> => {
+    uses++;
+    const result = tail.then(run);
+    tail = result.catch(() => undefined);
+    return result;
+  };
+  return Object.assign(lock, { uses: () => uses });
+}
+
+function setup(
+  handler: Handler,
+  refreshToken?: string,
+  options: { storage?: TokenStorage; lock?: RefreshLock } = {},
+) {
   const calls: Call[] = [];
-  const storage = memoryStorage();
+  const storage = options.storage ?? memoryStorage();
   const keeper = createSessionKeeper(storage);
   if (refreshToken !== undefined) storage.setItem("iyanu.refreshToken", refreshToken);
   let signedOut = 0;
@@ -58,7 +81,12 @@ function setup(handler: Handler, refreshToken?: string) {
     calls.push(call);
     return handler(call);
   }) as typeof fetch;
-  const api = createApi({ fetch: fetchFake, keeper, onSignedOut: () => void signedOut++ });
+  const api = createApi({
+    fetch: fetchFake,
+    keeper,
+    lock: options.lock,
+    onSignedOut: () => void signedOut++,
+  });
   return { api, keeper, calls, signedOutCount: () => signedOut };
 }
 
@@ -199,6 +227,91 @@ describe("signed-in calls", () => {
     expect(a).toEqual(ME);
     expect(b).toEqual(ME);
     expect(refreshes).toBe(1);
+  });
+});
+
+describe("refresh lock", () => {
+  it("runs every refresh inside the lock", async () => {
+    const lock = mutex();
+    let inside = false;
+    const guarded: RefreshLock = (run) =>
+      lock(async () => {
+        inside = true;
+        try {
+          return await run();
+        } finally {
+          inside = false;
+        }
+      });
+    const seen: boolean[] = [];
+    const { api } = setup(
+      (call) => {
+        if (call.path === "/api/refresh") {
+          seen.push(inside);
+          return json(200, { ...tokens(2), userId: "u1" });
+        }
+        return json(200, ME);
+      },
+      "ref1",
+      { lock: guarded },
+    );
+    expect(await api.restore()).toEqual(ME);
+    expect(seen).toEqual([true]);
+    expect(lock.uses()).toBe(1);
+  });
+
+  it("two tabs on one storage both stay signed in when they refresh at once", async () => {
+    // The server rotates the token and refuses an old one (reuse ends the session).
+    let current = "ref1";
+    let issued = 1;
+    let reused = false;
+    const server: Handler = async (call) => {
+      if (call.path === "/api/refresh") {
+        await Promise.resolve();
+        const sent = (call.body as { refreshToken: string }).refreshToken;
+        if (sent !== current || reused) {
+          reused = true;
+          return json(401, { error: "invalid_token" });
+        }
+        issued++;
+        current = `ref${issued}`;
+        return json(200, { ...tokens(issued), userId: "u1" });
+      }
+      return call.auth === "Bearer acc1" || reused ? json(401, {}) : json(200, ME);
+    };
+    const storage = memoryStorage();
+    const lock = mutex();
+    const tabA = setup(server, undefined, { storage, lock });
+    const tabB = setup(server, undefined, { storage, lock });
+    tabA.keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+    tabB.keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+    const [a, b] = await Promise.all([tabA.api.me(), tabB.api.me()]);
+    expect(a).toEqual(ME);
+    expect(b).toEqual(ME);
+    expect(reused).toBe(false);
+    expect(tabA.signedOutCount() + tabB.signedOutCount()).toBe(0);
+    expect(storage.getItem("iyanu.refreshToken")).toBe("ref3");
+  });
+
+  it("a lock that fails counts as a failed refresh and keeps the stored token", async () => {
+    const broken: RefreshLock = () => Promise.reject(new Error("SecurityError"));
+    const { api, keeper, calls } = setup(() => json(200, ME), "ref1", { lock: broken });
+    expect(await api.restore()).toBeNull();
+    expect(calls).toHaveLength(0);
+    expect(keeper.refreshToken()).toBe("ref1");
+  });
+
+  it("browserRefreshLock uses the named Web Lock, or runs at once without one", async () => {
+    const names: string[] = [];
+    const locks: LockRequester = {
+      request: (name, callback) => {
+        names.push(name);
+        return callback();
+      },
+    };
+    expect(await browserRefreshLock(locks)(async () => 7)).toBe(7);
+    expect(names).toEqual([REFRESH_LOCK_NAME]);
+    expect(await browserRefreshLock(undefined)(async () => 8)).toBe(8);
   });
 });
 

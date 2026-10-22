@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { REFRESH_TOKEN_KEY, createSessionKeeper, type TokenStorage } from "../src/session.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  REFRESH_TOKEN_KEY,
+  browserLocalStorage,
+  createSessionKeeper,
+  type TokenStorage,
+} from "../src/session.ts";
 
 function memoryStorage(): TokenStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -61,5 +66,25 @@ describe("session keeper", () => {
       keeper.clear();
       expect(keeper.accessToken()).toBeNull();
     }
+  });
+});
+
+describe("browserLocalStorage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("gives localStorage, not sessionStorage", () => {
+    const local = memoryStorage();
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", memoryStorage());
+    expect(browserLocalStorage()).toBe(local);
+    createSessionKeeper(browserLocalStorage()).save({ accessToken: "acc", refreshToken: "ref" });
+    expect(local.data.get(REFRESH_TOKEN_KEY)).toBe("ref");
+  });
+
+  it("gives null when there is no localStorage", () => {
+    vi.stubGlobal("localStorage", undefined);
+    expect(browserLocalStorage()).toBeNull();
   });
 });

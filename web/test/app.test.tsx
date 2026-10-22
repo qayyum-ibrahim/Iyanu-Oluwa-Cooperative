@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
-import App, { PASSWORD_CHANGED, SESSION_ENDED, changePasswordMessage, loginMessage } from "../src/App";
+import App, {
+  PASSWORD_CHANGED,
+  SESSION_ENDED,
+  SIGN_IN_FAILED,
+  changePasswordMessage,
+  loginMessage,
+} from "../src/App";
 import type { Api } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import SignIn from "../src/SignIn.tsx";
@@ -60,8 +66,9 @@ describe("ChangePassword", () => {
 
 describe("messages", () => {
   it("gives one message for every sign-in refusal", () => {
-    expect(loginMessage({ ok: false, reason: "invalid_credentials" })).toBe(
-      "Sign-in failed. Check your email and password.",
+    expect(loginMessage({ ok: false, reason: "invalid_credentials" })).toBe(SIGN_IN_FAILED);
+    expect(SIGN_IN_FAILED).toBe(
+      "Sign-in failed. Check your email and password. After 5 failed tries an account is locked for 15 minutes.",
     );
     expect(loginMessage({ ok: false, reason: "network" })).toMatch(/Cannot reach/);
     expect(loginMessage({ ok: false, reason: "server" })).toMatch(/went wrong/);

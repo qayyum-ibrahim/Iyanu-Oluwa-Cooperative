@@ -1,5 +1,6 @@
-// Token keeping (A-191 item 3, D-81). The access token lives in memory only. The refresh
-// token lives in sessionStorage, so closing the tab signs out. Never log a token.
+// Token keeping (D-84, replaces D-83's sessionStorage). The access token lives in memory only.
+// The refresh token lives in localStorage: every tab shares it and it survives closing the
+// browser until sign-out or expiry (7 days). Never log a token.
 
 export const REFRESH_TOKEN_KEY = "iyanu.refreshToken";
 
@@ -55,10 +56,10 @@ export function createSessionKeeper(storage: TokenStorage | null): SessionKeeper
   };
 }
 
-/** sessionStorage when the browser gives it, else null (server render, blocked storage). */
-export function browserSessionStorage(): TokenStorage | null {
+/** localStorage when the browser gives it, else null (server render, blocked storage). */
+export function browserLocalStorage(): TokenStorage | null {
   try {
-    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+    return typeof localStorage === "undefined" ? null : localStorage;
   } catch {
     return null;
   }

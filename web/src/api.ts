@@ -28,9 +28,32 @@ export type ChangePasswordResult =
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
 
+export type RefreshLock = <T>(run: () => Promise<T>) => Promise<T>;
+
+export const REFRESH_LOCK_NAME = "iyanu.refresh";
+
+/** The part of the LockManager interface we use, so tests can pass a fake. */
+export interface LockRequester {
+  request<T>(name: string, callback: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * A Web Lock shared by every tab of this origin. The refresh token is shared through
+ * localStorage and the server revokes the whole session when a used token comes back, so two
+ * tabs must never refresh at once. Without Web Locks (no secure context) the refresh runs at once.
+ */
+export function browserRefreshLock(
+  locks: LockRequester | undefined = globalThis.navigator?.locks,
+): RefreshLock {
+  if (locks === undefined) return (run) => run();
+  return (run) => locks.request(REFRESH_LOCK_NAME, run);
+}
+
 export interface ApiDeps {
   fetch: typeof fetch;
   keeper: SessionKeeper;
+  /** Runs a refresh so that no other tab refreshes at the same time. Default: runs it now. */
+  lock?: RefreshLock;
   /** Called when a signed-in call finds the session gone (refresh refused). */
   onSignedOut?: () => void;
   base?: string;
@@ -87,6 +110,7 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 export function createApi(deps: ApiDeps): Api {
   const base = deps.base ?? API_PREFIX;
   const { keeper } = deps;
+  const lock = deps.lock ?? ((run) => run());
   let refreshing: Promise<RefreshOutcome> | null = null;
 
   function post(path: string, body: unknown): Promise<Response> {
@@ -97,6 +121,7 @@ export function createApi(deps: ApiDeps): Api {
     });
   }
 
+  // Runs under the lock, so the stored token is read after any other tab has rotated it.
   async function doRefresh(): Promise<RefreshOutcome> {
     const refreshToken = keeper.refreshToken();
     if (refreshToken === null) return "rejected";
@@ -117,12 +142,14 @@ export function createApi(deps: ApiDeps): Api {
     return "ok";
   }
 
-  // One refresh at a time: the server rotates the refresh token, so a second refresh with
-  // the old token would be refused.
+  // One refresh at a time, in this tab and across tabs: the server rotates the refresh token,
+  // so a second refresh with the old token would be read as reuse and end the session.
   function refresh(): Promise<RefreshOutcome> {
-    refreshing ??= doRefresh().finally(() => {
-      refreshing = null;
-    });
+    refreshing ??= lock(doRefresh)
+      .catch((): RefreshOutcome => "failed")
+      .finally(() => {
+        refreshing = null;
+      });
     return refreshing;
   }
 

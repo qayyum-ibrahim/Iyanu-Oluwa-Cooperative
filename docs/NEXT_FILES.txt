@@ -1,5 +1,10 @@
 docs/STATUS.md
 docs/BUILD_LOG.md
+docs/DOMAIN_RULES.md
+docs/DECISIONS.md
 docs/PHASE_PLAN.md
-docs/OPEN_QUESTIONS.md
+server/src/categories.ts
+server/src/money.ts
+server/src/store.ts
+server/test/categories.test.ts
 docs/NEXT_FILES.txt

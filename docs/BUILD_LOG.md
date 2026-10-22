@@ -1,5 +1,20 @@
 # Build log (newest first)
 
+## Step 6.0 (size S), 2026-10-22: owner answers OQ-00, OQ-06 and OQ-07 (D-71)
+
+**Works (verified in this session):** docs only. OQ-00, OQ-06 and OQ-07 closed in OPEN_QUESTIONS. DOMAIN_RULES: the money rules confirmed (DR-01, DR-02, DR-04, DR-05 rest, DR-06, DR-08 example and rejection, DR-09, DR-11); DR-15 stays requested; new DR-16 (reactivation). DECISIONS: D-71. ASSUMPTIONS: A-179. PHASE_PLAN: Phase 6 first look (6.0 to 6.7). TRACEABILITY: R-35. `npm run check` (run before the docs, no code changed): 43 files, 1607 passed, 0 failed, 79.08 s, exit 0.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added (1607).
+**Not verified:** the readings in A-179 (owner to check).
+**Found along the way:**
+1. STATUS did not say 5.9e was pushed; `origin/main` pointed to `f88e138`. Fixed. The dependency line said "4.5 to 5.8"; fixed.
+2. The step brief named only the "proposed" rows for OQ-00; the "requested" money rows (DR-02, DR-09, DR-11, DR-08 example) were also confirmed, because STATUS said they waited on OQ-00 (A-179).
+3. No balances code exists yet (`store.ts` says balances are derived later); 6.1 builds it.
+4. Mirror: D-71 and DR-16 are new; the owner adds them to the claude.ai Project by hand.
+
+---
+
 ## Step 5.9e (size S), 2026-10-22: tests for the 5.9d test gaps (A-178)
 
 **Works (verified in this session):** three tests. `server/test/expenses.test.ts`: "gives not_found for a deleted expense sent with unchanged fields, and changes nothing (A-178 U5)" (Super Admin deletes f's expense; f sends the same category, amount and method; the row and the audit log stay as they were) and "saves a change of the narration alone on an Others expense (A-178 U18)" (two edits; the second changes only the narration, which is saved, and its audit detail has `narration_changed=true`). `server/test/helpers/expenses-contract.ts`: "returns null for an empty change to a deleted expense (A-178 UP8)", run on both adapters. `npm run check`: typecheck and lint clean, 43 files, 1607 passed, 0 failed, 74.96 s, exit 0. Tests committed as `2dbb0ca` (owner said yes) so the mutation script could run. Full rerun of `~/Desktop/mutate-5.9d.mjs` (output in `~/Desktop/mutate-5.9e.out`): baselines 220, 54, 334 and 346; 96 mutations, 92 caught, 4 escaped (D3, D4, U3, R3), 0 errors, 0 timeouts, 0 not applied; U5, U18 and UP8 caught (1 failed each, the new test); "files restored: yes"; `git status --short` empty.

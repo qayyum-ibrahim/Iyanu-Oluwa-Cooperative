@@ -3,14 +3,14 @@
 
 | ID | Question | Who answers | Needed by | Default until answered |
 |---|---|---|---|---|
-| OQ-00 | Mr. Aro to sign off the money rules in DOMAIN_RULES with real figures | Owner / Mr. Aro | Phase 6 | Rules stay "proposed" |
+| OQ-00 | Mr. Aro to sign off the money rules in DOMAIN_RULES with real figures. Answered 2026-10-22: "money rules are good to go"; the owner will say if a change is needed (D-71, A-179). | Owner / Mr. Aro | Closed | n/a |
 | OQ-01 | Where is it hosted, who runs it, and which production database? | Owner | Phase 10 | SQLite for dev only |
 | OQ-02 | Owner's email for the Super Admin account | Owner | Phase 2 | Entered when the setup script runs. Never in git. |
 | OQ-03 | Owner's OS and Node version. Answered 2026-10-13: macOS, Node v22.14.0, npm 11.21.0 | Owner | Closed | n/a |
 | OQ-04 | Deadline, definition of done, credit situation | Owner | Phase 1 | Lean mode, no deadline |
 | OQ-05 | SMS message text. Provider answered 2026-10-20: Twilio, real adapter after the fake is wired (D-49). | Owner | Phase 4 | Fake adapter, placeholder text |
-| OQ-06 | Can a member be paid off while holding an active loan? | Owner | Phase 6 | No. Blocked (as in the ZIP). |
-| OQ-07 | Can an Inactive member be reactivated? By whom? | Owner | Phase 6 | No reactivation feature |
+| OQ-06 | Can a member be paid off while holding an active loan? Answered 2026-10-22: no, the loan has to be repaid before pay-off (DR-06, D-71). | Owner | Closed | n/a |
+| OQ-07 | Can an Inactive member be reactivated? By whom? Answered 2026-10-22: yes, by the Super Admin or the Staff member the member belongs to (DR-16, D-71). | Owner | Closed | n/a |
 | OQ-08 | Who may edit an expense, and must old values be kept? | Owner | Phase 5 | Edits allowed with permission; old values go in the audit log. Built at 5.9c (D-70): old category, amount and method kept; old description and narration not kept (A-177). |
 | OQ-09 | Can staff pick members created by other staff when recording a payment? Answered 2026-10-17: no, own members only. | Owner | Closed | n/a |
 | OQ-10 | Can a pay-off be reversed or corrected? | Owner | Phase 6 | No. A correction is a new reversing entry. |

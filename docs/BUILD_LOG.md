@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 6.5 (size S), 2026-10-22: break-on-purpose for 6.3 to 6.4c; Phase U added to the plan (D-79)
+
+**Works (verified in this session):** One break-on-purpose run for 6.3 to 6.4c, script `~/Desktop/mutate-6.5.mjs` (not in git; output in `~/Desktop/mutate-6.5.out`). Baselines 63 (`balances.test.ts`, `payoffs.test.ts`), 69 (`payoffs.test.ts`, `payoffs-routes.test.ts`), 28 (routes), 222 (`expenses.test.ts`, `expenses-routes.test.ts`), 403 (memory store) and 417 (Prisma store and db); 119 mutations, 113 caught, 6 escaped (P21, R5, X5, X9, SP6, SP17), 0 errors, 0 timeouts, 0 not applied; "files restored: yes" (verified in this session). P21 is a test gap: the active-loan check changed from "some loan active" to "every loan active" escaped, so no test pays out a member with a repaid loan and a newer active loan, which `loans.ts` allows (A-188). Proposed fix: 6.5b. R5, X5, X9, SP6 and SP17 are equivalent or unreachable as tested (A-188). `npm run check` afterwards: 46 files, 1754 passed, 0 failed, 79.42 s (verified in this session). No source change.
+**Stubbed:** nothing.
+**Tests:** none added (1754).
+**Plan:** at the owner's request, Phase U (screens in `web/`, steps U.0 to U.9) added to `PHASE_PLAN.md` after Phase 6 (D-79). Docs only.
+**Not verified:** P21 is not yet caught (6.5b). The script has no `schema.prisma` mutation; the E mutations change the migrations instead, and all 8 were caught.
+
+---
+
 ## Step 6.4c (size S), 2026-10-22: pay-off expense guard by link (D-78)
 
 **Works (verified in this session):** `deleteExpense` and `updateExpense` in `server/src/expenses.ts` refuse an expense with `payOffId` set, whatever its category, with `not_deletable` or `not_editable` code `pay_off`; the Membership Withdrawal category is still refused too. 2 new tests in `server/test/expenses.test.ts` (memory store) and the linked case added to both real SQLite tests. `npm run check`: 46 files, 1754 passed, 0 failed, 77.90 s.

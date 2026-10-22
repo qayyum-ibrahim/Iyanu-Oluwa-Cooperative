@@ -10,6 +10,7 @@ Sizes: S one change, M several files, L split it. You say "continue" to start ea
 | 4 | Payments, breakdown check, Loan Repaid, SMS interface with fake provider, first-payment flow | Tests pass. Live payment recorded. |
 | 5 | Loans and expenses (filters, edit, soft-delete, link) | Tests pass. Totals reconcile. |
 | 6 | Pay-off, automatic Inactive and reactivation. OQ-00, OQ-06 and OQ-07 answered 2026-10-22 (D-71). | Worked examples confirmed by owner. |
+| U | Screens in `web/`, grown from `legacy-prototype/` (D-14, D-79): sign-in, members, member detail with balances, payments with the first-payment flow, loans, expenses, pay-off and reactivation, staff and access, audit. Server read routes the screens need (for example member balances) are added as server steps here. | Web check passes. Each screen walked through on the owner's machine against the dev server. |
 | 7 | Dashboard and reports; Lagos month-end tests | Totals match lists |
 | 8 | Excel exports | Files open as .xlsx; filters and permissions verified |
 | 9 | Hardening: security review, backups, accessibility | Review items closed |
@@ -66,6 +67,20 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 - 6.4 (M) Pay-off logic `processPayOff` (`payoff.process`, DR-14): blocked by an active loan (DR-06); payout, Membership Withdrawal expense, automatic Inactive (DR-07) and audit in one transaction; idempotency key as D-48. Split at start: route at 6.4b. Done (D-76, A-185): 41 tests; 1724 tests.
 - 6.4b (M) `POST /payoffs` route in `payoffs-routes.ts`, mounted in `app.ts`; route tests; live check. Done (D-77, A-186): 28 tests; 1752 tests; live check 157 passed.
 - 6.4c (S, proposed at 6.4) `deleteExpense` and `updateExpense` also refuse an expense with `payOffId` set. Done (D-78, A-187): 2 tests; 1754 tests.
-- 6.5 (S) Break-on-purpose for 6.3, 6.3b, 6.3c, 6.4, 6.4b and 6.4c.
+- 6.5 (S) Break-on-purpose for 6.3, 6.3b, 6.3c, 6.4, 6.4b and 6.4c. Done: 113 of 119 caught; P21 is a test gap; R5, X5, X9, SP6, SP17 equivalent or unreachable (A-188).
+- 6.5b (S, proposed at 6.5) One test in `payoffs.test.ts` for P21 (a repaid loan and a newer active loan still block a pay-off, DR-06), then rerun P21.
 - 6.6 (M) Reactivate a member (DR-16, D-71): `members.edit`, Super Admin or the Staff member who added the member; status Active and audit in one transaction.
 - 6.7 (S) Break-on-purpose for 6.6.
+
+## Phase U steps (added 2026-10-22, D-79; first look, sizes checked when each starts)
+Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (dashboard, export buttons) on this base. The screen parts of the Phase 3 and 4 exits (Members screen, first-payment flow) are met here. Each server step that touches money, security or data loss is followed by a break-on-purpose step. Installing the web dependencies needs the owner's word.
+- U.0 (S) Screen plan, docs only: every screen and the routes it calls, from TRACEABILITY and the prototype; what the prototype does that the server does not (for example "date spent", A-172); which server read routes are missing; how the web app keeps its tokens (A-45).
+- U.1 (M) Web skeleton in `web/`: build tool and UI library looked up in their official docs and pinned (the prototype uses `latest`, which is not allowed), a web `npm run check`, the dev server talking to the API.
+- U.2 (M) Sign-in, sign-out and change own password.
+- U.3 (M) Members list, add member, member detail. Needs a member balances read route (server step, with its break-on-purpose step).
+- U.4 (M) Record a payment with its breakdown and idempotency key; list a member's payments; the first-payment flow after adding a member.
+- U.5 (M) Give a loan; list a member's loans.
+- U.6 (M) Expenses: record, list with filters and total, edit, delete.
+- U.7 (M) Pay-off confirmation on member detail (refundable balances, payout, confirm; DR-05, A-185) and reactivation (after 6.6).
+- U.8 (M) Staff and access; audit viewer.
+- U.9 (S) Walk-through of every screen on the owner's machine.

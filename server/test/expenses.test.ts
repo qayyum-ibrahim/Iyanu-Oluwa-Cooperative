@@ -861,6 +861,34 @@ async function buildDelete(store: Store = createMemoryStore()) {
   return { ...base, d, e, d1, e1, loanExpense, payOff };
 }
 
+/**
+ * An expense of a manual category (Allowances) that names a pay-off (step 6.4c), saved straight in
+ * the store. Kept out of buildDelete so the list totals in other tests stay as they are.
+ */
+async function payOffLinkedExpense(store: Store, adminId: string) {
+  const member = await store.members.create({
+    fullName: "Pay-off Member",
+    phone: "",
+    address: "",
+    occupation: "",
+    createdById: adminId,
+  });
+  const payOff = await store.payOffs.create({
+    memberId: member.id,
+    method: "CASH",
+    total: 100n,
+    lines: [{ category: "Savings", amount: 100n }],
+    createdById: adminId,
+  });
+  return store.expenses.create({
+    category: "Allowances",
+    amount: 100n,
+    method: "CASH",
+    payOffId: payOff.id,
+    createdById: adminId,
+  });
+}
+
 /** The store, with one part failing inside the transaction (softDelete or the audit write). */
 function failingDelete(store: Store, part: "expenses" | "audit"): Store {
   return {
@@ -1016,6 +1044,18 @@ describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
     expect(await deletedActions(store, admin.id)).toEqual([]);
   });
 
+  it("refuses an expense of another category that names a pay-off with pay_off (6.4c)", async () => {
+    const { store, admin } = await buildDelete();
+    const linked = await payOffLinkedExpense(store, admin.id);
+    expect(await deleteExpense(store, actorOf(admin), linked.id)).toEqual({
+      ok: false,
+      reason: "not_deletable",
+      code: "pay_off",
+    });
+    expect(await store.expenses.findById(linked.id)).toMatchObject({ deletedAt: null, deletedById: null });
+    expect(await deletedActions(store, admin.id)).toEqual([]);
+  });
+
   it("keeps the Loan and pay-off expenses in the list total after the refusals", async () => {
     const { store, admin, loanExpense, payOff } = await buildDelete();
     await deleteExpense(store, actorOf(admin), loanExpense.id);
@@ -1070,6 +1110,9 @@ describe("deleteExpense on the Prisma store (real SQLite)", () => {
     expect((await deletedActions(store, d.id)).map((x) => x.entityId)).toEqual([d1.id]);
     expect(await deleteExpense(store, actorOf(admin), loanExpense.id)).toMatchObject({ code: "loan_linked" });
     expect(await deleteExpense(store, actorOf(admin), payOff.id)).toMatchObject({ code: "pay_off" });
+    const linked = await payOffLinkedExpense(store, admin.id);
+    expect(await deleteExpense(store, actorOf(admin), linked.id)).toMatchObject({ code: "pay_off" });
+    expect(await store.expenses.findById(linked.id)).toMatchObject({ deletedAt: null });
   });
 
   it("leaves the expense not deleted when the audit write fails", async () => {
@@ -1294,6 +1337,18 @@ describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-1
     });
     expect(await store.expenses.findById(payOff.id)).toEqual(before);
   });
+
+  it("refuses an expense of another category that names a pay-off with pay_off (6.4c)", async () => {
+    const { store, admin } = await buildEdit();
+    const linked = await payOffLinkedExpense(store, admin.id);
+    expect(await updateExpense(store, actorOf(admin), linked.id, edit())).toEqual({
+      ok: false,
+      reason: "not_editable",
+      code: "pay_off",
+    });
+    expect(await store.expenses.findById(linked.id)).toEqual(linked);
+    expect(await updatedActions(store, admin.id)).toEqual([]);
+  });
 });
 
 describe("updateExpense: the fields (PUT, as createExpense)", () => {
@@ -1467,6 +1522,9 @@ describe("updateExpense on the Prisma store (real SQLite)", () => {
     expect((await updatedActions(store, f.id)).map((x) => x.detail)).toEqual([EDIT_DETAIL]);
     expect(await updateExpense(store, actorOf(admin), loanExpense.id, edit())).toMatchObject({ code: "loan_linked" });
     expect(await updateExpense(store, actorOf(admin), payOff.id, edit())).toMatchObject({ code: "pay_off" });
+    const linked = await payOffLinkedExpense(store, admin.id);
+    expect(await updateExpense(store, actorOf(admin), linked.id, edit())).toMatchObject({ code: "pay_off" });
+    expect(await store.expenses.findById(linked.id)).toEqual(linked);
   });
 
   it("leaves the expense as it was when the audit write fails", async () => {

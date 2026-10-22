@@ -329,7 +329,7 @@ export type ExpenseDeleteResult = { ok: true } | ExpenseFailureResult;
  * Order: permission, then the expense. An unknown id, a deleted expense and, for Staff, an expense
  * someone else recorded all give not_found, so the answer does not reveal that it exists (DR-13,
  * as getMember). A Loan-linked expense gives not_deletable "loan_linked", a pay-off expense
- * (Membership Withdrawal) not_deletable "pay_off". The lookup, the delete and the audit entry run
+ * (Membership Withdrawal, or any expense that names a pay-off, step 6.4c) not_deletable "pay_off". The lookup, the delete and the audit entry run
  * in one store transaction (D-45). If another request deleted it first, the answer is not_found.
  * Audit details hold the category and the amount in kobo, as expense.created (A-176).
  */
@@ -344,7 +344,9 @@ export async function deleteExpense(store: Store, actor: ExpenseActor, id: unkno
     if (expense.loanId !== null || expense.category === LOAN_EXPENSE_CATEGORY) {
       return failure("not_deletable", "loan_linked");
     }
-    if (expense.category === PAY_OFF_EXPENSE_CATEGORY) return failure("not_deletable", "pay_off");
+    if (expense.payOffId !== null || expense.category === PAY_OFF_EXPENSE_CATEGORY) {
+      return failure("not_deletable", "pay_off");
+    }
 
     const deleted = await tx.expenses.softDelete(expense.id, actor.id);
     if (deleted === null) return failure("not_found");
@@ -369,7 +371,8 @@ export type ExpenseUpdateResult = { ok: true; value: ExpenseView } | ExpenseFail
  * for a new expense (checkFields); a field left out of the body counts as empty (A-177).
  * Order: permission, id, fields, then the expense. An unknown id, a deleted expense and, for
  * Staff, an expense someone else recorded give not_found (DR-13, as deleteExpense). A Loan-linked
- * expense gives not_editable "loan_linked", a pay-off expense not_editable "pay_off".
+ * expense gives not_editable "loan_linked", a pay-off expense (Membership Withdrawal, or any
+ * expense that names a pay-off, step 6.4c) not_editable "pay_off".
  * The lookup, the change and one audit entry "expense.updated" run in one store transaction
  * (D-45). An edit that changes nothing writes nothing and returns the expense. The audit detail
  * holds the old and new category, kobo amount and method, and only whether the description and
@@ -395,7 +398,9 @@ export async function updateExpense(
     if (expense.loanId !== null || expense.category === LOAN_EXPENSE_CATEGORY) {
       return failure("not_editable", "loan_linked");
     }
-    if (expense.category === PAY_OFF_EXPENSE_CATEGORY) return failure("not_editable", "pay_off");
+    if (expense.payOffId !== null || expense.category === PAY_OFF_EXPENSE_CATEGORY) {
+      return failure("not_editable", "pay_off");
+    }
 
     const descriptionChanged = expense.description !== next.description;
     const narrationChanged = expense.narration !== next.narration;

@@ -65,7 +65,7 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 - 6.3c (S) `memberBalances` takes off pay-off lines, so refundable balances show ₦0 after a pay-off (A-180). Done (D-75, A-184): 10 new tests; 1683 tests.
 - 6.4 (M) Pay-off logic `processPayOff` (`payoff.process`, DR-14): blocked by an active loan (DR-06); payout, Membership Withdrawal expense, automatic Inactive (DR-07) and audit in one transaction; idempotency key as D-48. Split at start: route at 6.4b. Done (D-76, A-185): 41 tests; 1724 tests.
 - 6.4b (M) `POST /payoffs` route in `payoffs-routes.ts`, mounted in `app.ts`; route tests; live check. Done (D-77, A-186): 28 tests; 1752 tests; live check 157 passed.
-- 6.4c (S, proposed at 6.4) `deleteExpense` and `updateExpense` also refuse an expense with `payOffId` set. Default yes.
-- 6.5 (S) Break-on-purpose for 6.3, 6.3b, 6.3c, 6.4, 6.4b (and 6.4c if done).
+- 6.4c (S, proposed at 6.4) `deleteExpense` and `updateExpense` also refuse an expense with `payOffId` set. Done (D-78, A-187): 2 tests; 1754 tests.
+- 6.5 (S) Break-on-purpose for 6.3, 6.3b, 6.3c, 6.4, 6.4b and 6.4c.
 - 6.6 (M) Reactivate a member (DR-16, D-71): `members.edit`, Super Admin or the Staff member who added the member; status Active and audit in one transaction.
 - 6.7 (S) Break-on-purpose for 6.6.

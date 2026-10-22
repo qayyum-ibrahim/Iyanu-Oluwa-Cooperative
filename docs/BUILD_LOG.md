@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 6.4c (size S), 2026-10-22: pay-off expense guard by link (D-78)
+
+**Works (verified in this session):** `deleteExpense` and `updateExpense` in `server/src/expenses.ts` refuse an expense with `payOffId` set, whatever its category, with `not_deletable` or `not_editable` code `pay_off`; the Membership Withdrawal category is still refused too. 2 new tests in `server/test/expenses.test.ts` (memory store) and the linked case added to both real SQLite tests. `npm run check`: 46 files, 1754 passed, 0 failed, 77.90 s.
+**Stubbed:** nothing.
+**Tests:** 2 added (1754).
+**Not verified:** no break-on-purpose run yet (6.5). An expense naming both a loan and a pay-off is not tested (A-187).
+
+---
+
 ## Docs fix after 6.4b, 2026-10-22: inconsistencies
 
 **Changed:** `DATA_MODEL.md` had no `PayOff`, `PayOffLine` or `Expense.payOffId` (last updated at 5.9) and still listed balances as "not yet modelled": added from `schema.prisma` (read in this session). `STATUS.md`: the owner inputs list is numbered 1 to 13 in order; "overrule D-19 to D-76" now D-77; a missing comma; item 13 now also names D-14 to D-18, which have no "Approved:" clause. `TRACEABILITY.md` R-12 cites D-77. `scripts/live-check-auth.sh`: the header comment named only /auth and /staff and one staff account; it now names every route and the rows each run adds (comments only).

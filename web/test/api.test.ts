@@ -159,17 +159,24 @@ describe("restore", () => {
   });
 
   it("clears the stored token when the refresh is refused", async () => {
-    const { api, keeper } = setup(() => json(401, { error: "invalid_token" }), "old");
+    const { api, keeper, calls, signedOutCount } = setup(
+      () => json(401, { error: "invalid_token" }),
+      "old",
+    );
     expect(await api.restore()).toBeNull();
     expect(keeper.refreshToken()).toBeNull();
+    expect(calls.map((c) => c.path)).toEqual(["/api/refresh"]);
+    expect(signedOutCount()).toBe(0);
   });
 
   it("keeps the stored token when the server cannot be reached", async () => {
-    const { api, keeper } = setup(() => {
+    const { api, keeper, calls, signedOutCount } = setup(() => {
       throw new TypeError("Failed to fetch");
     }, "ref1");
     expect(await api.restore()).toBeNull();
     expect(keeper.refreshToken()).toBe("ref1");
+    expect(calls.map((c) => c.path)).toEqual(["/api/refresh"]);
+    expect(signedOutCount()).toBe(0);
   });
 });
 
@@ -227,6 +234,42 @@ describe("signed-in calls", () => {
     expect(a).toEqual(ME);
     expect(b).toEqual(ME);
     expect(refreshes).toBe(1);
+  });
+
+  it("keeps the session when the refresh cannot reach the server", async () => {
+    const { api, keeper, signedOutCount } = setup((call) => {
+      if (call.path === "/api/refresh") throw new TypeError("Failed to fetch");
+      return json(401, {});
+    });
+    keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+    await expect(api.me()).rejects.toThrow("refresh_failed");
+    expect(signedOutCount()).toBe(0);
+    expect(keeper.refreshToken()).toBe("ref1");
+  });
+
+  it("sends a new refresh each time the access token expires", async () => {
+    // The server rotates the refresh token and accepts only the newest access token.
+    let issued = 1;
+    let live: string | null = null;
+    const { api, keeper, calls, signedOutCount } = setup((call) => {
+      if (call.path === "/api/refresh") {
+        if ((call.body as { refreshToken: string }).refreshToken !== `ref${issued}`) {
+          return json(401, { error: "invalid_token" });
+        }
+        issued++;
+        live = `Bearer acc${issued}`;
+        return json(200, { ...tokens(issued), userId: "u1" });
+      }
+      return call.auth === live ? json(200, ME) : json(401, {});
+    });
+    keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+    expect(await api.me()).toEqual(ME);
+    live = null; // acc2 expires
+    expect(await api.me()).toEqual(ME);
+    const refreshes = calls.filter((c) => c.path === "/api/refresh").map((c) => c.body);
+    expect(refreshes).toEqual([{ refreshToken: "ref1" }, { refreshToken: "ref2" }]);
+    expect(signedOutCount()).toBe(0);
+    expect(keeper.refreshToken()).toBe("ref3");
   });
 });
 
@@ -298,6 +341,18 @@ describe("refresh lock", () => {
     const { api, keeper, calls } = setup(() => json(200, ME), "ref1", { lock: broken });
     expect(await api.restore()).toBeNull();
     expect(calls).toHaveLength(0);
+    expect(keeper.refreshToken()).toBe("ref1");
+  });
+
+  it("a lock that fails during a signed-in call keeps the session", async () => {
+    const broken: RefreshLock = () => Promise.reject(new Error("SecurityError"));
+    const { api, keeper, calls, signedOutCount } = setup(() => json(401, {}), undefined, {
+      lock: broken,
+    });
+    keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+    await expect(api.me()).rejects.toThrow("refresh_failed");
+    expect(calls.map((c) => c.path)).toEqual(["/api/me"]);
+    expect(signedOutCount()).toBe(0);
     expect(keeper.refreshToken()).toBe("ref1");
   });
 

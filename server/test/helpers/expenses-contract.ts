@@ -4,6 +4,8 @@ import {
   DuplicateExpenseLoanError,
   UnknownActorError,
   UnknownLoanError,
+  DuplicateExpensePayOffError,
+  UnknownPayOffError,
   type NewExpense,
   type Store,
 } from "../../src/store.js";
@@ -38,6 +40,25 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       return l.id;
     };
 
+    // A real pay-off, since payOffId is a foreign key (6.3b). Fictional details only (D-08).
+    const newPayOffId = async (store: Store, createdById: string) => {
+      const m = await store.members.create({
+        fullName: "Pay-off Member",
+        phone: "",
+        address: "",
+        occupation: "",
+        createdById,
+      });
+      const p = await store.payOffs.create({
+        memberId: m.id,
+        method: "CASH",
+        total: 2_500_000n,
+        lines: [{ category: "Savings", amount: 2_500_000n }],
+        createdById,
+      });
+      return p.id;
+    };
+
     // 1,500,000 kobo is ₦15,000. Fictional details only (D-08).
     const expense = (createdById: string, over: Partial<NewExpense> = {}): NewExpense => ({
       createdById,
@@ -47,7 +68,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       ...over,
     });
 
-    it("saves an expense with an id, the creator, a date, empty texts and no loan or deletion", async () => {
+    it("saves an expense with an id, the creator, a date, empty texts and no loan, pay-off or deletion", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-create");
       const e = await store.expenses.create(expense(u.id));
@@ -59,6 +80,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         description: "",
         narration: "",
         loanId: null,
+        payOffId: null,
         idempotencyKey: null,
         requestHash: null,
         createdById: u.id,
@@ -143,6 +165,67 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       await expect(
         store.expenses.create(expense("no-such-user", { loanId: "no-such-loan" })),
       ).rejects.toBeInstanceOf(UnknownActorError);
+    });
+
+    // Pay-off links (step 6.3b), the same rules as the loan links.
+    it("keeps the pay-off id", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-payoff");
+      const payOffId = await newPayOffId(store, u.id);
+      const e = await store.expenses.create(expense(u.id, { category: "Membership Withdrawal", payOffId }));
+      expect(e).toMatchObject({ payOffId, loanId: null });
+      expect(await store.expenses.findById(e.id)).toEqual(e);
+    });
+
+    it("rejects an unknown pay-off with UnknownPayOffError and saves nothing", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-nopayoff");
+      await expect(
+        store.expenses.create(expense(u.id, { category: "Membership Withdrawal", payOffId: "no-such-pay-off" })),
+      ).rejects.toBeInstanceOf(UnknownPayOffError);
+      expect(await store.expenses.list({ createdById: u.id })).toEqual([]);
+    });
+
+    it("rejects a second expense for the same pay-off with DuplicateExpensePayOffError and saves nothing", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-payoff-dup");
+      const payOffId = await newPayOffId(store, u.id);
+      const first = await store.expenses.create(expense(u.id, { category: "Membership Withdrawal", payOffId }));
+      await expect(
+        store.expenses.create(expense(u.id, { category: "Membership Withdrawal", payOffId })),
+      ).rejects.toBeInstanceOf(DuplicateExpensePayOffError);
+      expect((await store.expenses.list({ createdById: u.id })).map((e) => e.id)).toEqual([first.id]);
+    });
+
+    it("checks the creator before the pay-off", async () => {
+      const store = await makeStore();
+      await expect(
+        store.expenses.create(expense("no-such-user", { payOffId: "no-such-pay-off" })),
+      ).rejects.toBeInstanceOf(UnknownActorError);
+    });
+
+    it("checks the loan before the pay-off", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-loan-payoff");
+      await expect(
+        store.expenses.create(expense(u.id, { loanId: "no-such-loan", payOffId: "no-such-pay-off" })),
+      ).rejects.toBeInstanceOf(UnknownLoanError);
+    });
+
+    it("checks a repeated loan before a repeated pay-off, and a repeated pay-off before a repeated key", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-payoff-order");
+      const loanId = await newLoanId(store, u.id);
+      const payOffId = await newPayOffId(store, u.id);
+      const idempotencyKey = uniqueKey();
+      await store.expenses.create(expense(u.id, { loanId, payOffId, idempotencyKey }));
+      const otherPayOffId = await newPayOffId(store, u.id);
+      await expect(
+        store.expenses.create(expense(u.id, { loanId, payOffId: otherPayOffId })),
+      ).rejects.toBeInstanceOf(DuplicateExpenseLoanError);
+      await expect(
+        store.expenses.create(expense(u.id, { payOffId, idempotencyKey })),
+      ).rejects.toBeInstanceOf(DuplicateExpensePayOffError);
     });
 
     it("allows many expenses with no loan", async () => {

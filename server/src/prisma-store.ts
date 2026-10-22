@@ -8,8 +8,10 @@ import {
   UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
+  DuplicateExpensePayOffError,
   DuplicateExpenseKeyError,
   DuplicateLoanKeyError,
+  UnknownPayOffError,
   DuplicatePayOffKeyError,
   formatMembershipId,
   type AuditRecord,
@@ -81,6 +83,7 @@ const toExpense = (r: ExpenseRow): ExpenseRecord => ({
   description: r.description,
   narration: r.narration,
   loanId: r.loanId,
+  payOffId: r.payOffId,
   idempotencyKey: r.idempotencyKey,
   requestHash: r.requestHash,
   createdById: r.createdById,
@@ -479,6 +482,13 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           const taken = await prisma.expense.findUnique({ where: { loanId: input.loanId }, select: { id: true } });
           if (taken !== null) throw new DuplicateExpenseLoanError();
         }
+        if (input.payOffId !== undefined) {
+          const payOff = await prisma.payOff.findUnique({ where: { id: input.payOffId }, select: { id: true } });
+          if (payOff === null) throw new UnknownPayOffError(input.payOffId);
+          // Read the pay-off link first, so a repeated payOffId wins over a repeated key (same order as memory).
+          const taken = await prisma.expense.findUnique({ where: { payOffId: input.payOffId }, select: { id: true } });
+          if (taken !== null) throw new DuplicateExpensePayOffError();
+        }
         try {
           const row = await prisma.expense.create({
             data: {
@@ -488,6 +498,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
               description: input.description ?? "",
               narration: input.narration ?? "",
               loanId: input.loanId ?? null,
+              payOffId: input.payOffId ?? null,
               idempotencyKey: input.idempotencyKey ?? null,
               requestHash: input.requestHash ?? null,
               createdById: input.createdById,
@@ -495,10 +506,12 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           });
           return toExpense(row);
         } catch (e) {
-          // Two unique indexes besides id: loanId and the user and key pair. A clash with a key is
-          // read as the key, since the loanId was read free just above (A-170).
+          // Three unique indexes besides id: loanId, payOffId and the user and key pair. A clash with a
+          // key is read as the key, since both links were read free just above (A-170, A-183). With
+          // no key, a pay-off link wins over a loan link: the logic code never sets both.
           if (hasCode(e, "P2002")) {
-            throw input.idempotencyKey !== undefined ? new DuplicateExpenseKeyError() : new DuplicateExpenseLoanError();
+            if (input.idempotencyKey !== undefined) throw new DuplicateExpenseKeyError();
+            throw input.payOffId !== undefined ? new DuplicateExpensePayOffError() : new DuplicateExpenseLoanError();
           }
           if (hasCode(e, "P2003")) throw new UnknownActorError(input.createdById);
           throw e;

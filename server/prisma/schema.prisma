@@ -157,6 +157,9 @@ model Expense {
   // The loan this expense pays out (DR-10). At most one expense per loan (A-148).
   loanId      String?       @unique
   loan        Loan?         @relation(fields: [loanId], references: [id], onDelete: Restrict)
+  // The pay-off this Membership Withdrawal expense pays out (DR-05, step 6.3b). At most one expense per pay-off.
+  payOffId    String?       @unique
+  payOff      PayOff?       @relation(fields: [payOffId], references: [id], onDelete: Restrict)
   // Set from the Idempotency-Key header of POST /expenses (step 5.7c). Loan expenses and old rows have none.
   idempotencyKey String?
   requestHash    String?
@@ -216,6 +219,7 @@ model PayOff {
   createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt      DateTime      @default(now())
   lines          PayOffLine[]
+  expense        Expense?
 
   @@index([memberId])
   @@index([createdById])

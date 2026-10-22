@@ -339,6 +339,8 @@ export interface ExpenseRecord {
   narration: string;
   /** The loan this expense pays out (DR-10), or null. At most one expense per loan (A-148). */
   loanId: string | null;
+  /** The pay-off this Membership Withdrawal pays out (DR-05, step 6.3b), or null. At most one expense per pay-off. */
+  payOffId: string | null;
   /** The caller's idempotency key, or null (step 5.7c). Unique per user. Loan expenses have none. */
   idempotencyKey: string | null;
   /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
@@ -359,6 +361,7 @@ export interface NewExpense {
   /** Defaults to "". */
   narration?: string;
   loanId?: string;
+  payOffId?: string;
   idempotencyKey?: string;
   requestHash?: string;
   createdById: string;
@@ -379,7 +382,7 @@ export interface ExpenseListQuery {
 
 /**
  * The fields an edit may change (step 5.9). A field left out keeps its value. The creator, the
- * date, the loan link, the key and the request hash never change.
+ * date, the loan link, the pay-off link, the key and the request hash never change.
  */
 export interface ExpenseChanges {
   category?: string;
@@ -396,6 +399,20 @@ export class DuplicateExpenseLoanError extends Error {
   }
 }
 
+export class UnknownPayOffError extends Error {
+  constructor(payOffId: string) {
+    super(`No pay-off with id ${payOffId}`);
+    this.name = "UnknownPayOffError";
+  }
+}
+
+export class DuplicateExpensePayOffError extends Error {
+  constructor() {
+    super("An expense for this pay-off already exists");
+    this.name = "DuplicateExpensePayOffError";
+  }
+}
+
 export class DuplicateExpenseKeyError extends Error {
   constructor() {
     super("An expense with this idempotency key already exists for this user");
@@ -407,9 +424,11 @@ export interface ExpenseStore {
   /**
    * Saves a new expense. Throws UnknownActorError if createdById is not a user, then
    * UnknownLoanError if loanId is not a loan, then DuplicateExpenseLoanError if another expense
-   * has the same loanId, then DuplicateExpenseKeyError if this user already saved an expense with
-   * the same idempotency key. Values are saved as given:
-   * checking the category, amount and narration is the logic code's job (A-150).
+   * has the same loanId, then UnknownPayOffError if payOffId is not a pay-off, then
+   * DuplicateExpensePayOffError if another expense has the same payOffId, then
+   * DuplicateExpenseKeyError if this user already saved an expense with the same idempotency key.
+   * Values are saved as given: checking the category, amount and narration, and which loan or
+   * pay-off an expense may name, is the logic code's job (A-150, A-183).
    */
   create(input: NewExpense): Promise<ExpenseRecord>;
   /** Returns a deleted expense too, with deletedAt and deletedById set. */

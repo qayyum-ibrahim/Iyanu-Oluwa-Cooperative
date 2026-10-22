@@ -4,9 +4,7 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/PHASE_PLAN.md
 docs/DECISIONS.md
-server/prisma/schema.prisma
+docs/DOMAIN_RULES.md
+server/src/balances.ts
+server/test/balances.test.ts
 server/src/store.ts
-server/src/memory-store.ts
-server/src/prisma-store.ts
-server/test/helpers/expenses-contract.ts
-server/test/db.test.ts

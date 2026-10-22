@@ -61,7 +61,7 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 - 6.2 (S) Break-on-purpose for 6.1. Done: 25 of 26 caught; B5 (error name untested) is a test gap (A-181).
 - 6.2b (S) One test for the error name (A-181), then rerun the mutations. Done: 26 of 26 caught; 1619 tests.
 - 6.3 (M) How a pay-off is stored: `PayOff` and `PayOffLine` tables, `payOffs` store in both adapters, migration. Done (D-73, A-182): 20 contract cases per adapter; 1659 tests.
-- 6.3b (S) `Expense.payOffId` (unique, `Restrict`) so the Membership Withdrawal expense names its pay-off (as D-58); migration; store checks in both adapters.
+- 6.3b (S) `Expense.payOffId` (unique, `Restrict`) so the Membership Withdrawal expense names its pay-off (as D-58); migration; store checks in both adapters. Done (D-74, A-183): 6 contract cases per adapter and 2 database cases; 1673 tests.
 - 6.3c (S) `memberBalances` takes off pay-off lines, so refundable balances show ₦0 after a pay-off (A-180).
 - 6.4 (M) Pay-off route (`payoff.process`, DR-14): blocked by an active loan (DR-06); payout, Membership Withdrawal expense, automatic Inactive (DR-07) and audit in one transaction; idempotency key as D-48.
 - 6.5 (S) Break-on-purpose for 6.3 and 6.4.

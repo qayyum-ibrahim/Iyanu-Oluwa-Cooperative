@@ -8,8 +8,10 @@ import {
   UnknownLoanError,
   DuplicateIdempotencyKeyError,
   DuplicateExpenseLoanError,
+  DuplicateExpensePayOffError,
   DuplicateExpenseKeyError,
   DuplicateLoanKeyError,
+  UnknownPayOffError,
   DuplicatePayOffKeyError,
   formatMembershipId,
   type AuditRecord,
@@ -355,6 +357,12 @@ export function createMemoryStore(): Store {
           if (input.loanId !== undefined && rows.some((e) => e.loanId === input.loanId)) {
             throw new DuplicateExpenseLoanError();
           }
+          if (input.payOffId !== undefined && !payOffRows.some((p) => p.id === input.payOffId)) {
+            throw new UnknownPayOffError(input.payOffId);
+          }
+          if (input.payOffId !== undefined && rows.some((e) => e.payOffId === input.payOffId)) {
+            throw new DuplicateExpensePayOffError();
+          }
           if (
             input.idempotencyKey !== undefined &&
             rows.some(
@@ -371,6 +379,7 @@ export function createMemoryStore(): Store {
             description: input.description ?? "",
             narration: input.narration ?? "",
             loanId: input.loanId ?? null,
+            payOffId: input.payOffId ?? null,
             idempotencyKey: input.idempotencyKey ?? null,
             requestHash: input.requestHash ?? null,
             createdById: input.createdById,

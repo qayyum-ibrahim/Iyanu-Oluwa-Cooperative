@@ -173,6 +173,26 @@ describe("database (real migration, temporary SQLite file)", () => {
     await expect(db.loan.delete({ where: { id: paidOut.id } })).rejects.toMatchObject({ code: "P2003" });
   });
 
+  // The expense store reads the pay-off first (6.3b), so only these tests reach the pay-off link rules.
+  it("rejects an expense whose pay-off does not exist", async () => {
+    const u = await newUser("expense-payoff@example.test");
+    await expect(
+      db.expense.create({
+        data: { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH", payOffId: "no-such-pay-off", createdById: u.id },
+      }),
+    ).rejects.toMatchObject({ code: "P2003" });
+  });
+
+  it("rejects a second expense for one pay-off and refuses to delete a pay-off that has an expense", async () => {
+    const u = await newUser("payoff-keep@example.test");
+    const m = await newMember(9005, u.id);
+    const p = await db.payOff.create({ data: { memberId: m.id, method: "CASH", totalKobo: 100n, createdById: u.id } });
+    const data = { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH" as const, payOffId: p.id, createdById: u.id };
+    await db.expense.create({ data });
+    await expect(db.expense.create({ data })).rejects.toMatchObject({ code: "P2002" });
+    await expect(db.payOff.delete({ where: { id: p.id } })).rejects.toMatchObject({ code: "P2003" });
+  });
+
   it("rejects two lines with the same position in one payment", async () => {
     const u = await newUser("pay-lines@example.test");
     const m = await newMember(9002, u.id);

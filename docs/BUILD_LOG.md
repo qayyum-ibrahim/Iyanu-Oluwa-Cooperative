@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 6.3b (size S), 2026-10-22: pay-off link on expenses (D-74)
+
+**Works (verified in this session):** `Expense.payOffId` (nullable, `@unique`, foreign key to `PayOff`, `onDelete: Restrict`) and the back relation `PayOff.expense` in `schema.prisma`. Migration `20261022120000_expense_payoff_link` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy` in the scratchpad; SQLite rebuilds `Expense`: the `INSERT ... SELECT` copies every old column, including `loanId`, `idempotencyKey` and `requestHash`, read in this session; dev database not touched). `ExpenseRecord.payOffId`, `NewExpense.payOffId`, `UnknownPayOffError` and `DuplicateExpensePayOffError` in `store.ts`; both adapters check the creator, the loan, a repeated loan, the pay-off, a repeated pay-off, then the key. Prisma reads a unique clash in the write as the key when a key is given, else the pay-off when one is given, else the loan (A-170, A-183). Six contract cases per adapter in `expenses-contract.ts` (keeps the id; unknown pay-off; repeated pay-off; creator before pay-off; loan before pay-off; repeated loan before repeated pay-off before repeated key); first case now also expects `payOffId: null`. Two `db.test.ts` cases (unknown pay-off P2003; second expense for one pay-off P2002 and pay-off delete refused P2003). `npm run check`: 44 files, 1673 passed, 0 failed, 74.23 s. `npx vitest run test/memory-store.test.ts test/prisma-store.test.ts test/db.test.ts -t "pay-off"`: 56 passed, 346 skipped.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing. No route sets `payOffId` yet (6.4).
+**Tests:** 14 added (1673).
+**Not verified:** the migration on the dev database (owner runs `db:deploy`); the row copy on a table with rows (A-160); the Prisma clash reading under a real race. No break-on-purpose run yet (6.5).
+**Found along the way:** nothing new. The name conflict ("Member Withdrawal" and "Membership Withdrawal") and the stale A-148 line logged at 6.3 are still open.
+
+---
+
 ## Step 6.3 (size M), 2026-10-22: pay-off table and store (D-73)
 
 **Works (verified in this session):** models `PayOff` (member, method, `totalKobo`, `idempotencyKey`, `requestHash`, creator, `createdAt`; indexes on `memberId` and `createdById`; unique on creator and key) and `PayOffLine` (`payOffId`, `position`, `category`, `amountKobo`; unique on pay-off and position), all relations `onDelete: Restrict`. Migration `20261022090000_pay_offs` (SQL from `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a temporary database built by `migrate deploy` in the scratchpad; two `CREATE TABLE` and four indexes; dev database not touched). `PayOffRecord`, `PayOffLineRecord`, `NewPayOff`, `PayOffStore` and `DuplicatePayOffKeyError` in `store.ts`; both adapters; the memory transaction snapshot copies pay-offs. New `test/helpers/payoffs-contract.ts`, 20 cases per adapter (DR-05 worked example as data). Hand-built stores in `auth.test.ts` (4), `sessions.test.ts` (3), `auth-routes.test.ts` (1) gained `payOffs` (owner approved). `npm run check`: 44 files, 1659 passed, 0 failed, 72.06 s. `npx vitest run test/memory-store.test.ts test/prisma-store.test.ts -t "pay-offs"`: 40 passed, 334 skipped.

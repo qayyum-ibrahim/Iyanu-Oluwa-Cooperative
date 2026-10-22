@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.2e (size S), 2026-10-22: tests for the U.2c test gaps A7, A8, A11, A26 (A-195)
+
+**Works (verified in this session):** `web/test/api.test.ts`: 3 new tests (failed lock during a signed-in call keeps the session; network failure on refresh during a signed-in call keeps the session; two refreshes in a row on one client both reach the server) and 2 `restore` tests extended (one `/api/refresh` sent, no `onSignedOut`). `npm run check` (web): 4 files, 45 passed. `npm run check` (server): 46 files, 1781 passed. Tests committed as `56978a0`, then `~/Desktop/mutate-U.2c.mjs` rerun in full: baseline 38; 45 mutations, 42 caught, 3 escaped (A14, A16, A25), 0 errors, 0 timeouts, 0 not applied; A7, A8, A11, A26 caught; "files restored: yes"; `git status --short` empty.
+**Escapes:** A14, A16, A25, equivalent (A-195). No test gap left in `session.ts` and `api.ts`.
+**Tests:** web 42 to 45; server 1781 unchanged.
+**Not verified:** the app in a browser, two real tabs, the Web Lock in a real browser. No source change, no dependency, no live check, dev database not touched.
+
+---
+
 ## Step U.2c (size S), 2026-10-22: break-on-purpose for session.ts and api.ts (A-195)
 
 **Works (verified in this session):** `~/Desktop/mutate-U.2c.mjs` (not in git): `--dry` found all 45 find texts once. Baseline 35 passed (`session.test.ts`, `api.test.ts`, `app.test.tsx`). 45 mutations (S1 to S13 in `session.ts`, A1 to A32 in `api.ts`): 38 caught, 7 escaped (A7, A8, A11, A14, A16, A25, A26), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. Every `session.ts` mutation and every lock-name, lock-use and two-tab mutation was caught. `npm run check` (web): 4 files, 42 passed. `npm run check` (server): 46 files, 1781 passed.

@@ -2,7 +2,13 @@ docs/STATUS.md
 docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
+docs/DECISIONS.md
 docs/PHASE_PLAN.md
-web/src/api.ts
-web/src/session.ts
-web/test/api.test.ts
+web/package.json
+web/package-lock.json
+web/vite.config.ts
+web/tsconfig.json
+web/src/App.tsx
+web/src/SignIn.tsx
+web/src/ChangePassword.tsx
+web/test/app.test.tsx

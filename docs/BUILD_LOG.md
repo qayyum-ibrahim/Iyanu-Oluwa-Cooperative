@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 6.2 (size S), 2026-10-22: break-on-purpose for member balances (A-181)
+
+**Works (verified in this session):** script `~/Desktop/mutate-6.1.mjs` (not in git), `--dry`: "dry run done: 26 mutations", no find text missing or repeated. Run (output in `~/Desktop/mutate-6.2.out`): baseline 11 passed; 26 mutations `{"caught":25,"escaped":1,"error":0,"timeout":0,"notApplied":0}`; escaped: B5; "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 44 files, 1618 passed, 0 failed, 79.20 s.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** none added (1618).
+**Not verified:** B5 (`BalanceError` name not set) escaped: a test gap, A-181. Fix proposed at 6.2b.
+**Found along the way:**
+1. STATUS did not say 6.1 was pushed; `origin/main` pointed to `f95df83`. Fixed.
+2. Mutations: B1 to B5 the unknown-category check and the error, B6 to B11 the adding, B12 to B16 the category list and flags, B17 to B25 the totals, B26 the input left unchanged.
+
+---
+
 ## Step 6.1 (size S), 2026-10-22: member balances from payment lines (D-72)
 
 **Works (verified in this session):** new `server/src/balances.ts` (`memberBalances`, `BalanceError`) and `server/test/balances.test.ts` (11 tests, including the DR-05 worked example: payout ₦25,000, ₦3,000 kept). `npm run check`: 44 files, 1618 passed, 0 failed, 78.78 s, exit 0.

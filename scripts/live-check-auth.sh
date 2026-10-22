@@ -1,9 +1,10 @@
 #!/bin/sh
-# Live check of /auth and /staff against a running server. Run from anywhere: sh scripts/live-check-auth.sh
+# Live check of /auth, /staff, /audit, /members, /payments, /loans and /payoffs against a running server. Run from anywhere: sh scripts/live-check-auth.sh
 # You type the owner email and password. The password is hidden, never printed, never in a command line.
 # Tokens are never printed and never put in a command line (the access token goes to curl on stdin).
 # The one wrong-password try counts as 1 failure and the next correct sign-in resets it (limit is 5).
-# The staff check creates one fictional staff account on the dev database each run (D-08).
+# Each run adds fictional rows to the dev database (D-08): one staff account, two members, three payments,
+# one loan with its Loan expense, and one pay-off with its Membership Withdrawal expense (that member becomes Inactive).
 
 umask 077
 BASE="${BASE:-http://localhost:3000}"

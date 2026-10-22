@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Docs fix after 6.4b, 2026-10-22: inconsistencies
+
+**Changed:** `DATA_MODEL.md` had no `PayOff`, `PayOffLine` or `Expense.payOffId` (last updated at 5.9) and still listed balances as "not yet modelled": added from `schema.prisma` (read in this session). `STATUS.md`: the owner inputs list is numbered 1 to 13 in order; "overrule D-19 to D-76" now D-77; a missing comma; item 13 now also names D-14 to D-18, which have no "Approved:" clause. `TRACEABILITY.md` R-12 cites D-77. `scripts/live-check-auth.sh`: the header comment named only /auth and /staff and one staff account; it now names every route and the rows each run adds (comments only).
+**Checks:** `sh -n scripts/live-check-auth.sh`: syntax-ok (verified in this session). No code change, so no `npm run check`.
+**Decided:** the owner confirmed the approvals: D-14 to D-18 "Approved: project lead" (with D-13), D-67 approved under the owner's "go" for 5.8b. Added to `DECISIONS.md`; the owner input is removed.
+
+---
+
 ## Step 6.4b (size M), 2026-10-22: pay-off route (D-77)
 
 **Works (verified in this session):** `POST /payoffs` in new `server/src/payoffs-routes.ts`, mounted in `app.ts`: 401 without a token, 403 without `payoff.process` (before the body is read), header `Idempotency-Key`, body `memberId`, `method`, `total`; 201 `{ payOff }` with no-store, `Idempotent-Replayed: true` on a repeat; 400 `invalid_input` with code, 400 `bad_request` for malformed JSON, 413 `too_large`; 404 `not_found`; 409 `member_inactive`, `active_loan`, `nothing_to_pay_off`, `payout_changed`, `idempotency_conflict`. 28 tests in new `server/test/payoffs-routes.test.ts`. `npm run check`: 46 files, 1752 passed, 0 failed, 84.72 s. `npm run db:deploy` (owner said yes): `20261022090000_pay_offs` and `20261022120000_expense_payoff_link` applied, "All migrations have been successfully applied."; `prisma migrate status`: "Database schema is up to date!".

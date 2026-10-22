@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.2d (size S), 2026-10-22: jsdom and click tests for the sign-in screens (D-85, A-196)
+
+**Works (verified in this session):** jsdom 29.1.1 installed exact in `web/` (owner said yes): 37 packages added, `npm audit` 0 vulnerabilities. `web/test/app.test.tsx` runs in jsdom and has 10 new click tests through `App` with a fake `Api` (sign-in refused and good, restore, sign-out, the api's sign-out notice, change password stopped in the browser, changed, wrong current password, Cancel). `npm run check` (web): 4 files, 55 passed. `npm run check` (server): 46 files, 1781 passed.
+**Failed first:** 4 of the new tests, all test mistakes: jsdom strips spaces from an `type="email"` value, so the trim check was wrong (the test cannot pin `.trim()`); the header and the form both have a "Change password" button and the helper clicked the header one. Fixed in the test only.
+**Tests:** web 45 to 55; server 1781 unchanged.
+**Not verified:** the app in a real browser; no break-on-purpose run (tests only, no source change). No live check, dev database not touched.
+
+---
+
 ## Step U.2e (size S), 2026-10-22: tests for the U.2c test gaps A7, A8, A11, A26 (A-195)
 
 **Works (verified in this session):** `web/test/api.test.ts`: 3 new tests (failed lock during a signed-in call keeps the session; network failure on refresh during a signed-in call keeps the session; two refreshes in a row on one client both reach the server) and 2 `restore` tests extended (one `/api/refresh` sent, no `onSignedOut`). `npm run check` (web): 4 files, 45 passed. `npm run check` (server): 46 files, 1781 passed. Tests committed as `56978a0`, then `~/Desktop/mutate-U.2c.mjs` rerun in full: baseline 38; 45 mutations, 42 caught, 3 escaped (A14, A16, A25), 0 errors, 0 timeouts, 0 not applied; A7, A8, A11, A26 caught; "files restored: yes"; `git status --short` empty.

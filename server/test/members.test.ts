@@ -393,6 +393,16 @@ describe("reactivateMember", () => {
     expect(text).not.toContain("08000000009");
   });
 
+  it("names the Super Admin, not the Staff recorder, as the actor when the Super Admin reactivates (DR-15, A-190)", async () => {
+    const { store, admin, b, inactive } = await buildReactivation();
+    const m = await inactive(b.id);
+    must(await reactivateMember(store, actorOf(admin), m.id));
+    const entries = await store.audit.listByActor(admin.id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ actorId: admin.id, action: "member.reactivated", entityId: m.id });
+    expect(await store.audit.listByActor(b.id)).toEqual([]);
+  });
+
   it("refuses Staff without members.edit, even for their own member, and saves nothing", async () => {
     const { store, noEdit, inactive } = await buildReactivation();
     const m = await inactive(noEdit.id);

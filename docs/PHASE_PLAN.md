@@ -71,7 +71,7 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 - 6.5b (S, proposed at 6.5) One test in `payoffs.test.ts` for P21 (a repaid loan and a newer active loan still block a pay-off, DR-06), then rerun P21. Done: P21 caught (A-188).
 - 6.6 (M) Reactivate a member (DR-16, D-71): `members.edit`, Super Admin or the Staff member who added the member; status Active and audit in one transaction. Done (D-80, A-189): `POST /members/:id/reactivate`; 25 tests; 1780 tests.
 - 6.7 (S) Break-on-purpose for 6.6. Done: 24 of 28 caught; L14 is a test gap; L3, L18, R2 equivalent as tested (A-190).
-- 6.7b (S, proposed at 6.7) One test in `members.test.ts`: the Super Admin reactivates a member recorded by Staff and the audit entry names the Super Admin (DR-15), then rerun L14.
+- 6.7b (S, proposed at 6.7) One test in `members.test.ts`: the Super Admin reactivates a member recorded by Staff and the audit entry names the Super Admin (DR-15), then rerun L14. Done: L14 caught (A-190); 1781 tests.
 
 ## Phase U steps (added 2026-10-22, D-79; first look, sizes checked when each starts)
 Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (dashboard, export buttons) on this base. The screen parts of the Phase 3 and 4 exits (Members screen, first-payment flow) are met here. Each server step that touches money, security or data loss is followed by a break-on-purpose step. Installing the web dependencies needs the owner's word.

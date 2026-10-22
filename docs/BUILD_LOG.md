@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 6.7b (size S), 2026-10-22: test for L14 (A-190)
+
+**Works (verified in this session):** One test in `server/test/members.test.ts`, "names the Super Admin, not the Staff recorder, as the actor when the Super Admin reactivates (DR-15, A-190)". `npm run check`: 46 files, 1781 passed, 0 failed, 85.51 s. L14 rerun alone by hand with the exact find and replace texts from `~/Desktop/mutate-6.7.mjs`: `members.test.ts` 1 failed (the new test), 62 passed, so L14 is caught. `src/members.ts` restored from a copy; `git diff` on it empty; `git status --short` showed only the test file.
+**Stubbed:** nothing.
+**Tests:** 1 added (1781).
+**Not verified:** the full 6.7 script was not rerun. No source change, no migration, no live check, dev database not touched.
+
+---
+
 ## Step 6.7 (size S), 2026-10-22: break-on-purpose for 6.6 (A-190)
 
 **Works (verified in this session):** One break-on-purpose run for `reactivateMember` and `POST /members/:id/reactivate`, script `~/Desktop/mutate-6.7.mjs` (not in git; `--dry`: all 28 find texts found once; output in `~/Desktop/mutate-6.7.out`). Baselines 97 (`members.test.ts`, `members-routes.test.ts`) and 35 (routes). 28 mutations, 24 caught, 4 escaped (L3, L14, L18, R2), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. L14 (audit actor is the member's recorder) is a test gap (A-190); fix proposed at 6.7b. L3, L18 and R2 are equivalent as tested (A-190). `npm run check` afterwards: 46 files, 1780 passed, 0 failed, 83.76 s.

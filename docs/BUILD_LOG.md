@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 6.5b (size S), 2026-10-22: test for P21 (A-188)
+
+**Works (verified in this session):** One test in `server/test/payoffs.test.ts`, "answers active_loan when a repaid loan is followed by a newer active loan (DR-06, A-188)". `npm run check`: 46 files, 1755 passed, 0 failed, 82.80 s. P21 rerun alone by hand with `sed`, using the exact find and replace texts from `~/Desktop/mutate-6.5.mjs`: `payoffs.test.ts` 1 failed (the new test), 41 passed, so P21 is caught. `src/payoffs.ts` restored from a copy; `git diff` on it empty; `git status --short` showed only the test file.
+**Stubbed:** nothing.
+**Tests:** 1 added (1755).
+**Not verified:** nothing new. No source change, no migration, no live check, dev database not touched.
+
+---
+
 ## Step 6.5 (size S), 2026-10-22: break-on-purpose for 6.3 to 6.4c; Phase U added to the plan (D-79)
 
 **Works (verified in this session):** One break-on-purpose run for 6.3 to 6.4c, script `~/Desktop/mutate-6.5.mjs` (not in git; output in `~/Desktop/mutate-6.5.out`). Baselines 63 (`balances.test.ts`, `payoffs.test.ts`), 69 (`payoffs.test.ts`, `payoffs-routes.test.ts`), 28 (routes), 222 (`expenses.test.ts`, `expenses-routes.test.ts`), 403 (memory store) and 417 (Prisma store and db); 119 mutations, 113 caught, 6 escaped (P21, R5, X5, X9, SP6, SP17), 0 errors, 0 timeouts, 0 not applied; "files restored: yes" (verified in this session). P21 is a test gap: the active-loan check changed from "some loan active" to "every loan active" escaped, so no test pays out a member with a repaid loan and a newer active loan, which `loans.ts` allows (A-188). Proposed fix: 6.5b. R5, X5, X9, SP6 and SP17 are equivalent or unreachable as tested (A-188). `npm run check` afterwards: 46 files, 1754 passed, 0 failed, 79.42 s (verified in this session). No source change.

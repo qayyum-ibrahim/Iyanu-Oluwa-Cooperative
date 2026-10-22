@@ -68,7 +68,7 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 - 6.4b (M) `POST /payoffs` route in `payoffs-routes.ts`, mounted in `app.ts`; route tests; live check. Done (D-77, A-186): 28 tests; 1752 tests; live check 157 passed.
 - 6.4c (S, proposed at 6.4) `deleteExpense` and `updateExpense` also refuse an expense with `payOffId` set. Done (D-78, A-187): 2 tests; 1754 tests.
 - 6.5 (S) Break-on-purpose for 6.3, 6.3b, 6.3c, 6.4, 6.4b and 6.4c. Done: 113 of 119 caught; P21 is a test gap; R5, X5, X9, SP6, SP17 equivalent or unreachable (A-188).
-- 6.5b (S, proposed at 6.5) One test in `payoffs.test.ts` for P21 (a repaid loan and a newer active loan still block a pay-off, DR-06), then rerun P21.
+- 6.5b (S, proposed at 6.5) One test in `payoffs.test.ts` for P21 (a repaid loan and a newer active loan still block a pay-off, DR-06), then rerun P21. Done: P21 caught (A-188).
 - 6.6 (M) Reactivate a member (DR-16, D-71): `members.edit`, Super Admin or the Staff member who added the member; status Active and audit in one transaction.
 - 6.7 (S) Break-on-purpose for 6.6.
 

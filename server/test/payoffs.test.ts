@@ -321,6 +321,17 @@ describe("processPayOff: refusals", () => {
     await expectNothingSaved(store, m.id, a.id);
   });
 
+  it("answers active_loan when a repaid loan is followed by a newer active loan (DR-06, A-188)", async () => {
+    const { store, a, addMember, pay, payExample } = await build();
+    const m = await addMember(a.id, "A One");
+    await payExample(m.id, a.id);
+    const repaid = await store.loans.create({ memberId: m.id, principal: 1_000_000n, createdById: a.id });
+    await pay(m.id, a.id, [["Loan Repaid", 10000]], repaid.id);
+    await store.loans.create({ memberId: m.id, principal: 500_000n, createdById: a.id });
+    expect(await processPayOff(store, actorOf(a), payOffBody(m.id))).toEqual({ ok: false, reason: "active_loan" });
+    await expectNothingSaved(store, m.id, a.id);
+  });
+
   it("does not count another member's active loan", async () => {
     const { store, a, addMember, payExample } = await build();
     const m = await addMember(a.id, "A One");

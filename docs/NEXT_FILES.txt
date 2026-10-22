@@ -3,6 +3,11 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/PHASE_PLAN.md
+docs/DECISIONS.md
+docs/DOMAIN_RULES.md
+server/src/members.ts
+server/src/members-routes.ts
+server/src/store.ts
 server/src/payoffs.ts
-server/src/loans.ts
-server/test/payoffs.test.ts
+server/test/members.test.ts
+server/test/members-routes.test.ts

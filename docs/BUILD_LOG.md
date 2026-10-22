@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 6.6 (size M), 2026-10-22: reactivate a member (DR-16, D-80)
+
+**Works (verified in this session):** `reactivateMember` in `server/src/members.ts` and `POST /members/:id/reactivate` in `server/src/members-routes.ts`. `members.edit` needed; Staff only for their own members, else `not_found`; Active member 409 `already_active`; status Active and one `member.reactivated` audit entry in one transaction; 200 `{ member }`. `npm run check`: 46 files, 1780 passed, 0 failed, 88.59 s.
+**Stubbed:** nothing.
+**Tests:** 25 added (1780): 14 memory store and 3 real SQLite in `members.test.ts`, 8 in `members-routes.test.ts`.
+**Not verified:** no live check (the script has no reactivation checks); no break-on-purpose yet (6.7). No migration, dev database not touched.
+
+---
+
 ## Step 6.5b (size S), 2026-10-22: test for P21 (A-188)
 
 **Works (verified in this session):** One test in `server/test/payoffs.test.ts`, "answers active_loan when a repaid loan is followed by a newer active loan (DR-06, A-188)". `npm run check`: 46 files, 1755 passed, 0 failed, 82.80 s. P21 rerun alone by hand with `sed`, using the exact find and replace texts from `~/Desktop/mutate-6.5.mjs`: `payoffs.test.ts` 1 failed (the new test), 41 passed, so P21 is caught. `src/payoffs.ts` restored from a copy; `git diff` on it empty; `git status --short` showed only the test file.

@@ -14,6 +14,7 @@ import {
   createMember,
   getMember,
   listMembers,
+  reactivateMember,
   type MemberActor,
   type MemberFailure,
 } from "./members.js";
@@ -22,6 +23,7 @@ const STATUS: Record<MemberFailure, number> = {
   forbidden: 403,
   invalid_input: 400,
   not_found: 404,
+  already_active: 409,
 };
 
 function bodyOf(req: Request): Record<string, unknown> {
@@ -95,6 +97,21 @@ export function createMembersRouter(deps: GuardDeps): Router {
       return;
     }
     const result = await getMember(deps.store, actor, req.params["id"]);
+    if (!result.ok) {
+      sendFailure(res, result.reason);
+      return;
+    }
+    res.status(200).json({ member: result.value });
+  });
+
+  // No body is read (DR-16, A-189).
+  router.post("/:id/reactivate", requirePermission("members.edit"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const result = await reactivateMember(deps.store, actor, req.params["id"]);
     if (!result.ok) {
       sendFailure(res, result.reason);
       return;

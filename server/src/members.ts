@@ -30,7 +30,7 @@ export interface MemberView {
   createdAt: string;
 }
 
-export type MemberFailure = "forbidden" | "invalid_input" | "not_found";
+export type MemberFailure = "forbidden" | "invalid_input" | "not_found" | "already_active";
 export type MemberResult<T> = { ok: true; value: T } | { ok: false; reason: MemberFailure };
 
 const failure = (reason: MemberFailure): { ok: false; reason: MemberFailure } => ({
@@ -181,4 +181,37 @@ export async function getMember(
   if (member === null) return failure("not_found");
   if (!seesAll(actor) && member.createdById !== actor.id) return failure("not_found");
   return { ok: true, value: toView(member) };
+}
+/**
+ * Makes an Inactive member Active again (DR-16, D-71, A-179) and writes one audit entry
+ * "member.reactivated" (detail: the Membership ID and the new status). Both in one transaction.
+ * Needs members.edit. Staff may reactivate only a member they recorded; any other member, an
+ * unknown id or a non-text id gives not_found. An Active member gives already_active, nothing saved.
+ */
+export async function reactivateMember(
+  store: Store,
+  actor: MemberActor,
+  id: unknown,
+): Promise<MemberResult<MemberView>> {
+  if (!hasPermission(actor.subject, "members.edit")) return failure("forbidden");
+  if (typeof id !== "string" || id.length === 0) return failure("not_found");
+
+  return store.transaction(async (tx): Promise<MemberResult<MemberView>> => {
+    const member = await tx.members.findById(id);
+    if (member === null) return failure("not_found");
+    if (!seesAll(actor) && member.createdById !== actor.id) return failure("not_found");
+    if (member.status === "ACTIVE") return failure("already_active");
+
+    if (!(await tx.members.setStatus(member.id, "ACTIVE"))) {
+      throw new Error("The member to reactivate is missing");
+    }
+    await tx.audit.append({
+      actorId: actor.id,
+      action: "member.reactivated",
+      entityType: "Member",
+      entityId: member.id,
+      detail: `membership_id=${member.membershipId} member_status=ACTIVE`,
+    });
+    return { ok: true, value: toView({ ...member, status: "ACTIVE" }) };
+  });
 }

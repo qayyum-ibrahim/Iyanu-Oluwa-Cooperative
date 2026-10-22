@@ -1,14 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { subjectOf } from "../src/guards.js";
 import {
   createMember,
   getMember,
   listMembers,
+  reactivateMember,
   type MemberActor,
   type MemberResult,
 } from "../src/members.js";
 import { createMemoryStore } from "../src/memory-store.js";
-import type { Role, UserRecord } from "../src/store.js";
+import { createPrismaStore } from "../src/prisma-store.js";
+import type { Role, Store, UserRecord } from "../src/store.js";
+import { createTempDb, type TempDb } from "./helpers/temp-db.js";
 
 // Fictional data only (D-08).
 async function build() {
@@ -310,5 +313,195 @@ describe("getMember", () => {
       ok: false,
       reason: "forbidden",
     });
+  });
+});
+// Reactivation (step 6.6, DR-16, D-71, A-179, A-189).
+async function buildReactivation(store: Store = createMemoryStore()) {
+  const tag = Math.random().toString(36).slice(2, 10);
+  const make = (name: string, role: Role, permissions: string[]) =>
+    store.users.create({
+      email: `${name}-${tag}@example.test`,
+      passwordHash: "not-a-real-hash",
+      displayName: name,
+      role,
+      permissions,
+    });
+  const admin = await make("admin", "SUPER_ADMIN", []);
+  const a = await make("edit-a", "STAFF", ["members.edit"]);
+  const b = await make("edit-b", "STAFF", ["members.edit"]);
+  const noEdit = await make("no-edit", "STAFF", ["members.create", "members.view"]);
+  const inactive = async (createdById: string) => {
+    const m = await store.members.create({
+      fullName: "Gone Member",
+      phone: "08000000009",
+      address: "",
+      occupation: "",
+      createdById,
+    });
+    await store.members.setStatus(m.id, "INACTIVE");
+    return m;
+  };
+  return { store, admin, a, b, noEdit, inactive };
+}
+
+const statusOf = async (store: Store, id: string) => (await store.members.findById(id))?.status;
+
+function failingInside(store: Store, part: "members" | "audit"): Store {
+  const down = () => Promise.reject(new Error(`${part} down`));
+  return {
+    ...store,
+    transaction: (fn) =>
+      store.transaction((tx) =>
+        part === "members"
+          ? fn({ ...tx, members: { ...tx.members, setStatus: down } })
+          : fn({ ...tx, audit: { ...tx.audit, append: down } }),
+      ),
+  };
+}
+
+describe("reactivateMember", () => {
+  it("makes Staff's own Inactive member Active, in the answer and in the store", async () => {
+    const { store, a, inactive } = await buildReactivation();
+    const m = await inactive(a.id);
+    const r = must(await reactivateMember(store, actorOf(a), m.id));
+    expect(r).toMatchObject({ id: m.id, membershipId: m.membershipId, status: "ACTIVE", createdById: a.id });
+    expect(await statusOf(store, m.id)).toBe("ACTIVE");
+  });
+
+  it("lets the Super Admin reactivate a member recorded by Staff", async () => {
+    const { store, admin, b, inactive } = await buildReactivation();
+    const m = await inactive(b.id);
+    expect(must(await reactivateMember(store, actorOf(admin), m.id)).status).toBe("ACTIVE");
+    expect(await statusOf(store, m.id)).toBe("ACTIVE");
+  });
+
+  it("writes one member.reactivated entry with the actor, the Membership ID and the new status only", async () => {
+    const { store, a, inactive } = await buildReactivation();
+    const m = await inactive(a.id);
+    await reactivateMember(store, actorOf(a), m.id);
+    const entries = await store.audit.listByActor(a.id);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      actorId: a.id,
+      action: "member.reactivated",
+      entityType: "Member",
+      entityId: m.id,
+      detail: `membership_id=${m.membershipId} member_status=ACTIVE`,
+    });
+    const text = JSON.stringify(entries);
+    expect(text).not.toContain("Gone Member");
+    expect(text).not.toContain("08000000009");
+  });
+
+  it("refuses Staff without members.edit, even for their own member, and saves nothing", async () => {
+    const { store, noEdit, inactive } = await buildReactivation();
+    const m = await inactive(noEdit.id);
+    expect(await reactivateMember(store, actorOf(noEdit), m.id)).toEqual({ ok: false, reason: "forbidden" });
+    expect(await statusOf(store, m.id)).toBe("INACTIVE");
+    expect(await store.audit.listByActor(noEdit.id)).toEqual([]);
+  });
+
+  it("answers not_found to Staff with members.edit for another user's member, and saves nothing", async () => {
+    const { store, a, b, inactive } = await buildReactivation();
+    const m = await inactive(b.id);
+    expect(await reactivateMember(store, actorOf(a), m.id)).toEqual({ ok: false, reason: "not_found" });
+    expect(await statusOf(store, m.id)).toBe("INACTIVE");
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it.each([
+    { label: "unknown", value: "no-such-id" },
+    { label: "missing", value: undefined },
+    { label: "empty", value: "" },
+    { label: "a number", value: 5 },
+  ])("answers not_found for an id that is $label", async ({ value }) => {
+    const { store, admin } = await buildReactivation();
+    expect(await reactivateMember(store, actorOf(admin), value)).toEqual({ ok: false, reason: "not_found" });
+    expect(await store.audit.listByActor(admin.id)).toEqual([]);
+  });
+
+  it("answers already_active for an Active member and writes no audit entry", async () => {
+    const { store, a } = await buildReactivation();
+    const m = await store.members.create({
+      fullName: "Still Here",
+      phone: "",
+      address: "",
+      occupation: "",
+      createdById: a.id,
+    });
+    expect(await reactivateMember(store, actorOf(a), m.id)).toEqual({ ok: false, reason: "already_active" });
+    expect(await statusOf(store, m.id)).toBe("ACTIVE");
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("answers already_active to a second reactivation and writes one audit entry in all", async () => {
+    const { store, a, inactive } = await buildReactivation();
+    const m = await inactive(a.id);
+    must(await reactivateMember(store, actorOf(a), m.id));
+    expect(await reactivateMember(store, actorOf(a), m.id)).toEqual({ ok: false, reason: "already_active" });
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  for (const part of ["members", "audit"] as const) {
+    it(`leaves the member Inactive with no audit entry when the ${part} write fails (one transaction)`, async () => {
+      const { store, a, inactive } = await buildReactivation();
+      const m = await inactive(a.id);
+      await expect(reactivateMember(failingInside(store, part), actorOf(a), m.id)).rejects.toThrow(`${part} down`);
+      expect(await statusOf(store, m.id)).toBe("INACTIVE");
+      expect(await store.audit.listByActor(a.id)).toEqual([]);
+    });
+  }
+
+  it("throws, and writes no audit entry, when the store cannot find the member to update", async () => {
+    const { store, a, inactive } = await buildReactivation();
+    const m = await inactive(a.id);
+    const lost: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) => fn({ ...tx, members: { ...tx.members, setStatus: async () => false } })),
+    };
+    await expect(reactivateMember(lost, actorOf(a), m.id)).rejects.toThrow("member to reactivate is missing");
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+});
+
+describe("reactivateMember on the Prisma store (real SQLite)", () => {
+  let tmp: TempDb;
+  let store: Store;
+  beforeAll(() => {
+    tmp = createTempDb();
+    store = createPrismaStore(tmp.prisma);
+  }, 120_000);
+  afterAll(async () => {
+    await tmp.cleanup();
+  });
+
+  it("saves the Active status and the audit entry", async () => {
+    const { a, inactive } = await buildReactivation(store);
+    const m = await inactive(a.id);
+    must(await reactivateMember(store, actorOf(a), m.id));
+    expect(await statusOf(store, m.id)).toBe("ACTIVE");
+    expect((await store.audit.listByActor(a.id)).map((e) => e.action)).toEqual(["member.reactivated"]);
+  });
+
+  it("leaves the member Inactive when the audit write fails", async () => {
+    const { a, inactive } = await buildReactivation(store);
+    const m = await inactive(a.id);
+    await expect(reactivateMember(failingInside(store, "audit"), actorOf(a), m.id)).rejects.toThrow("audit down");
+    expect(await statusOf(store, m.id)).toBe("INACTIVE");
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("reactivates once when five requests run at once", async () => {
+    const { a, inactive } = await buildReactivation(store);
+    const m = await inactive(a.id);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => reactivateMember(store, actorOf(a), m.id)),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).map((r) => (r.ok ? "" : r.reason))).toEqual(
+      Array(4).fill("already_active"),
+    );
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
   });
 });

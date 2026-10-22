@@ -24,11 +24,18 @@ async function build() {
   const b = await make("staff-b", "STAFF", ["members.create", "members.view"]);
   const viewOnly = await make("view-only", "STAFF", ["members.view"]);
   const createOnly = await make("create-only", "STAFF", ["members.create"]);
+  const editA = await make("edit-a", "STAFF", ["members.edit"]);
+  const editB = await make("edit-b", "STAFF", ["members.edit"]);
   const app = createApp({ store, tokenSecret: SECRET, now: () => T0 });
   const bearer = (u: { id: string }) => `Bearer ${createAccessToken(SECRET, u.id, T0)}`;
   const addMember = (createdById: string, fullName: string) =>
     store.members.create({ fullName, phone: "", address: "", occupation: "", createdById });
-  return { store, app, admin, a, b, viewOnly, createOnly, bearer, addMember };
+  const addInactive = async (createdById: string, fullName: string) => {
+    const m = await addMember(createdById, fullName);
+    await store.members.setStatus(m.id, "INACTIVE");
+    return m;
+  };
+  return { store, app, admin, a, b, viewOnly, createOnly, editA, editB, bearer, addMember, addInactive };
 }
 
 const memberBody = (over: Record<string, unknown> = {}) => ({
@@ -292,6 +299,83 @@ describe("GET /members/:id", () => {
     const res = await request(app).get("/members/no-such-id").set("Authorization", bearer(admin));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "not_found" });
+  });
+});
+
+describe("POST /members/:id/reactivate", () => {
+  it("answers 401 without a token, and the member stays Inactive", async () => {
+    const { app, store, editA, addInactive } = await build();
+    const m = await addInactive(editA.id, "Gone One");
+    const res = await request(app).post(`/members/${m.id}/reactivate`);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "unauthorized" });
+    expect((await store.members.findById(m.id))?.status).toBe("INACTIVE");
+  });
+
+  it("answers 403 to Staff without members.edit, even for their own member", async () => {
+    const { app, store, a, bearer, addInactive } = await build();
+    const m = await addInactive(a.id, "Gone One");
+    const res = await request(app).post(`/members/${m.id}/reactivate`).set("Authorization", bearer(a));
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+    expect((await store.members.findById(m.id))?.status).toBe("INACTIVE");
+  });
+
+  it("answers 200 with the Active member to the Staff member who recorded them, and audits it", async () => {
+    const { app, store, editA, bearer, addInactive } = await build();
+    const m = await addInactive(editA.id, "Gone One");
+    const res = await request(app).post(`/members/${m.id}/reactivate`).set("Authorization", bearer(editA));
+    expect(res.status).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(Object.keys(res.body as object)).toEqual(["member"]);
+    expect(res.body.member).toMatchObject({ id: m.id, membershipId: "IO-001", status: "ACTIVE" });
+    expect((await store.members.findById(m.id))?.status).toBe("ACTIVE");
+    expect((await store.audit.listByActor(editA.id)).map((e) => e.action)).toEqual(["member.reactivated"]);
+  });
+
+  it("answers 200 to the Super Admin for a member recorded by Staff", async () => {
+    const { app, admin, editB, bearer, addInactive } = await build();
+    const m = await addInactive(editB.id, "Gone Two");
+    const res = await request(app).post(`/members/${m.id}/reactivate`).set("Authorization", bearer(admin));
+    expect(res.status).toBe(200);
+    expect(res.body.member.status).toBe("ACTIVE");
+  });
+
+  it("answers 404 to Staff with members.edit for another user's member", async () => {
+    const { app, store, editA, editB, bearer, addInactive } = await build();
+    const m = await addInactive(editB.id, "Gone Two");
+    const res = await request(app).post(`/members/${m.id}/reactivate`).set("Authorization", bearer(editA));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "not_found" });
+    expect((await store.members.findById(m.id))?.status).toBe("INACTIVE");
+  });
+
+  it("answers 404 for an unknown id", async () => {
+    const { app, admin, bearer } = await build();
+    const res = await request(app).post("/members/no-such-id/reactivate").set("Authorization", bearer(admin));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "not_found" });
+  });
+
+  it("answers 409 already_active for an Active member", async () => {
+    const { app, store, editA, bearer, addMember } = await build();
+    const m = await addMember(editA.id, "Still Here");
+    const res = await request(app).post(`/members/${m.id}/reactivate`).set("Authorization", bearer(editA));
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: "already_active" });
+    expect(await store.audit.listByActor(editA.id)).toEqual([]);
+  });
+
+  it("ignores a body, even malformed JSON", async () => {
+    const { app, editA, bearer, addInactive } = await build();
+    const m = await addInactive(editA.id, "Gone One");
+    const res = await request(app)
+      .post(`/members/${m.id}/reactivate`)
+      .set("Authorization", bearer(editA))
+      .set("Content-Type", "application/json")
+      .send("{bad");
+    expect(res.status).toBe(200);
+    expect(res.body.member.status).toBe("ACTIVE");
   });
 });
 

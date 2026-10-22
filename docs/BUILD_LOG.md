@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.2 (size M), 2026-10-22: sign-in, sign-out, change own password (D-83, A-193)
+
+**Works (verified in this session):** `web/src/session.ts` (access token in memory, refresh token in `sessionStorage`), `web/src/api.ts` (login, restore, me, logout, change password; one refresh and one retry on 401, one refresh at a time), `SignIn.tsx`, `ChangePassword.tsx`, `App.tsx`, `styles.css`. First `npm run check` (web) failed at the typecheck: TS2882, no type for the side-effect import `./styles.css`; fixed with `/// <reference types="vite/client" />` in `main.tsx` (`node_modules/vite/client.d.ts` line 43 declares `*.css`). Then one test failed: it expected `autocomplete=` but React 19.3.1's server render writes `autoComplete=`; the test was corrected. `npm run check` (web): typecheck and lint clean, 4 files, 36 passed. `npm run build` (web): built in 1.58 s. `npm run check` (server): 46 files, 1781 passed, 95.76 s.
+**Stubbed:** the signed-in page shows only the name and the two buttons; screens come at U.3 to U.8.
+**Tests:** 28 added in `web/test/` (5 `session.test.ts`, 17 `api.test.ts`, 6 more in `app.test.tsx`); web total 36. Server 1781 unchanged.
+**Not verified:** the screens in a browser against a running API; clicks and typing (no DOM in tests). No server change, no live check, dev database not touched. No dependency installed. Break-on-purpose owed at U.2b.
+
+---
+
 ## Step U.1 (size M), 2026-10-22: web skeleton (D-82, A-192)
 
 **Works (verified in this session):** `web/` holds a React and Vite app in TypeScript with exact versions (react 19.3.1, vite 8.3.4, @vitejs/plugin-react 6.1.2, eslint-plugin-react-hooks 7.1.1; typescript 6.0.3, eslint 10.12.0, typescript-eslint 8.71.2, vitest 5.0.4, @types/node 22.20.5 as the server). Versions from `npm view`; Vite proxy form from https://vite.dev/config/server-options. `src/api-proxy.ts` forwards `/api` to `http://localhost:3000` (or `API_TARGET`) and removes `/api`. First `npm run check` failed at the tests: rolldown's Intel Mac binding was missing after `npm install` (npm/cli#4828); owner said yes to deleting `web/node_modules` and `npm ci`, which installed it. Vite then warned that `vite.config.ts` imported without a file extension; fixed (`.ts` extension, `allowImportingTsExtensions`). `npm run check` (web): typecheck and lint clean, 2 files, 8 passed. `npm run build` (web): 15 modules, built. `npm run check` (server): 46 files, 1781 passed, 89.92 s.

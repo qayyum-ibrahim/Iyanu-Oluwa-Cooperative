@@ -77,7 +77,8 @@ Each money step is followed by a break-on-purpose step. An M step may split when
 Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (dashboard, export buttons) on this base. The screen parts of the Phase 3 and 4 exits (Members screen, first-payment flow) are met here. Each server step that touches money, security or data loss is followed by a break-on-purpose step. Installing the web dependencies needs the owner's word.
 - U.0 (S) Screen plan, docs only (D-81, A-191). Done: the plan below.
 - U.1 (M) Web skeleton in `web/`: React and Vite, as the prototype (README), versions looked up in the official docs and pinned (D-19); a web `npm run check` (typecheck, lint, tests); the Vite dev server forwards `/api` to the API, so the server needs no CORS code (A-191). Installing needs the owner's word. Done (D-82, A-192): pinned versions, `/api` removed by the proxy, 8 tests.
-- U.2 (M) Sign-in screen, sign-out, change own password, token keeping and refresh (A-191 item 3). Routes exist.
+- U.2 (M) Sign-in screen, sign-out, change own password, token keeping and refresh (A-191 item 3). Routes exist. Done (D-83, A-193): 28 web tests, no jsdom.
+- U.2b (S) Break-on-purpose for `web/src/session.ts` and `web/src/api.ts` (CLAUDE.md rule 10).
 - U.3a (S) Server: `GET /members/:id/balances` (`members.view`, DR-13 scope as `GET /members/:id`): per-category balances, refundable total (the payout) and the "Retained by cooperative" amounts (OQ-14), from `memberBalances` (D-72), amounts as strings (A-18). Followed by U.3b (S) break-on-purpose.
 - U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments).
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).

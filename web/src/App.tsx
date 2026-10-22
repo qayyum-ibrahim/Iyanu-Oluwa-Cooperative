@@ -1,8 +1,147 @@
-// Skeleton only (U.1). The screens come in U.2 to U.8 (D-81).
-export default function App() {
+// Sign-in, sign-out and change own password (U.2, D-81). Other screens come in U.3 to U.8.
+import { useEffect, useState } from "react";
+import { createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
+import ChangePassword from "./ChangePassword.tsx";
+import { browserSessionStorage, createSessionKeeper } from "./session.ts";
+import SignIn from "./SignIn.tsx";
+
+export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
+export const SESSION_ENDED = "Your session has ended. Please sign in again.";
+export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
+
+type View =
+  | { kind: "loading" }
+  | { kind: "signed-out"; notice?: string }
+  | { kind: "signed-in"; me: Me; page: "home" | "password" };
+
+/** Every sign-in failure reads the same (D-26). */
+export function loginMessage(result: LoginResult): string | null {
+  if (result.ok) return null;
+  if (result.reason === "invalid_credentials") {
+    return "Sign-in failed. Check your email and password.";
+  }
+  if (result.reason === "network") return "Cannot reach the server. Try again.";
+  return "Something went wrong. Try again.";
+}
+
+export function changePasswordMessage(result: ChangePasswordResult): string | null {
+  if (result.ok) return null;
+  switch (result.reason) {
+    case "wrong_password":
+      return "The current password is wrong.";
+    case "invalid_input":
+      return "The new password was refused. Use 12 to 128 characters, different from the current one.";
+    case "signed_out":
+      return SESSION_ENDED;
+    case "network":
+      return "Cannot reach the server. Try again.";
+    default:
+      return "Something went wrong. Try again.";
+  }
+}
+
+function browserApi(onSignedOut: () => void): Api {
+  return createApi({
+    fetch: (input, init) => fetch(input, init),
+    keeper: createSessionKeeper(browserSessionStorage()),
+    onSignedOut,
+  });
+}
+
+export interface AppProps {
+  makeApi?: (onSignedOut: () => void) => Api;
+}
+
+export default function App({ makeApi = browserApi }: AppProps) {
+  const [view, setView] = useState<View>({ kind: "loading" });
+  const [api] = useState(() =>
+    makeApi(() => setView({ kind: "signed-out", notice: SESSION_ENDED })),
+  );
+
+  useEffect(() => {
+    let active = true;
+    api.restore().then((me) => {
+      if (!active) return;
+      setView(me === null ? { kind: "signed-out" } : { kind: "signed-in", me, page: "home" });
+    });
+    return () => {
+      active = false;
+    };
+  }, [api]);
+
+  async function signIn(email: string, password: string): Promise<string | null> {
+    const result = await api.login(email, password);
+    if (result.ok) setView({ kind: "signed-in", me: result.me, page: "home" });
+    return loginMessage(result);
+  }
+
+  async function signOut() {
+    await api.logout();
+    setView({ kind: "signed-out" });
+  }
+
+  async function changePassword(current: string, next: string): Promise<string | null> {
+    const result = await api.changePassword(current, next);
+    if (result.ok) {
+      setView({ kind: "signed-out", notice: PASSWORD_CHANGED });
+      return null;
+    }
+    if (result.reason === "signed_out") return null; // onSignedOut already showed sign-in.
+    return changePasswordMessage(result);
+  }
+
+  if (view.kind === "loading") {
+    return (
+      <main>
+        <h1>{SYSTEM_NAME}</h1>
+        <p>Loading…</p>
+      </main>
+    );
+  }
+
+  if (view.kind === "signed-out") {
+    return <SignIn onSignIn={signIn} notice={view.notice} />;
+  }
+
+  const { me } = view;
   return (
-    <main>
-      <h1>IYANU-OLUWA Cooperative Management System</h1>
-    </main>
+    <div className="app">
+      <header>
+        <div className="brand">
+          <b>IO</b>
+          <div>
+            IYANU-OLUWA
+            <small>Cooperative Management</small>
+          </div>
+        </div>
+        <span className="who">
+          {me.user.displayName}
+          <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
+        </span>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setView({ ...view, page: "password" })}
+        >
+          Change password
+        </button>
+        <button type="button" className="logout" onClick={signOut}>
+          Sign out
+        </button>
+      </header>
+      <main>
+        {view.page === "password" ? (
+          <ChangePassword
+            onSubmit={changePassword}
+            onCancel={() => setView({ ...view, page: "home" })}
+          />
+        ) : (
+          <>
+            <h1>{SYSTEM_NAME}</h1>
+            <p>Signed in as {me.user.displayName}. The screens come in the next steps.</p>
+          </>
+        )}
+      </main>
+    </div>
   );
 }

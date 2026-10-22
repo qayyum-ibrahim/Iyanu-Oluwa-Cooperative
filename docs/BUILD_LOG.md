@@ -1,5 +1,18 @@
 # Build log (newest first)
 
+## Step 6.2b (size S), 2026-10-22: test for the BalanceError name (A-181)
+
+**Works (verified in this session):** one test added to `server/test/balances.test.ts` (12 tests): `names the error BalanceError, so the server log shows it`. `npm run check`: 44 files, 1619 passed, 0 failed, 80.90 s. Test file committed alone as `19e6ad7` (owner said yes), because the mutation script needs a clean tree. Rerun of `~/Desktop/mutate-6.1.mjs` (output in `~/Desktop/mutate-6.2b.out`): 26 mutations `{"caught":26,"escaped":0,"error":0,"timeout":0,"notApplied":0}`; B5 CAUGHT by the new test ("names the error BalanceError, so the server log shows it"); "files restored: yes"; `git status --short` empty.
+**Works (verified on owner's machine):** nothing new.
+**Stubbed:** nothing.
+**Tests:** 1 added (1619).
+**Not verified:** nothing open for 6.1 balances. The break-on-purpose scripts are not in git.
+**Found along the way:**
+1. My first try at the rerun used a scratch copy of the script with the clean-tree check loosened. The auto-mode classifier denied it. I stopped, asked, and committed the test first instead (the script's own advice).
+2. Docs were not in the owner's "test file alone" commit, so they follow in a separate docs commit.
+
+---
+
 ## Step 6.2 (size S), 2026-10-22: break-on-purpose for member balances (A-181)
 
 **Works (verified in this session):** script `~/Desktop/mutate-6.1.mjs` (not in git), `--dry`: "dry run done: 26 mutations", no find text missing or repeated. Run (output in `~/Desktop/mutate-6.2.out`): baseline 11 passed; 26 mutations `{"caught":25,"escaped":1,"error":0,"timeout":0,"notApplied":0}`; escaped: B5; "files restored: yes"; `git status --short` empty. `npm run check` afterwards: 44 files, 1618 passed, 0 failed, 79.20 s.

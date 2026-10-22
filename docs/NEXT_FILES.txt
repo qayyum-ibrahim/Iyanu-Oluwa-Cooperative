@@ -3,5 +3,10 @@ docs/BUILD_LOG.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/PHASE_PLAN.md
+docs/DOMAIN_RULES.md
+docs/DECISIONS.md
 server/src/balances.ts
-server/test/balances.test.ts
+server/src/store.ts
+server/src/memory-store.ts
+server/src/prisma-store.ts
+server/prisma/schema.prisma

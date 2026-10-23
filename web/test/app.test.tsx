@@ -98,9 +98,13 @@ import {
   BLANK_STAFF,
   STAFF_NAME_MAX,
   STAFF_PERMISSIONS,
+  UNKNOWN_PERMISSION,
   checkNewStaff,
+  cleanPermissions,
   createdStaffMessage,
   permissionCount,
+  permissionsMessage,
+  savedPermissionsMessage,
   staffListMessage,
   staffMessage,
   type StaffFormInput,
@@ -128,6 +132,7 @@ const idleApi: Api = {
   reactivateMember: async () => ({ ok: false, reason: "server" }),
   listStaff: async () => ({ ok: false, reason: "server" }),
   createStaff: async () => ({ ok: false, reason: "server" }),
+  setStaffPermissions: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -222,6 +227,8 @@ interface FakeApi extends Api {
   reactivated: string[];
   /** Every staff account the screen sent, in order. */
   hired: NewStaff[];
+  /** Every permissions change the screen sent, in order. */
+  granted: { id: string; permissions: string[] }[];
   signOutFromServer(): void;
 }
 
@@ -280,6 +287,8 @@ function fakeApi(
     staffList?: CallResult<StaffAccount[]>;
     /** Answers to createStaff in turn; the last one repeats. */
     hire?: CreateStaffResult[];
+    /** Answers to setStaffPermissions in turn; the last one repeats. A success is saved as the server would. */
+    grant?: CallResult<StaffAccount>[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -293,6 +302,7 @@ function fakeApi(
     const paidOff: NewPayOff[] = [];
     const reactivated: string[] = [];
     const hired: NewStaff[] = [];
+    const granted: { id: string; permissions: string[] }[] = [];
     return {
       calls,
       paid,
@@ -304,6 +314,7 @@ function fakeApi(
       paidOff,
       reactivated,
       hired,
+      granted,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -404,6 +415,14 @@ function fakeApi(
         const answers = opts.hire ?? [];
         const result = answers[Math.min(hired.length, answers.length) - 1] ?? { ok: false, reason: "server" };
         if (result.ok) opts.staff = [...(opts.staff ?? []), result.staff];
+        return result;
+      },
+      setStaffPermissions: async (id, permissions) => {
+        calls.push(`grant ${id}`);
+        granted.push({ id, permissions });
+        const answers = opts.grant ?? [];
+        const result = answers[Math.min(granted.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+        if (result.ok) opts.staff = (opts.staff ?? []).map((s) => (s.id === id ? result.value : s));
         return result;
       },
     };
@@ -3170,6 +3189,27 @@ describe("staff helpers", () => {
     expect(permissionCount(1)).toBe("1 permission");
     expect(permissionCount(5)).toBe("5 permissions");
   });
+
+  it("cleans a permission list to table order, or refuses an unknown entry", () => {
+    expect(cleanPermissions(["payoff.process", "dashboard", "dashboard"])).toEqual(["dashboard", "payoff.process"]);
+    expect(cleanPermissions([])).toEqual([]);
+    expect(cleanPermissions(["dashboard", "users.manage"])).toBeNull();
+    expect(cleanPermissions(["toString"])).toBeNull();
+    expect(UNKNOWN_PERMISSION).toMatch(/unknown entry/);
+  });
+
+  it("gives a message for each refused permissions change", () => {
+    expect(permissionsMessage("not_found")).toMatch(/not found/);
+    expect(permissionsMessage("invalid_input")).toMatch(/were refused/);
+    expect(permissionsMessage("forbidden")).toMatch(/permission/);
+    expect(permissionsMessage("signed_out")).toBeNull();
+    expect(permissionsMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(permissionsMessage("server")).toBe("Something went wrong. Try again.");
+    expect(savedPermissionsMessage(staffAccount("s1", "Staff One"))).toBe("Permissions saved for Staff One: none.");
+    expect(savedPermissionsMessage(staffAccount("s1", "Staff One", { permissions: ["dashboard"] }))).toBe(
+      "Permissions saved for Staff One: 1 permission.",
+    );
+  });
 });
 
 const STAFF_MANAGER: Me = { ...ME, permissions: ["users.manage"] };
@@ -3209,8 +3249,8 @@ describe("staff & access (jsdom)", () => {
     expect(api.calls).toEqual(["staff"]);
     expect(el("h1").textContent).toBe("Staff & access");
     expect(rowTexts()).toEqual([
-      "Staff Ones1@example.testActive2 permissions23 Oct 2026",
-      "Staff Twos2@example.testInactiveNone23 Oct 2026",
+      "Staff Ones1@example.testActive2 permissions23 Oct 2026Permissions",
+      "Staff Twos2@example.testInactiveNone23 Oct 2026Permissions",
     ]);
   });
 
@@ -3269,7 +3309,7 @@ describe("staff & access (jsdom)", () => {
     expect(api.calls).toEqual(["staff", "hire", "staff"]);
     expect(el("[role=status]").textContent).toBe("Staff account created for Staff Two (staff.two@example.test).");
     expect(container?.querySelector("form.staff-form")).toBeNull();
-    expect(rowTexts()).toEqual(["Staff Twostaff.two@example.testActive2 permissions23 Oct 2026"]);
+    expect(rowTexts()).toEqual(["Staff Twostaff.two@example.testActive2 permissions23 Oct 2026Permissions"]);
   });
 
   it("keeps the form open with the message when the email is taken, and Cancel closes it", async () => {
@@ -3285,5 +3325,97 @@ describe("staff & access (jsdom)", () => {
     await click(button("Cancel"));
     expect(container?.querySelector("form.staff-form")).toBeNull();
     expect(button("+ Add staff")).toBeTruthy();
+  });
+});
+
+async function openPermissions(name: string) {
+  await click(el(`button[aria-label="Change permissions for ${name}"]`));
+}
+
+function ticked(): string[] {
+  return inputs("checkbox")
+    .filter((b) => b.checked)
+    .map((b) => b.value);
+}
+
+describe("staff permissions (jsdom)", () => {
+  const ONE = staffAccount("s1", "Staff One", { permissions: ["members.view", "payments.view"] });
+  const TWO = staffAccount("s2", "Staff Two", { isActive: false });
+
+  it("opens the grid with the account's permissions, one form at a time", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO] }));
+    await openStaff();
+    await openPermissions("Staff One");
+    expect(el(".form-title").textContent).toBe("Permissions for Staff One");
+    expect(ticked()).toEqual(["members.view", "payments.view"]);
+    expect(inputs("checkbox")).toHaveLength(21);
+    expect(() => button("+ Add staff")).toThrow();
+    expect(() => button("Permissions")).toThrow();
+    await click(button("Cancel"));
+    expect(container?.querySelector("form.staff-form")).toBeNull();
+    await openPermissions("Staff Two");
+    expect(el(".form-title").textContent).toBe("Permissions for Staff Two");
+    expect(ticked()).toEqual([]);
+    expect(api.calls).toEqual(["staff"]);
+  });
+
+  it("sends the ticked list in table order, then reads the list again", async () => {
+    const saved = { ...ONE, permissions: ["dashboard", "members.view", "loans.disburse"] };
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO], grant: [{ ok: true, value: saved }] }));
+    await openStaff();
+    await openPermissions("Staff One");
+    await click(checkbox("payments.view"));
+    await click(checkbox("loans.disburse"));
+    await click(checkbox("dashboard"));
+    await click(button("Save permissions"));
+    expect(api.granted).toEqual([{ id: "s1", permissions: ["dashboard", "members.view", "loans.disburse"] }]);
+    expect(api.calls).toEqual(["staff", "grant s1", "staff"]);
+    expect(el("[role=status]").textContent).toBe("Permissions saved for Staff One: 3 permissions.");
+    expect(container?.querySelector("form.staff-form")).toBeNull();
+    expect(rowTexts()[0]).toBe("Staff Ones1@example.testActive3 permissions23 Oct 2026Permissions");
+  });
+
+  it("can take every permission away", async () => {
+    const api = await mount(
+      fakeApi({ restore: STAFF_MANAGER, staff: [ONE], grant: [{ ok: true, value: { ...ONE, permissions: [] } }] }),
+    );
+    await openStaff();
+    await openPermissions("Staff One");
+    await click(checkbox("members.view"));
+    await click(checkbox("payments.view"));
+    await click(button("Save permissions"));
+    expect(api.granted).toEqual([{ id: "s1", permissions: [] }]);
+    expect(el("[role=status]").textContent).toBe("Permissions saved for Staff One: none.");
+  });
+
+  it("keeps the form and the ticks with the message on a refusal, and a retry sends again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        staff: [ONE],
+        grant: [{ ok: false, reason: "network" }, { ok: false, reason: "not_found" }],
+      }),
+    );
+    await openStaff();
+    await openPermissions("Staff One");
+    await click(checkbox("dashboard"));
+    await click(button("Save permissions"));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(ticked()).toEqual(["dashboard", "members.view", "payments.view"]);
+    expect(button("Save permissions").disabled).toBe(false);
+    await click(button("Save permissions"));
+    expect(el("[role=alert]").textContent).toBe("This staff account was not found. Reload the page.");
+    expect(api.calls).toEqual(["staff", "grant s1", "grant s1"]);
+    expect(api.granted[1]).toEqual(api.granted[0]);
+  });
+
+  it("refuses an account holding a permission the grid does not list, with no call", async () => {
+    const odd = { ...ONE, permissions: ["members.view", "reports.print"] };
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [odd] }));
+    await openStaff();
+    await openPermissions("Staff One");
+    await click(button("Save permissions"));
+    expect(el("[role=alert]").textContent).toBe(UNKNOWN_PERMISSION);
+    expect(api.granted).toEqual([]);
   });
 });

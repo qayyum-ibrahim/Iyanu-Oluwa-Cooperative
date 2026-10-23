@@ -3,7 +3,8 @@
 // (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b), the
 // expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
 // paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
-// staff list and add staff (server/src/staff-routes.ts, U.8a). Tokens travel in the JSON body
+// staff list and add staff (server/src/staff-routes.ts, U.8a) and a staff account's permissions
+// (U.8b). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -351,6 +352,7 @@ export interface Api {
   reactivateMember(id: string): Promise<ReactivateMemberResult>;
   listStaff(): Promise<CallResult<StaffAccount[]>>;
   createStaff(input: NewStaff): Promise<CreateStaffResult>;
+  setStaffPermissions(id: string, permissions: string[]): Promise<CallResult<StaffAccount>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -1159,6 +1161,17 @@ export function createApi(deps: ApiDeps): Api {
       const staff = isObject(reply) ? staffOf(reply["staff"]) : null;
       if (staff === null) return { ok: false, reason: "server" };
       return { ok: true, staff };
+    },
+
+    // No key: the whole list replaces the old one, so the same request sent twice is the same.
+    setStaffPermissions(id, permissions) {
+      return call(
+        `/staff/${encodeURIComponent(id)}/permissions`,
+        { method: "PUT", body: JSON.stringify({ permissions }) },
+        200,
+        "staff",
+        staffOf,
+      );
     },
   };
 }

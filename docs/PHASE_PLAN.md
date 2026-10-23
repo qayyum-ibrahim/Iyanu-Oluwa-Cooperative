@@ -116,7 +116,7 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.7b (S) Web: `reactivateMember` in `web/src/api.ts` and the Reactivate button on an Inactive member (`members.edit`, 409 `already_active`, D-80). Done (A-223): 241 web tests.
 - U.8 Staff and access (create, permissions, deactivate, reactivate, reset password); audit viewer. U.8 was L, so it split at its start (D-97):
   - U.8a (M) Web: `listStaff` and `createStaff` in `web/src/api.ts`, the Staff & access page in the menu with `users.manage` (`web/src/Staff.tsx`): the staff list and the add staff form with the permission grid. Done (A-224): 260 web tests.
-  - U.8b (M) Web: change a staff account's permissions (`PUT /staff/:id/permissions`).
+  - U.8b (M) Web: change a staff account's permissions (`PUT /staff/:id/permissions`). Done (A-225): `setStaffPermissions`, a "Permissions" button on each row; 272 web tests.
   - U.8c (M) Web: deactivate, reactivate and reset a staff password (`POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`).
   - U.8d (M) Web: the audit viewer (`GET /audit`, actor and action filters, paging).
 - U.9 (S) Walk-through of every screen on the owner's machine against the dev server.

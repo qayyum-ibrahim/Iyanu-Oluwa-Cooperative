@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.8b (size M), 2026-10-23: change a staff account's permissions (D-97, A-225)
+
+The owner said "fix inconsistencies and go".
+**Changed:** `web/src/api.ts` (`setStaffPermissions`: `PUT /staff/:id/permissions` with `{ permissions }`, no key, reply shape checked; header comment), `web/src/Staff.tsx` (`cleanPermissions`, `UNKNOWN_PERMISSION`, `permissionsMessage`, `savedPermissionsMessage`, a shared `PermissionGrid`, the permissions form, an Actions column with "Permissions" on each row, one form at a time; `checkNewStaff` uses `cleanPermissions`; header comment). Tests: `web/test/api.test.ts` (`setStaffPermissions` 5), `web/test/app.test.tsx` (helpers 2, screen 5; fakes have `setStaffPermissions`; the U.8a row texts now end with the button). Docs: ASSUMPTIONS (A-225), PHASE_PLAN (U.8b done), TRACEABILITY (R-19, R-21), STATUS ("Screens:" fixed, inconsistency 1).
+**Works (verified in this session):** `npm run check` (web): 4 files, 272 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.8a (size M), 2026-10-23: Staff & access page with the staff list and add staff (D-97, A-224)
 
 The owner said "fix inconsistencies and go. let me know if you need me to decide anything". U.8 was L, so it split (D-97: U.8a to U.8d).

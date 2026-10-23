@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.4c (size M), 2026-10-23: break-on-purpose for U.4a and U.4b (A-206)
+
+The owner said: "fix inconsistencies, include store adapters, go".
+**Changed:** no source file kept. New throwaway script `~/Desktop/mutate-U.4c.mjs` (not in git), output `~/Desktop/mutate-U.4c.out`. Docs fixes: PHASE_PLAN U.4c now names the hash, view, audit, route and store adapters; `docs/NEXT_FILES.txt` had left out the store adapters.
+**Works (verified in this session):** `node ~/Desktop/mutate-U.4c.mjs --dry`: "dry run done: 39 mutations". Full run: baseline 9 test files, 610 passed; 39 mutations, 34 caught, 5 escaped (L2, C4, C5, C6, H2), 0 errors, 0 not applied; "files restored: yes"; `git status --short` "(empty)". `npm run check` (server) completed in 98.59 s; its output tail had no counts, so `npm run test` was run again: 47 files, 1842 passed.
+**Escapes (A-206):** C4 and H2 are test gaps; L2 is equivalent only on this Lagos-time Mac; C5 and C6 are equivalent (read from code). U.4c2 proposed.
+**Not verified:** L2 on a machine outside Lagos time; the web side (not touched); the live check (not run).
+
+---
+
 ## Step U.4b (size M), 2026-10-23: payment date in `POST /payments` (D-88, A-205)
 
 The owner said: "fix Inconsistencies, yes to db:deploy, item 6 confirmed, go".

@@ -302,6 +302,181 @@ describe("GET /members/:id", () => {
   });
 });
 
+describe("GET /members/:id/balances", () => {
+  const ORDER = [
+    "Shares",
+    "Savings",
+    "Special Savings",
+    "Development Levy",
+    "Loan Repaid",
+    "Loan Interest",
+    "Entrance Fee",
+    "Stationeries",
+    "Empowerment Repaid",
+    "Committee Gift",
+    "Special Deposit",
+    "Investment Repaid",
+    "Investment Income",
+    "Building Funds",
+  ];
+  const REFUNDABLE = ["Shares", "Savings", "Special Savings", "Special Deposit", "Building Funds"];
+
+  // The DR-05 worked example: payout ₦25,000; Development Levy ₦1,000 and Entrance Fee ₦2,000 kept.
+  const payExample = (store: Awaited<ReturnType<typeof build>>["store"], memberId: string, by: string) =>
+    store.payments.create({
+      memberId,
+      method: "CASH",
+      total: 2_800_000n,
+      lines: [
+        { category: "Shares", amount: 1_200_000n },
+        { category: "Savings", amount: 800_000n },
+        { category: "Special Savings", amount: 500_005n },
+        { category: "Development Levy", amount: 100_000n },
+        { category: "Entrance Fee", amount: 199_995n },
+      ],
+      createdById: by,
+    });
+
+  const balanceOf = (body: { balances: { categories: { category: string; balance: string }[] } }, name: string) =>
+    body.balances.categories.find((c) => c.category === name)?.balance;
+
+  it("answers 401 without a token", async () => {
+    const { app, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect((await request(app).get(`/members/${m.id}/balances`)).status).toBe(401);
+  });
+
+  it("answers 403 to Staff without members.view", async () => {
+    const { app, a, createOnly, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(createOnly));
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: "forbidden" });
+  });
+
+  it("answers 200 to Staff for a member they recorded: no-store, exact fields, amounts as strings", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await payExample(store, m.id, a.id);
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.status).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(Object.keys(res.body as object)).toEqual(["balances"]);
+    expect(Object.keys(res.body.balances as object).sort()).toEqual([
+      "categories",
+      "memberId",
+      "nonRefundableTotal",
+      "refundableTotal",
+    ]);
+    expect(res.body.balances.memberId).toBe(m.id);
+    expect(res.body.balances.refundableTotal).toBe("25000.05");
+    expect(res.body.balances.nonRefundableTotal).toBe("2999.95");
+    expect(res.body.balances.categories[0]).toEqual({ category: "Shares", balance: "12000.00", refundable: true });
+    expect(balanceOf(res.body, "Savings")).toBe("8000.00");
+    expect(balanceOf(res.body, "Special Savings")).toBe("5000.05");
+    expect(balanceOf(res.body, "Development Levy")).toBe("1000.00");
+    expect(balanceOf(res.body, "Entrance Fee")).toBe("1999.95");
+    expect(balanceOf(res.body, "Loan Interest")).toBe("0.00");
+  });
+
+  it("lists every payment category in DR-04 order, each marked refundable as DR-03", async () => {
+    const { app, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.status).toBe(200);
+    const cats = res.body.balances.categories as { category: string; balance: string; refundable: boolean }[];
+    expect(cats.map((c) => c.category)).toEqual(ORDER);
+    for (const c of cats) {
+      expect(Object.keys(c).sort(), c.category).toEqual(["balance", "category", "refundable"]);
+      expect(c.balance, c.category).toBe("0.00");
+      expect(c.refundable, c.category).toBe(REFUNDABLE.includes(c.category));
+    }
+    expect(res.body.balances.refundableTotal).toBe("0.00");
+    expect(res.body.balances.nonRefundableTotal).toBe("0.00");
+  });
+
+  it("takes pay-offs off: refundable balances ₦0, the rest kept (DR-05)", async () => {
+    const { app, store, admin, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await payExample(store, m.id, a.id);
+    await store.payOffs.create({
+      memberId: m.id,
+      method: "CASH",
+      total: 2_500_005n,
+      lines: [
+        { category: "Shares", amount: 1_200_000n },
+        { category: "Savings", amount: 800_000n },
+        { category: "Special Savings", amount: 500_005n },
+      ],
+      createdById: admin.id,
+    });
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.status).toBe(200);
+    expect(res.body.balances.refundableTotal).toBe("0.00");
+    expect(res.body.balances.nonRefundableTotal).toBe("2999.95");
+    expect(balanceOf(res.body, "Shares")).toBe("0.00");
+    expect(balanceOf(res.body, "Development Levy")).toBe("1000.00");
+  });
+
+  it("counts only this member's payments", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const other = await addMember(a.id, "A Two");
+    await payExample(store, other.id, a.id);
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.body.balances.refundableTotal).toBe("0.00");
+    expect(res.body.balances.nonRefundableTotal).toBe("0.00");
+  });
+
+  it("answers 404 when Staff ask for another user's member", async () => {
+    const { app, store, a, b, bearer, addMember } = await build();
+    const m = await addMember(b.id, "B One");
+    await payExample(store, m.id, b.id);
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "not_found" });
+  });
+
+  it("answers 200 to the Super Admin for a member recorded by Staff, Inactive too", async () => {
+    const { app, store, admin, b, bearer, addInactive } = await build();
+    const m = await addInactive(b.id, "B One");
+    await payExample(store, m.id, b.id);
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(admin));
+    expect(res.status).toBe(200);
+    expect(res.body.balances.refundableTotal).toBe("25000.05");
+  });
+
+  it("answers 404 for an unknown id", async () => {
+    const { app, admin, bearer } = await build();
+    const res = await request(app).get("/members/no-such-id/balances").set("Authorization", bearer(admin));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "not_found" });
+  });
+
+  it("answers 500 server_error, with no amounts, when a pay-off took more than the balance (broken data)", async () => {
+    const { app, store, admin, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await store.payOffs.create({
+      memberId: m.id,
+      method: "CASH",
+      total: 100n,
+      lines: [{ category: "Savings", amount: 100n }],
+      createdById: admin.id,
+    });
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(admin));
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "server_error" });
+  });
+
+  it("writes no audit entry", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(a));
+    expect(res.status).toBe(200);
+    expect(await store.audit.list({ limit: 100, offset: 0 })).toEqual([]);
+  });
+});
+
 describe("POST /members/:id/reactivate", () => {
   it("answers 401 without a token, and the member stays Inactive", async () => {
     const { app, store, editA, addInactive } = await build();

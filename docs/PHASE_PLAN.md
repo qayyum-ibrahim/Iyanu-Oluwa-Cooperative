@@ -82,7 +82,7 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
 - U.2c (S) Break-on-purpose for `web/src/session.ts` and `web/src/api.ts`, including the refresh lock (CLAUDE.md rule 10). Done: 38 of 45 caught; A7, A8, A11, A26 test gaps; A14, A16, A25 equivalent (A-195).
 - U.2e (S, proposed at U.2c; runs before U.2d) Tests in `web/test/api.test.ts` for A7 (a failed lock during a signed-in call keeps the session), A8 (two refreshes in a row on one client both reach the server), A11 (a network failure on refresh during a signed-in call keeps the session) and A26 (a refused `restore` sends one refresh and does not call `onSignedOut`), then a full rerun of `mutate-U.2c.mjs`. Done: 45 web tests; rerun 42 of 45 caught, only A14, A16, A25 escape (A-195).
 - U.2d (S) Install jsdom (owner said yes at U.2b; version looked up and pinned, asked again before the install) and click tests for the sign-in, change-password and signed-in screens. Done (D-85, A-196): jsdom 29.1.1, 55 web tests.
-- U.3a (S) Server: `GET /members/:id/balances` (`members.view`, DR-13 scope as `GET /members/:id`): per-category balances, refundable total (the payout) and the "Retained by cooperative" amounts (OQ-14), from `memberBalances` (D-72), amounts as strings (A-18). Followed by U.3b (S) break-on-purpose.
+- U.3a (S) Server: `GET /members/:id/balances` (`members.view`, DR-13 scope as `GET /members/:id`): per-category balances, refundable total (the payout) and the "Retained by cooperative" amounts (OQ-14), from `memberBalances` (D-72), amounts as strings (A-18). Followed by U.3b (S) break-on-purpose. Done (D-86, A-197): 1792 server tests.
 - U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments).
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).
 - U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.
@@ -99,11 +99,11 @@ Sizes stay a first look; an M step may split when it starts.
 | Change own password | `POST /auth/password` | signed in | none |
 | Members list | `GET /members?status=&createdById=` | `members.view` | no name search on the server (in the browser, A-191); the list shows no balance or loan column, unlike the prototype (would need one read per member or a list route; not planned) |
 | Add member | `POST /members` | `members.create` | none |
-| Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, balances (missing) | `members.view`, `payments.view`, `loans.view` | balances route missing (U.3a); no member edit route (`members.edit` is used only by reactivation) |
+| Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, `GET /members/:id/balances` (U.3a) | `members.view`, `payments.view`, `loans.view` | no member edit route (`members.edit` is used only by reactivation) |
 | Record payment | `POST /payments` | `payments.create` | no payment date: the server uses the time recorded (the prototype README orders the form member, date, method, total, breakdown; A-191) |
 | Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); no loan date (time recorded) |
 | Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | no "date spent" (A-172); no paging |
-| Pay-off | balances (missing), `POST /payoffs` | `payoff.process` | balances route missing (U.3a); no pay-off read (A-186) |
+| Pay-off | `GET /members/:id/balances` (U.3a), `POST /payoffs` | `payoff.process` | no pay-off read (A-186) |
 | Reactivate member | `POST /members/:id/reactivate` | `members.edit` | none |
 | Staff and access | `GET /staff`, `POST /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password` | `users.manage` (Super Admin only) | none |
 | Audit | `GET /audit?actorId=&action=&limit=&offset=` | `users.manage` | none |

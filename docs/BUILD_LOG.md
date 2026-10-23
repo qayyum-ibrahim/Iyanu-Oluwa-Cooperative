@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.3a (size S), 2026-10-23: `GET /members/:id/balances` (D-86, A-197)
+
+**Works (verified in this session):** `getMemberBalances` in `server/src/members.ts` and the route in `server/src/members-routes.ts`. `members.view`, DR-13 scope as `GET /members/:id`, reads in one transaction, amounts as strings, refundable and non-refundable totals, 500 on broken data, no audit. `npm run check` (server): 46 files, 1792 passed.
+**Failed first:** typecheck, in the new test only: `store.audit.list({})` needs `limit` and `offset`. Fixed in the test.
+**Tests:** server 1781 to 1792 (11 route tests); web 55 unchanged (not rerun, no web change).
+**Not verified:** no break-on-purpose yet (owed at U.3b); no live check; dev database not touched; the read transaction only tested on the memory store through the route.
+
+---
+
 ## Step U.2d (size S), 2026-10-22: jsdom and click tests for the sign-in screens (D-85, A-196)
 
 **Works (verified in this session):** jsdom 29.1.1 installed exact in `web/` (owner said yes): 37 packages added, `npm audit` 0 vulnerabilities. `web/test/app.test.tsx` runs in jsdom and has 10 new click tests through `App` with a fake `Api` (sign-in refused and good, restore, sign-out, the api's sign-out notice, change password stopped in the browser, changed, wrong current password, Cancel). `npm run check` (web): 4 files, 55 passed. `npm run check` (server): 46 files, 1781 passed.

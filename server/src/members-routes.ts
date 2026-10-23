@@ -13,6 +13,7 @@ import {
 import {
   createMember,
   getMember,
+  getMemberBalances,
   listMembers,
   reactivateMember,
   type MemberActor,
@@ -102,6 +103,20 @@ export function createMembersRouter(deps: GuardDeps): Router {
       return;
     }
     res.status(200).json({ member: result.value });
+  });
+
+  router.get("/:id/balances", requirePermission("members.view"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const result = await getMemberBalances(deps.store, actor, req.params["id"]);
+    if (!result.ok) {
+      sendFailure(res, result.reason);
+      return;
+    }
+    res.status(200).json({ balances: result.value });
   });
 
   // No body is read (DR-16, A-189).

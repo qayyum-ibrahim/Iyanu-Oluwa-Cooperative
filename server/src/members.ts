@@ -2,6 +2,8 @@
 // Staff see only the members they recorded. The Super Admin sees all (OQ-09).
 // Audit details hold the Membership ID only, never a name or phone.
 
+import { memberBalances } from "./balances.js";
+import { koboToNairaString } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import type { MemberRecord, MemberStatus, Store } from "./store.js";
 
@@ -182,6 +184,56 @@ export async function getMember(
   if (!seesAll(actor) && member.createdById !== actor.id) return failure("not_found");
   return { ok: true, value: toView(member) };
 }
+
+/** A member's balances as they may leave this module. Amounts are naira strings (A-18). */
+export interface MemberBalancesView {
+  memberId: string;
+  categories: { category: string; balance: string; refundable: boolean }[];
+  /** What a pay-off would pay out now (DR-05). */
+  refundableTotal: string;
+  /** Shown as "Retained by cooperative" (OQ-14); never paid out. */
+  nonRefundableTotal: string;
+}
+
+/**
+ * One member's balances (DR-03, DR-05, OQ-14), worked out by memberBalances from their payments
+ * less their pay-offs (D-72, D-73). Same access as getMember: members.view, and an unknown id,
+ * a non-text id, or a member a Staff caller may not see all give not_found (DR-13).
+ * The member, payments and pay-offs are read in one transaction, so a pay-off saved in between
+ * cannot be counted against payments read before it. Nothing is written; no audit (A-75).
+ * Broken data makes memberBalances throw BalanceError, which the route answers with 500.
+ */
+export async function getMemberBalances(
+  store: Store,
+  actor: MemberActor,
+  id: unknown,
+): Promise<MemberResult<MemberBalancesView>> {
+  if (!hasPermission(actor.subject, "members.view")) return failure("forbidden");
+  if (typeof id !== "string" || id.length === 0) return failure("not_found");
+
+  return store.transaction(async (tx): Promise<MemberResult<MemberBalancesView>> => {
+    const member = await tx.members.findById(id);
+    if (member === null) return failure("not_found");
+    if (!seesAll(actor) && member.createdById !== actor.id) return failure("not_found");
+
+    const payments = await tx.payments.listByMember(member.id);
+    const balances = memberBalances(payments, await tx.payOffs.listByMember(member.id));
+    return {
+      ok: true,
+      value: {
+        memberId: member.id,
+        categories: balances.categories.map((c) => ({
+          category: c.category,
+          balance: koboToNairaString(c.balance),
+          refundable: c.refundable,
+        })),
+        refundableTotal: koboToNairaString(balances.refundableTotal),
+        nonRefundableTotal: koboToNairaString(balances.nonRefundableTotal),
+      },
+    };
+  });
+}
+
 /**
  * Makes an Inactive member Active again (DR-16, D-71, A-179) and writes one audit entry
  * "member.reactivated" (detail: the Membership ID and the new status). Both in one transaction.

@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.8d (size M), 2026-10-23: the audit viewer (D-97, A-227)
+
+The owner said "fix inconsistencies and go".
+**Changed:** `web/src/api.ts` (`AuditEntry`, `AuditPage`, `AuditFilter`, `auditEntryOf`, `auditPageOf`, `auditQuery`, `listAudit`: `GET /audit` with `actorId`, `action`, `limit`, `offset`; header comment), `web/src/Audit.tsx` (new: `AUDIT_PAGE_SIZE`, `AUDIT_ACTIONS`, `formatTime`, `actorNames`, `actorLabel`, `pageRange`, `auditListMessage`, the page), `web/src/App.tsx` ("Audit log" in the menu with `users.manage`; header comment brought up to date, inconsistency 1), `web/src/styles.css` (audit filters, details, paging). Tests: `web/test/api.test.ts` (`listAudit`, 5), `web/test/app.test.tsx` (helpers 4, screen 7; the fakes have `listAudit`). Docs: ASSUMPTIONS (A-227), PHASE_PLAN (U.8d done; U.8e proposed: the Phase U end break-on-purpose run, which had no step in the plan), TRACEABILITY (R-22), STATUS (also "D-19 to D-97").
+**Inconsistencies fixed:** the `App.tsx` header; the new page in its own file `web/src/Audit.tsx` (not in NEXT_FILES, named in the step header); actor names as A-227 item 2.
+**Works (verified in this session):** `npm run check` (web): 4 files, 308 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose (read-only display code, A-227 item 8).
+
 ## Step U.8c (size M), 2026-10-23: deactivate, reactivate and reset a staff password (D-97, A-226)
 
 The owner said "go".

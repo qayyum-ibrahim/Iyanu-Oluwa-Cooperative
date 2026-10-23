@@ -598,3 +598,31 @@ td.amount {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Audit log page (U.8d) */
+.audit-filters {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 18px;
+}
+.audit-filters .form-actions {
+  grid-column: 1 / -1;
+}
+.audit-detail {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.audit-paging {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 19px;
+  font-size: 13px;
+  color: #53605a;
+}
+.audit-paging div {
+  display: flex;
+  gap: 8px;
+}

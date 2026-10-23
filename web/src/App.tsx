@@ -2,10 +2,11 @@
 // member detail (U.3f), record a payment from member detail (U.4e2), the first payment after
 // adding a member (U.4f), give a loan from member detail (U.5b), the expense list (U.6c), record
 // an expense (U.6d), edit and delete an expense (U.6e), the pay-off on member detail (U.7a),
-// reactivate a member on member detail (U.7b), the staff list and add staff (U.8a). Other screens
-// come in U.8b to U.8d.
+// reactivate a member on member detail (U.7b), the staff list and add staff (U.8a), staff
+// permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d).
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
+import Audit from "./Audit.tsx";
 import ChangePassword from "./ChangePassword.tsx";
 import Expenses from "./Expenses.tsx";
 import Members from "./Members.tsx";
@@ -17,7 +18,7 @@ export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
 export const SESSION_ENDED = "Your session has ended. Please sign in again.";
 export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
 
-type Page = "home" | "password" | "members" | "expenses" | "staff";
+type Page = "home" | "password" | "members" | "expenses" | "staff" | "audit";
 
 type View =
   | { kind: "loading" }
@@ -167,6 +168,15 @@ export default function App({ makeApi = browserApi }: AppProps) {
               Staff &amp; access
             </button>
           )}
+          {can("users.manage") && (
+            <button
+              type="button"
+              className={view.page === "audit" ? "active" : ""}
+              onClick={() => go("audit")}
+            >
+              Audit log
+            </button>
+          )}
         </nav>
         <button type="button" className="secondary" onClick={() => go("password")}>
           Change password
@@ -198,6 +208,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
           />
         ) : view.page === "staff" && can("users.manage") ? (
           <Staff api={api} />
+        ) : view.page === "audit" && can("users.manage") ? (
+          <Audit api={api} me={me.user} />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

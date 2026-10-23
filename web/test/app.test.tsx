@@ -13,6 +13,8 @@ import App, {
 } from "../src/App";
 import type {
   Api,
+  AuditFilter,
+  AuditPage,
   CallResult,
   ChangePasswordResult,
   CreateExpenseResult,
@@ -42,6 +44,15 @@ import type {
   StaffAccount,
   UpdateExpenseResult,
 } from "../src/api.ts";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_PAGE_SIZE,
+  actorLabel,
+  actorNames,
+  auditListMessage,
+  formatTime,
+  pageRange,
+} from "../src/Audit.tsx";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
   EXPENSE_CATEGORIES,
@@ -141,6 +152,7 @@ const idleApi: Api = {
   deactivateStaff: async () => ({ ok: false, reason: "server" }),
   reactivateStaff: async () => ({ ok: false, reason: "server" }),
   resetStaffPassword: async () => ({ ok: false, reason: "server" }),
+  listAudit: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -241,6 +253,8 @@ interface FakeApi extends Api {
   switched: string[];
   /** Every password reset the screen sent, in order. */
   resets: { id: string; password: string }[];
+  /** Every audit query the screen sent, in order. */
+  auditQueries: AuditFilter[];
   signOutFromServer(): void;
 }
 
@@ -305,6 +319,8 @@ function fakeApi(
     switch?: CallResult<StaffAccount>[];
     /** Answers to resetStaffPassword in turn; the last one repeats. */
     reset?: CallResult<StaffAccount>[];
+    /** Answers to listAudit in turn; the last one repeats. */
+    audit?: CallResult<AuditPage>[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -321,6 +337,7 @@ function fakeApi(
     const granted: { id: string; permissions: string[] }[] = [];
     const switched: string[] = [];
     const resets: { id: string; password: string }[] = [];
+    const auditQueries: AuditFilter[] = [];
     const switchTo = (verb: string) => async (id: string) => {
       calls.push(`${verb} ${id}`);
       switched.push(`${verb} ${id}`);
@@ -343,6 +360,7 @@ function fakeApi(
       granted,
       switched,
       resets,
+      auditQueries,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -460,6 +478,17 @@ function fakeApi(
         resets.push({ id, password });
         const answers = opts.reset ?? [];
         return answers[Math.min(resets.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      listAudit: async (filter) => {
+        calls.push("audit");
+        auditQueries.push(filter);
+        const answers = opts.audit ?? [];
+        return (
+          answers[Math.min(auditQueries.length, answers.length) - 1] ?? {
+            ok: true,
+            value: { entries: [], limit: filter.limit, offset: filter.offset, hasMore: false },
+          }
+        );
       },
     };
   };
@@ -3596,5 +3625,176 @@ describe("staff deactivate, reactivate and reset password (jsdom)", () => {
     expect(el("[role=alert]").textContent).toBe("The password was refused. It must be 12 to 128 characters.");
     expect(el<HTMLInputElement>("input[name=password]").value).toBe("a new long password");
     expect(api.calls).toEqual(["staff", "reset s1"]);
+  });
+});
+
+function auditEntry(id: string, extra: Partial<AuditPage["entries"][number]> = {}): AuditPage["entries"][number] {
+  return {
+    id,
+    createdAt: "2026-10-23T09:05:00.000Z",
+    actorId: "u1",
+    action: "staff.created",
+    entityType: "User",
+    entityId: "s1",
+    detail: "permissions=2",
+    ...extra,
+  };
+}
+
+function auditPage(entries: AuditPage["entries"], extra: Partial<AuditPage> = {}): CallResult<AuditPage> {
+  return { ok: true, value: { entries, limit: AUDIT_PAGE_SIZE, offset: 0, hasMore: false, ...extra } };
+}
+
+describe("audit helpers", () => {
+  it("lists every action the server writes, once each", () => {
+    expect(AUDIT_ACTIONS).toHaveLength(22);
+    expect(new Set(AUDIT_ACTIONS).size).toBe(22);
+    expect(AUDIT_ACTIONS).toContain("payoff.processed");
+    expect(AUDIT_ACTIONS).toContain("staff.deactivated");
+    expect(AUDIT_PAGE_SIZE).toBe(50);
+  });
+
+  it("shows the time in Lagos, and odd text as it came", () => {
+    expect(formatTime("2026-10-31T23:30:00.000Z")).toBe("1 Nov 2026, 00:30");
+    expect(formatTime("not a time")).toBe("not a time");
+  });
+
+  it("names the signed-in user first, then staff; no actor is a dash, an unknown id shows as sent", () => {
+    const names = actorNames(ME.user, [staffAccount("s1", "Staff One"), staffAccount("u1", "Not Me")]);
+    expect([...names]).toEqual([
+      ["u1", "You (Ada Test)"],
+      ["s1", "Staff One"],
+    ]);
+    expect(actorLabel(null, names)).toBe("—");
+    expect(actorLabel("s1", names)).toBe("Staff One");
+    expect(actorLabel("zz9", names)).toBe("zz9");
+  });
+
+  it("gives the page range and the messages", () => {
+    expect(pageRange(0, 0)).toBe("No entries");
+    expect(pageRange(50, 50)).toBe("Entries 51–100");
+    expect(auditListMessage("invalid_input")).toMatch(/Press Clear/);
+    expect(auditListMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(auditListMessage("signed_out")).toBeNull();
+    expect(auditListMessage("server")).toMatch(/went wrong/);
+  });
+});
+
+async function openAudit() {
+  await click(button("Audit log"));
+}
+
+describe("audit log (jsdom)", () => {
+  it("has no Audit log button without users.manage", async () => {
+    await mount(fakeApi({ restore: { ...ME, permissions: ["members.view", "expenses.view"] } }));
+    expect(() => button("Audit log")).toThrow();
+  });
+
+  it("reads the staff and the first page, and shows each entry with its user", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        staff: [staffAccount("s1", "Staff One")],
+        audit: [
+          auditPage([
+            auditEntry("a3", { actorId: "s1", action: "payment.created", entityType: "Payment", detail: null }),
+            auditEntry("a2", { actorId: null, action: "login.failure", entityType: "User", detail: "reason=x" }),
+            auditEntry("a1", { actorId: "gone", createdAt: "2026-10-31T23:30:00.000Z" }),
+          ]),
+        ],
+      }),
+    );
+    await openAudit();
+    expect(el("h1").textContent).toBe("Audit log");
+    expect(api.calls).toEqual(["staff", "audit"]);
+    expect(api.auditQueries).toEqual([{ limit: 50, offset: 0 }]);
+    expect(rowTexts()).toEqual([
+      "23 Oct 2026, 10:05Staff Onepayment.createdPayment—",
+      "23 Oct 2026, 10:05—login.failureUserreason=x",
+      "1 Nov 2026, 00:30gonestaff.createdUserpermissions=2",
+    ]);
+    expect(text()).toContain("Entries 1–3");
+    expect(button("Newer").disabled).toBe(true);
+    expect(button("Older").disabled).toBe(true);
+  });
+
+  it("offers the signed-in user and the staff in the user filter, and every action", async () => {
+    await mount(fakeApi({ restore: STAFF_MANAGER, staff: [staffAccount("s1", "Staff One")] }));
+    await openAudit();
+    const users = Array.from(select("actorId").options).map((o) => [o.value, o.textContent]);
+    expect(users).toEqual([
+      ["", "All users"],
+      ["u1", "You (Ada Test)"],
+      ["s1", "Staff One"],
+    ]);
+    expect(select("action").options).toHaveLength(23);
+    expect(text()).toContain("No entries found.");
+  });
+
+  it("still shows the log with ids when the staff list cannot be read", async () => {
+    await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        staffList: { ok: false, reason: "network" },
+        audit: [auditPage([auditEntry("a1", { actorId: "s1" })])],
+      }),
+    );
+    await openAudit();
+    expect(rowTexts()).toEqual(["23 Oct 2026, 10:05s1staff.createdUserpermissions=2"]);
+    expect(container?.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("sends the filters on Apply from the first page, and Clear empties them", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [staffAccount("s1", "Staff One")] }));
+    await openAudit();
+    await choose(select("actorId"), "s1");
+    await choose(select("action"), "staff.deactivated");
+    expect(api.auditQueries).toHaveLength(1);
+    await click(button("Apply"));
+    await click(button("Clear"));
+    expect(api.auditQueries).toEqual([
+      { limit: 50, offset: 0 },
+      { actorId: "s1", action: "staff.deactivated", limit: 50, offset: 0 },
+      { limit: 50, offset: 0 },
+    ]);
+    expect(select("actorId").value).toBe("");
+    expect(select("action").value).toBe("");
+  });
+
+  it("moves to older and newer pages and keeps the filters", async () => {
+    const full = Array.from({ length: 50 }, (_, i) => auditEntry(`a${i}`));
+    const api = await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        audit: [
+          auditPage(full, { hasMore: true }),
+          auditPage(full, { hasMore: true }),
+          auditPage([auditEntry("b1")], { offset: 50 }),
+          auditPage(full, { hasMore: true }),
+        ],
+      }),
+    );
+    await openAudit();
+    await choose(select("action"), "staff.created");
+    await click(button("Apply"));
+    expect(text()).toContain("Entries 1–50");
+    await click(button("Older"));
+    expect(text()).toContain("Entries 51–51");
+    expect(button("Older").disabled).toBe(true);
+    await click(button("Newer"));
+    expect(api.auditQueries).toEqual([
+      { limit: 50, offset: 0 },
+      { action: "staff.created", limit: 50, offset: 0 },
+      { action: "staff.created", limit: 50, offset: 50 },
+      { action: "staff.created", limit: 50, offset: 0 },
+    ]);
+    expect(text()).toContain("Entries 1–50");
+  });
+
+  it("shows the message when the log cannot be read", async () => {
+    await mount(fakeApi({ restore: STAFF_MANAGER, audit: [{ ok: false, reason: "invalid_input" }] }));
+    await openAudit();
+    expect(el("[role=alert]").textContent).toBe("The filters were refused. Press Clear and try again.");
+    expect(rowTexts()).toHaveLength(0);
   });
 });

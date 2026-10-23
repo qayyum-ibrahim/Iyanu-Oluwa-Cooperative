@@ -1815,3 +1815,91 @@ describe("resetStaffPassword", () => {
     expect(await wrong.api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: false, reason: "server" });
   });
 });
+
+const ENTRY = {
+  id: "a1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+  actorId: "u1",
+  action: "staff.created",
+  entityType: "User",
+  entityId: "s1",
+  detail: "permissions=2",
+};
+
+const PAGE = { entries: [ENTRY], limit: 50, offset: 0, hasMore: false };
+
+describe("listAudit", () => {
+  it("reads GET /audit with the page and no filters", async () => {
+    const quiet = { ...ENTRY, id: "a2", actorId: null, entityId: null, detail: null };
+    const page = { ...PAGE, entries: [ENTRY, quiet], hasMore: true };
+    const { api, calls } = signedIn(() => json(200, page));
+    expect(await api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: true, value: page });
+    expect(calls).toEqual([{ path: "/api/audit?limit=50&offset=0", method: "GET", auth: "Bearer acc1", body: null }]);
+  });
+
+  it("sends the actor and action filters in a fixed order, each value made safe", async () => {
+    const { api, calls } = signedIn(() => json(200, PAGE));
+    await api.listAudit({ action: "login success", actorId: "a/b?c", limit: 20, offset: 40 });
+    expect(calls[0]?.path).toBe("/api/audit?actorId=a%2Fb%3Fc&action=login%20success&limit=20&offset=40");
+  });
+
+  it("on a 401 refreshes once and reads again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, PAGE) : json(401, {});
+    });
+    expect(await api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: true, value: PAGE });
+    expect(calls.map((c) => c.path)).toEqual(["/api/audit?limit=50&offset=0", "/api/refresh", "/api/audit?limit=50&offset=0"]);
+  });
+
+  it("maps 400, 403, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a page of the wrong shape and for a 201", async () => {
+    const bad: unknown[] = [
+      null,
+      [],
+      {},
+      { ...PAGE, entries: null },
+      { ...PAGE, entries: "" },
+      { ...PAGE, entries: [null] },
+      { ...PAGE, entries: [ENTRY, { ...ENTRY, id: 2 }] },
+      { ...PAGE, entries: [{ ...ENTRY, createdAt: undefined }] },
+      { ...PAGE, entries: [{ ...ENTRY, action: null }] },
+      { ...PAGE, entries: [{ ...ENTRY, entityType: 1 }] },
+      { ...PAGE, entries: [{ ...ENTRY, actorId: 1 }] },
+      { ...PAGE, entries: [{ ...ENTRY, entityId: undefined }] },
+      { ...PAGE, entries: [{ ...ENTRY, detail: {} }] },
+      { ...PAGE, limit: "50" },
+      { ...PAGE, limit: 0 },
+      { ...PAGE, limit: 1.5 },
+      { ...PAGE, offset: -1 },
+      { ...PAGE, offset: undefined },
+      { ...PAGE, hasMore: "false" },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, PAGE));
+    expect(await wrong.api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: false, reason: "server" });
+  });
+});

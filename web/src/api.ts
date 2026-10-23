@@ -4,7 +4,8 @@
 // expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
 // paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
 // staff list and add staff (server/src/staff-routes.ts, U.8a), a staff account's permissions
-// (U.8b), and deactivate, reactivate and reset a staff password (U.8c). Tokens travel in the JSON body
+// (U.8b), deactivate, reactivate and reset a staff password (U.8c), and the audit log
+// (server/src/audit-routes.ts, U.8d). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -239,6 +240,34 @@ export interface NewStaff {
   permissions: string[];
 }
 
+/** One audit entry as GET /audit sends it (AuditEntryView in server/src/audit-view.ts). */
+export interface AuditEntry {
+  id: string;
+  createdAt: string;
+  /** Null for an entry with no actor, such as a failed sign-in (A-28). */
+  actorId: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  detail: string | null;
+}
+
+/** GET /audit: newest first; hasMore says whether a page follows. */
+export interface AuditPage {
+  entries: AuditEntry[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/** The query of GET /audit. A filter left out is not filtered on. */
+export interface AuditFilter {
+  actorId?: string;
+  action?: string;
+  limit: number;
+  offset: number;
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -356,6 +385,7 @@ export interface Api {
   deactivateStaff(id: string): Promise<CallResult<StaffAccount>>;
   reactivateStaff(id: string): Promise<CallResult<StaffAccount>>;
   resetStaffPassword(id: string, password: string): Promise<CallResult<StaffAccount>>;
+  listAudit(filter: AuditFilter): Promise<CallResult<AuditPage>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -630,6 +660,49 @@ function staffOf(value: unknown): StaffAccount | null {
     permissions,
     createdAt: v.createdAt,
   };
+}
+
+const AUDIT_TEXT_FIELDS = ["id", "createdAt", "action", "entityType"] as const;
+const AUDIT_NULLABLE_FIELDS = ["actorId", "entityId", "detail"] as const;
+
+function auditEntryOf(value: unknown): AuditEntry | null {
+  if (!isObject(value)) return null;
+  for (const field of AUDIT_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  for (const field of AUDIT_NULLABLE_FIELDS) {
+    if (value[field] !== null && typeof value[field] !== "string") return null;
+  }
+  const v = value as Record<(typeof AUDIT_TEXT_FIELDS)[number], string> &
+    Record<(typeof AUDIT_NULLABLE_FIELDS)[number], string | null>;
+  return {
+    id: v.id,
+    createdAt: v.createdAt,
+    actorId: v.actorId,
+    action: v.action,
+    entityType: v.entityType,
+    entityId: v.entityId,
+    detail: v.detail,
+  };
+}
+
+function auditPageOf(value: unknown): AuditPage | null {
+  if (!isObject(value)) return null;
+  const entries = listOf(auditEntryOf)(value["entries"]);
+  const { limit, offset, hasMore } = value;
+  if (entries === null || typeof hasMore !== "boolean") return null;
+  if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(offset)) return null;
+  if ((limit as number) < 1 || (offset as number) < 0) return null;
+  return { entries, limit: limit as number, offset: offset as number, hasMore };
+}
+
+/** The query string for GET /audit, fields in a fixed order, each value made safe. */
+function auditQuery(filter: AuditFilter): string {
+  const parts: string[] = [];
+  if (filter.actorId !== undefined) parts.push(`actorId=${encodeURIComponent(filter.actorId)}`);
+  if (filter.action !== undefined) parts.push(`action=${encodeURIComponent(filter.action)}`);
+  parts.push(`limit=${filter.limit}`, `offset=${filter.offset}`);
+  return `?${parts.join("&")}`;
 }
 
 /** The query string for GET /expenses, fields in a fixed order, each value made safe. */
@@ -1196,6 +1269,10 @@ export function createApi(deps: ApiDeps): Api {
         "staff",
         staffOf,
       );
+    },
+
+    listAudit(filter) {
+      return call(`/audit${auditQuery(filter)}`, {}, 200, null, auditPageOf);
     },
   };
 }

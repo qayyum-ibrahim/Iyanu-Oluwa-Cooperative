@@ -7,4 +7,5 @@ web/src/api.ts
 web/src/Members.tsx
 web/test/api.test.ts
 web/test/app.test.tsx
+web/vite.config.ts
 web/package.json

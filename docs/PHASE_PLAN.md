@@ -87,7 +87,8 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.3d (S) Member calls in `web/src/api.ts` (list, read one, add, balances). Done: 62 web tests.
   - U.3e (M) Members list screen and add member form. Done (A-200): 74 web tests.
   - U.3f (M) Member detail: profile, balances, payments, loans; the payments and loans list calls in `api.ts`. Done (A-201): 87 web tests.
-  - U.3g (S) Break-on-purpose for the new `api.ts` code and the money display (CLAUDE.md rule 10).
+  - U.3g (S) Break-on-purpose for the new `api.ts` code and the money display (CLAUDE.md rule 10). Done: 58 of 70 caught; 11 test gaps, V9 equivalent on a Lagos-time machine only (A-202).
+  - U.3h (S, proposed at U.3g) Tests in `web/test/api.test.ts` and `web/test/app.test.tsx` for the U.3g gaps (A3, A4, A7, A14, A19, A26, A27, A31, V13, V23, V24) and a run in another time zone for V9, then a full rerun of `mutate-U.3g.mjs`.
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).
 - U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.
 - U.6 (M) Expenses: record, list with filters and total, edit, delete.

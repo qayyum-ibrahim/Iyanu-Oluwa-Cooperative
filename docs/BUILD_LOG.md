@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.3g (size S), 2026-10-23: break-on-purpose for the U.3d to U.3f web code (A-202)
+
+**Works (verified in this session):** `node ~/Desktop/mutate-U.3g.mjs` (not in git): baseline 73 passed; 70 mutations (42 in `web/src/api.ts`, 28 in `web/src/Members.tsx`), 58 caught, 12 escaped, 0 errors, 0 not applied; files restored: yes; `git status --short` empty. `npm run check` (web): 4 files, 87 passed. `npm run check` (server): 46 files, 1794 passed. No source change kept.
+**Escaped:** test gaps A3, A4, A7, A14, A19, A26, A27, A31, V13, V23, V24; V9 equivalent only because this machine runs in Lagos time (A-202).
+**Not verified:** the V9 result on a machine in another time zone; the screen in a real browser. Gaps go to U.3h.
+
+---
+
 ## Step U.3f (size M), 2026-10-23: member detail (A-201)
 
 **Works (verified in this session):** `web/src/api.ts`: `listPayments(memberId)` (`GET /payments?memberId=`) and `listLoans(memberId)` (`GET /loans?memberId=`), id put in the query with `encodeURIComponent`, every field checked, amounts must be two-decimal naira strings, one bad item refuses the whole list. `web/src/Members.tsx`: a View button per row opens member detail: profile, balances (refundable total, "Retained by cooperative", each category), loans (with `loans.view`), payments newest first (with `payments.view`), "On loan" badge, Back keeps the filter and search; `formatNaira` (adds ₦ and commas to the string) and `formatDate` (day in Lagos). `App.tsx` passes the two view permissions; `styles.css` has the detail styles. Docs fixes: TRACEABILITY R-01 ("No screen yet" removed) and STATUS Next step brief (one review order). `npm run check` (web): 4 files, 87 passed. `npm run check` (server): 46 files, 1794 passed.

@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.3b (size S), 2026-10-23: break-on-purpose for U.3a (A-198)
+
+**Works (verified in this session):** `~/Desktop/mutate-U.3b.mjs` (not in git): baseline 109 (`test/members-routes.test.ts`, `test/members.test.ts`); 32 mutations, 24 caught, 8 escaped (G1, G2, G3, G9, G12, R1, R2, R9), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. `npm run check` (server): 46 files, 1792 passed.
+**Escapes:** test gaps G2, R2 (`members.create` checked instead of `members.view`), G12 (reads outside one transaction); equivalent G1, R1, G3, G9, R9 (A-198). Fix proposed as U.3c (S).
+**Docs fixes:** STATUS item 12 now D-55 to D-86; A-197 item 4 now cites the Prisma 7 and SQLite isolation docs.
+**Tests:** server 1792 unchanged; web 55 unchanged (not rerun).
+**Not verified:** the dev database's journal mode (WAL or not); no live check; dev database not touched.
+
+---
+
 ## Step U.3a (size S), 2026-10-23: `GET /members/:id/balances` (D-86, A-197)
 
 **Works (verified in this session):** `getMemberBalances` in `server/src/members.ts` and the route in `server/src/members-routes.ts`. `members.view`, DR-13 scope as `GET /members/:id`, reads in one transaction, amounts as strings, refundable and non-refundable totals, 500 on broken data, no audit. `npm run check` (server): 46 files, 1792 passed.

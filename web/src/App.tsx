@@ -1,7 +1,7 @@
 // Sign-in, sign-out and change own password (U.2, D-81), members list and add member (U.3e),
 // member detail (U.3f), record a payment from member detail (U.4e2), the first payment after
-// adding a member (U.4f), give a loan from member detail (U.5b), the expense list (U.6c). Other
-// screens come in U.6d to U.8.
+// adding a member (U.4f), give a loan from member detail (U.5b), the expense list (U.6c), record
+// an expense (U.6d). Other screens come in U.6e to U.8.
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import ChangePassword from "./ChangePassword.tsx";
@@ -176,7 +176,7 @@ export default function App({ makeApi = browserApi }: AppProps) {
             canGiveLoan={can("loans.disburse")}
           />
         ) : view.page === "expenses" && can("expenses.view") ? (
-          <Expenses api={api} />
+          <Expenses api={api} canCreate={can("expenses.create")} />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

@@ -1054,3 +1054,111 @@ describe("listExpenses", () => {
     }
   });
 });
+
+const NEW_EXPENSE = {
+  idempotencyKey: "key-0000000000000003",
+  category: "Others",
+  method: "CASH" as const,
+  spentOn: "2026-10-21",
+  amount: "15000.50",
+  description: "Generator fuel",
+  narration: "For the office",
+};
+
+const SENT_EXPENSE = {
+  category: "Others",
+  method: "CASH",
+  spentOn: "2026-10-21",
+  amount: "15000.50",
+  description: "Generator fuel",
+  narration: "For the office",
+};
+
+describe("createExpense", () => {
+  it("posts the expense with the key in the Idempotency-Key header, not in the body", async () => {
+    const { api, calls, keys } = signedIn(() => json(201, { expense: EXPENSE }));
+    expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: true, expense: EXPENSE, replayed: false });
+    expect(calls).toEqual([{ path: "/api/expenses", method: "POST", auth: "Bearer acc1", body: SENT_EXPENSE }]);
+    expect(keys).toEqual(["key-0000000000000003"]);
+  });
+
+  it("reads the Idempotent-Replayed header", async () => {
+    const { api } = signedIn(() => replayed({ expense: EXPENSE }));
+    expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: true, expense: EXPENSE, replayed: true });
+  });
+
+  it("on a 401 refreshes once and sends the same key and body again", async () => {
+    const { api, calls, keys } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(201, { expense: EXPENSE }) : json(401, {});
+    });
+    expect(await api.createExpense(NEW_EXPENSE)).toMatchObject({ ok: true, replayed: false });
+    expect(calls.map((c) => c.path)).toEqual(["/api/expenses", "/api/refresh", "/api/expenses"]);
+    expect(calls[2]?.body).toEqual(SENT_EXPENSE);
+    expect(keys[2]).toBe("key-0000000000000003");
+  });
+
+  it("passes idempotency_conflict on, and answers server for any other 409", async () => {
+    const { api } = signedIn(() => json(409, { error: "idempotency_conflict" }));
+    expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "idempotency_conflict" });
+    for (const body of [{ error: "active_loan" }, { error: "toString" }, null, "x"]) {
+      const other = signedIn(() => json(409, body));
+      expect(await other.api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("passes the code of a 400 on", async () => {
+    const day = signedIn(() => json(400, { error: "invalid_input", code: "future_spent_on" }));
+    expect(await day.api.createExpense(NEW_EXPENSE)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "future_spent_on",
+    });
+    for (const body of [{ error: "invalid_input", code: 3 }, { error: "invalid_input" }, null]) {
+      const { api } = signedIn(() => json(400, body));
+      expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "invalid_input" });
+    }
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 201 of the wrong shape and for a 200", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { expense: null },
+      { expense: { ...EXPENSE, spentOn: undefined } },
+      { expense: { ...EXPENSE, spentOn: "21-10-2026" } },
+      { expense: { ...EXPENSE, amount: 15000.5 } },
+      { expense: { ...EXPENSE, amount: "15000.5" } },
+      { expense: { ...EXPENSE, method: "CHEQUE" } },
+      { expense: { ...EXPENSE, narration: null } },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(201, body));
+      expect(await api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, { expense: EXPENSE }));
+    expect(await wrong.api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "server" });
+  });
+});

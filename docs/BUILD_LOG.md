@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.6d (size M), 2026-10-23: record an expense on the Expenses page (D-95, A-220)
+
+The owner said "go" after Claude proposed splitting U.6d (L) into U.6d record and U.6e edit and delete (D-95).
+**Changed:** `web/src/api.ts` (`NewExpense`, `CreateExpenseResult`, `expenseFailureOf`, `createExpense` with the key in the `Idempotency-Key` header and the reply shape checked), `web/src/Expenses.tsx` (`MANUAL_EXPENSE_CATEGORIES`, `EXPENSE_TEXT_MAX`, `checkExpense`, `expenseMessage`, `savedExpenseMessage`, `ExpenseForm` with one key per attempt; "+ Record expense" with `canCreate`; notice; list read again after a save; header comment), `web/src/App.tsx` (passes `expenses.create`; header comment), `web/src/styles.css` (expense form beside the payment and loan forms). Tests: `web/test/api.test.ts` (`createExpense`, 7), `web/test/app.test.tsx` (expense form helpers 4, expense form 9; fakes have `createExpense`). Docs: DECISIONS (D-95), ASSUMPTIONS (A-220), PHASE_PLAN (U.6d split, U.6e), TRACEABILITY (R-10, R-11), STATUS.
+**Works (verified in this session):** first `npm run check` (web) stopped at the typecheck: my test constant `FORM` clashed with the payment test's `FORM` (TS2451); I renamed mine `EXPENSE_FORM` (test file only). Rerun `npm run check` (web): 4 files, 188 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (the key handling goes into the Phase U end run, D-90).
+
+---
+
 ## Step U.6c (size M), 2026-10-23: Expenses page with the list, filters and total (A-219)
 
 The owner said "fix inconsistencies and go".

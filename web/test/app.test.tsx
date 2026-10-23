@@ -15,6 +15,7 @@ import type {
   Api,
   CallResult,
   ChangePasswordResult,
+  CreateExpenseResult,
   CreateLoanResult,
   CreatePaymentResult,
   Expense,
@@ -26,6 +27,7 @@ import type {
   Member,
   MemberBalances,
   MemberStatusFilter,
+  NewExpense,
   NewLoan,
   NewPayment,
   Payment,
@@ -34,10 +36,16 @@ import type {
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
   EXPENSE_CATEGORIES,
+  EXPENSE_TEXT_MAX,
+  MANUAL_EXPENSE_CATEGORIES,
   NO_FILTER,
+  checkExpense,
   checkExpenseFilter,
   expenseCount,
   expenseListMessage,
+  expenseMessage,
+  savedExpenseMessage,
+  type ExpenseFormInput,
 } from "../src/Expenses.tsx";
 import {
   LOAN_TEXT_MAX,
@@ -83,6 +91,7 @@ const idleApi: Api = {
   createPayment: async () => ({ ok: false, reason: "server" }),
   createLoan: async () => ({ ok: false, reason: "server" }),
   listExpenses: async () => ({ ok: false, reason: "server" }),
+  createExpense: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -165,6 +174,8 @@ interface FakeApi extends Api {
   lent: NewLoan[];
   /** Every expense list query the screen sent, in order. */
   expenseQueries: ExpenseFilter[];
+  /** Every expense the screen recorded, in order. */
+  spent: NewExpense[];
   signOutFromServer(): void;
 }
 
@@ -208,6 +219,8 @@ function fakeApi(
     /** Answers to createLoan in turn; the last one repeats. */
     lend?: CreateLoanResult[];
     expenses?: CallResult<ExpenseList>;
+    /** Answers to createExpense in turn; the last one repeats. */
+    spend?: CreateExpenseResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -215,11 +228,13 @@ function fakeApi(
     const paid: NewPayment[] = [];
     const lent: NewLoan[] = [];
     const expenseQueries: ExpenseFilter[] = [];
+    const spent: NewExpense[] = [];
     return {
       calls,
       paid,
       lent,
       expenseQueries,
+      spent,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -277,6 +292,12 @@ function fakeApi(
         calls.push("expenses");
         expenseQueries.push(filter);
         return opts.expenses ?? { ok: true, value: { expenses: [], total: "0.00" } };
+      },
+      createExpense: async (input) => {
+        calls.push("spend");
+        spent.push(input);
+        const answers = opts.spend ?? [];
+        return answers[Math.min(spent.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
     };
   };
@@ -1958,5 +1979,279 @@ describe("expenses page (jsdom)", () => {
     expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
     expect(rowTexts()).toHaveLength(0);
     expect(container?.querySelector(".expense-total")).toBeNull();
+  });
+});
+
+const EXPENSE_FORM: ExpenseFormInput = {
+  spentOn: "2026-10-20",
+  category: "Office Maintenance",
+  method: "CASH",
+  amount: "15000",
+  description: " Plumber ",
+  narration: "",
+};
+
+describe("expense form helpers", () => {
+  it("offers only the categories a person may pick, in DR-11 order", () => {
+    expect(MANUAL_EXPENSE_CATEGORIES).toEqual([
+      "Expenses",
+      "Allowances",
+      "Members Credit",
+      "Asset Purchase",
+      "Office Maintenance",
+      "Payment to Union",
+      "Payment to Apexes",
+      "Others",
+    ]);
+  });
+
+  it("gives the fields to send, the amount as a naira string and the texts trimmed", () => {
+    expect(checkExpense(EXPENSE_FORM, "2026-10-23")).toEqual({
+      ok: true,
+      value: {
+        category: "Office Maintenance",
+        method: "CASH",
+        spentOn: "2026-10-20",
+        amount: "15000.00",
+        description: "Plumber",
+        narration: "",
+      },
+    });
+    expect(
+      checkExpense({ ...EXPENSE_FORM, category: "Others", narration: " Fuel ", spentOn: "2026-10-23" }, "2026-10-23"),
+    ).toMatchObject({ ok: true, value: { category: "Others", narration: "Fuel", spentOn: "2026-10-23" } });
+  });
+
+  it("refuses each bad field in the server's order", () => {
+    const refused = (input: ExpenseFormInput) => {
+      const result = checkExpense(input, "2026-10-23");
+      return result.ok ? null : result.message;
+    };
+    expect(refused({ ...EXPENSE_FORM, category: "", spentOn: "x" })).toBe("Choose a category.");
+    expect(refused({ ...EXPENSE_FORM, category: "Loan" })).toBe("Choose a category.");
+    expect(refused({ ...EXPENSE_FORM, category: "Membership Withdrawal" })).toBe("Choose a category.");
+    expect(refused({ ...EXPENSE_FORM, spentOn: "2026-02-30", amount: "x" })).toBe("Enter the expense date.");
+    expect(refused({ ...EXPENSE_FORM, spentOn: "2026-10-24" })).toBe("The expense date cannot be after today.");
+    expect(refused({ ...EXPENSE_FORM, amount: "0", description: "x".repeat(201) })).toBe(
+      "Enter an amount above ₦0.00, with at most 2 decimals.",
+    );
+    expect(refused({ ...EXPENSE_FORM, amount: "1.005" })).toBe("Enter an amount above ₦0.00, with at most 2 decimals.");
+    expect(refused({ ...EXPENSE_FORM, description: "x".repeat(EXPENSE_TEXT_MAX + 1) })).toBe(
+      "The description may have at most 200 characters.",
+    );
+    expect(refused({ ...EXPENSE_FORM, description: ` ${"x".repeat(EXPENSE_TEXT_MAX)} ` })).toBeNull();
+    expect(refused({ ...EXPENSE_FORM, category: "Others", narration: "x".repeat(EXPENSE_TEXT_MAX + 1) })).toBe(
+      "The narration may have at most 200 characters.",
+    );
+    expect(refused({ ...EXPENSE_FORM, category: "Others", narration: "  " })).toBe(
+      "Others needs a narration: say what the money was for.",
+    );
+    expect(refused({ ...EXPENSE_FORM, narration: "Fuel" })).toBe("Only Others takes a narration.");
+  });
+
+  it("maps each refusal to a message, and names the saved expense", () => {
+    expect(expenseMessage({ ok: false, reason: "idempotency_conflict" })).toMatch(/already sent/);
+    expect(expenseMessage({ ok: false, reason: "invalid_input", code: "system_only" })).toBe(
+      "Loan and Membership Withdrawal are recorded by the system.",
+    );
+    expect(expenseMessage({ ok: false, reason: "invalid_input", code: "future_spent_on" })).toBe(
+      "The expense date cannot be after today.",
+    );
+    expect(expenseMessage({ ok: false, reason: "invalid_input", code: "toString" })).toMatch(/was refused/);
+    expect(expenseMessage({ ok: false, reason: "invalid_input" })).toMatch(/was refused/);
+    expect(expenseMessage({ ok: false, reason: "forbidden" })).toMatch(/permission/);
+    expect(expenseMessage({ ok: false, reason: "signed_out" })).toBeNull();
+    expect(expenseMessage({ ok: false, reason: "network" })).toMatch(/not be saved twice/);
+    expect(expenseMessage({ ok: false, reason: "server" })).toMatch(/not be saved twice/);
+    expect(
+      savedExpenseMessage({
+        ok: true,
+        replayed: false,
+        expense: expense("e9", "2026-10-20", "15000.00", { category: "Office Maintenance" }),
+      }),
+    ).toBe("Office Maintenance expense of ₦15,000.00 on 20 Oct 2026 recorded.");
+  });
+});
+
+const EXPENSE_CREATOR: Me = {
+  ...ME,
+  user: { ...ME.user, role: "STAFF" },
+  permissions: ["expenses.view", "expenses.create"],
+};
+
+function recorded(e: Expense): CreateExpenseResult {
+  return { ok: true, expense: e, replayed: false };
+}
+
+function formSelect(name: string): HTMLSelectElement {
+  return el(`.expense-form select[name=${name}]`);
+}
+
+async function openExpenseForm() {
+  await openExpenses();
+  await click(button("+ Record expense"));
+}
+
+async function submitExpense() {
+  await click(el(".expense-form button[type=submit]"));
+}
+
+describe("expense form (jsdom)", () => {
+  it("has no Record expense button without expenses.create", async () => {
+    await mount(fakeApi({ restore: EXPENSE_VIEWER }));
+    await openExpenses();
+    expect(() => button("+ Record expense")).toThrow();
+  });
+
+  it("opens with today's day in Lagos, no category, Bank transfer; only the hand-picked categories", async () => {
+    await mount(fakeApi({ restore: EXPENSE_CREATOR }));
+    await openExpenseForm();
+    expect(el<HTMLInputElement>("input[name=spentOn]").value).toBe(lagosToday());
+    expect(el<HTMLInputElement>("input[name=spentOn]").max).toBe(lagosToday());
+    expect(formSelect("category").value).toBe("");
+    expect(formSelect("method").value).toBe("BANK_TRANSFER");
+    expect(el<HTMLInputElement>("input[name=amount]").value).toBe("");
+    expect(el<HTMLInputElement>("input[name=description]").maxLength).toBe(EXPENSE_TEXT_MAX);
+    expect(Array.from(formSelect("category").options, (o) => o.value)).toEqual([
+      "",
+      ...MANUAL_EXPENSE_CATEGORIES,
+    ]);
+    expect(() => button("+ Record expense")).toThrow();
+  });
+
+  it("shows the narration only for Others, and empties it when Others is left", async () => {
+    await mount(fakeApi({ restore: EXPENSE_CREATOR }));
+    await openExpenseForm();
+    expect(container?.querySelector("input[name=narration]")).toBeNull();
+    await choose(formSelect("category"), "Others");
+    expect(el<HTMLInputElement>("input[name=narration]").maxLength).toBe(EXPENSE_TEXT_MAX);
+    await type(el("input[name=narration]"), "Fuel");
+    await choose(formSelect("category"), "Expenses");
+    expect(container?.querySelector("input[name=narration]")).toBeNull();
+    await choose(formSelect("category"), "Others");
+    expect(el<HTMLInputElement>("input[name=narration]").value).toBe("");
+  });
+
+  it("records the expense, shows the notice and reads the list again with the filters in use", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_CREATOR,
+        spend: [recorded(expense("e9", "2026-10-20", "15000.00", { category: "Others", method: "CASH" }))],
+      }),
+    );
+    await openExpenses();
+    await choose(select("method"), "CASH");
+    await click(button("Apply"));
+    await click(button("+ Record expense"));
+    await type(el("input[name=spentOn]"), "2026-10-20");
+    await choose(formSelect("category"), "Others");
+    await type(el("input[name=amount]"), "15000");
+    await choose(formSelect("method"), "CASH");
+    await type(el("input[name=description]"), " Generator ");
+    await type(el("input[name=narration]"), " Fuel ");
+    await submitExpense();
+
+    expect(api.spent).toHaveLength(1);
+    const sent = api.spent[0]!;
+    expect(sent.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
+    expect({ ...sent, idempotencyKey: "" }).toEqual({
+      idempotencyKey: "",
+      category: "Others",
+      method: "CASH",
+      spentOn: "2026-10-20",
+      amount: "15000.00",
+      description: "Generator",
+      narration: "Fuel",
+    });
+    expect(el("[role=status]").textContent).toBe("Others expense of ₦15,000.00 on 20 Oct 2026 recorded.");
+    expect(container?.querySelector(".expense-form")).toBeNull();
+    expect(api.expenseQueries).toEqual([{}, { method: "CASH" }, { method: "CASH" }]);
+    expect(button("+ Record expense")).toBeTruthy();
+  });
+
+  it("sends the same key after a network failure, and a new key after any change", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_CREATOR,
+        spend: [
+          { ok: false, reason: "network" },
+          { ok: false, reason: "server" },
+          recorded(expense("e9", lagosToday(), "16000.00")),
+        ],
+      }),
+    );
+    await openExpenseForm();
+    await choose(formSelect("category"), "Expenses");
+    await type(el("input[name=amount]"), "15000");
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toBe(
+      "Cannot reach the server. Press Record expense again: it will not be saved twice.",
+    );
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toContain("Something went wrong.");
+    expect(api.spent[1]).toEqual(api.spent[0]);
+
+    await type(el("input[name=amount]"), "16000");
+    await submitExpense();
+    expect(api.spent).toHaveLength(3);
+    expect(api.spent[2]!.amount).toBe("16000.00");
+    expect(api.spent[2]!.idempotencyKey).not.toBe(api.spent[0]!.idempotencyKey);
+    expect(el("[role=status]").textContent).toContain("of ₦16,000.00");
+  });
+
+  it("makes a new key after idempotency_conflict", async () => {
+    const api = await mount(
+      fakeApi({ restore: EXPENSE_CREATOR, spend: [{ ok: false, reason: "idempotency_conflict" }] }),
+    );
+    await openExpenseForm();
+    await choose(formSelect("category"), "Expenses");
+    await type(el("input[name=amount]"), "15000");
+    await submitExpense();
+    await submitExpense();
+    expect(api.spent).toHaveLength(2);
+    expect(api.spent[1]!.idempotencyKey).not.toBe(api.spent[0]!.idempotencyKey);
+  });
+
+  it("stops a missing category and a date after today, with no call", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_CREATOR }));
+    await openExpenseForm();
+    await type(el("input[name=amount]"), "15000");
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toBe("Choose a category.");
+    await choose(formSelect("category"), "Expenses");
+    await type(el("input[name=spentOn]"), lagosToday(new Date(Date.now() + 24 * 60 * 60 * 1000)));
+    // As the loan form test: the input's max stops a button press in jsdom (A-213).
+    await act(async () => {
+      el<HTMLFormElement>(".expense-form").dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(el(".expense-form [role=alert]").textContent).toBe("The expense date cannot be after today.");
+    expect(api.spent).toEqual([]);
+  });
+
+  it("keeps the form and shows the server's refusal", async () => {
+    await mount(
+      fakeApi({
+        restore: EXPENSE_CREATOR,
+        spend: [{ ok: false, reason: "invalid_input", code: "amount_not_positive" }],
+      }),
+    );
+    await openExpenseForm();
+    await choose(formSelect("category"), "Expenses");
+    await type(el("input[name=amount]"), "15000");
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toBe("The amount must be above ₦0.00.");
+    expect(el<HTMLInputElement>("input[name=amount]").value).toBe("15000");
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("closes on Cancel with no call", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_CREATOR }));
+    await openExpenseForm();
+    await click(button("Cancel"));
+    expect(container?.querySelector(".expense-form")).toBeNull();
+    expect(button("+ Record expense")).toBeTruthy();
+    expect(api.spent).toEqual([]);
   });
 });

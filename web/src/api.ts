@@ -151,6 +151,18 @@ export interface Expense {
   createdAt: string;
 }
 
+/** The body of POST /expenses plus its Idempotency-Key header. The amount is a naira string (A-18). */
+export interface NewExpense {
+  /** Made by the caller once per expense attempt; a retry sends the same key (D-65). */
+  idempotencyKey: string;
+  category: string;
+  method: PaymentMethod;
+  spentOn: string;
+  amount: string;
+  description: string;
+  narration: string;
+}
+
 /** The query of GET /expenses (D-94). A field left out is not filtered on. */
 export interface ExpenseFilter {
   category?: string;
@@ -192,6 +204,11 @@ export type CreatePaymentResult =
 export type CreateLoanResult =
   | { ok: true; loan: GivenLoan; replayed: boolean }
   | { ok: false; reason: CallFailure | LoanConflict; code?: string };
+
+/** replayed: the key had been used and the server sent back the first expense. */
+export type CreateExpenseResult =
+  | { ok: true; expense: Expense; replayed: boolean }
+  | { ok: false; reason: CallFailure | "idempotency_conflict"; code?: string };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -243,6 +260,7 @@ export interface Api {
   listLoans(memberId: string): Promise<CallResult<Loan[]>>;
   createLoan(input: NewLoan): Promise<CreateLoanResult>;
   listExpenses(filter: ExpenseFilter): Promise<CallResult<ExpenseList>>;
+  createExpense(input: NewExpense): Promise<CreateExpenseResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -547,6 +565,20 @@ function loanFailureOf(status: number, body: unknown): Extract<CreateLoanResult,
   return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
 }
 
+/** A refused POST /expenses. A 409 other than idempotency_conflict answers server. */
+function expenseFailureOf(
+  status: number,
+  body: unknown,
+): Extract<CreateExpenseResult, { ok: false }> {
+  const reply = isObject(body) ? body : {};
+  if (status === 409) {
+    return { ok: false, reason: reply["error"] === "idempotency_conflict" ? "idempotency_conflict" : "server" };
+  }
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  const { code } = reply;
+  return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export function createApi(deps: ApiDeps): Api {
@@ -825,6 +857,27 @@ export function createApi(deps: ApiDeps): Api {
         if (expenses === null || typeof total !== "string" || !NAIRA.test(total)) return null;
         return { expenses, total };
       });
+    },
+
+    async createExpense(input) {
+      const { idempotencyKey, ...body } = input;
+      let response: Response | null;
+      try {
+        response = await authed("/expenses", {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status !== 201) return expenseFailureOf(response.status, reply);
+      const expense = isObject(reply) ? expenseOf(reply["expense"]) : null;
+      if (expense === null) return { ok: false, reason: "server" };
+      const replayed = response.headers.get("Idempotent-Replayed") === "true";
+      return { ok: true, expense, replayed };
     },
   };
 }

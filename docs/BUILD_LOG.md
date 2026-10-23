@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.5b (size M), 2026-10-23: "Give loan" form on member detail (A-215)
+
+The owner said "go".
+**Changed:** `web/src/api.ts` (`createLoan` with the key in the `Idempotency-Key` header; `GivenLoan`, `NewLoan`, `LoanConflict`, `CreateLoanResult`; `givenOn` checked in loan reads), `web/src/Members.tsx` (`checkLoan`, `loanMessage`, `savedLoanMessage`, `LOAN_TEXT_MAX`, the `LoanForm`; "Give loan" button on member detail; one form at a time; "Given" column shows `givenOn`), `web/src/App.tsx` (passes `loans.disburse`; header comment brought up to date), `web/src/styles.css` (loan form shares the payment form rules), tests: `web/test/api.test.ts` (`createLoan`, `givenOn` reads), `web/test/app.test.tsx` (loan form helpers, loan form, loans listed by the day given). Docs: ASSUMPTIONS (A-215), PHASE_PLAN, TRACEABILITY, STATUS.
+**Works (verified in this session):** `npm run check` (web): 4 files, 154 passed. `npm run check` (server): 48 files, 1871 passed.
+**Not verified:** not run in a browser; no live check (the server was not changed).
+
+---
+
 ## Step U.5a (size M), 2026-10-23: loan date `givenOn` on the server (D-91, A-214)
 
 The owner said: "loans should have a date field, and go". U.5 split: U.5a server, U.5b web form.

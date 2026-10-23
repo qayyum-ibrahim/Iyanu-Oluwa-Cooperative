@@ -401,11 +401,13 @@ td.amount {
   }
 }
 
-/* Payment form (U.4e2), from the prototype's breakdown box */
-.payment-form {
+/* Payment form (U.4e2), from the prototype's breakdown box; loan form (U.5b) */
+.payment-form,
+.loan-form {
   margin-bottom: 18px;
 }
-.payment-form fieldset {
+.payment-form fieldset,
+.loan-form fieldset {
   border: 0;
   margin: 0;
   padding: 0;

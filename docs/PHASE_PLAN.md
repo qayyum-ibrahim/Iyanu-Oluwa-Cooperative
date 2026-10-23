@@ -103,7 +103,7 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - D.90 (S, docs) Leaner process (D-90). Done. From U.5 on: one screen or feature per M step; one break-on-purpose run at the end of Phase U for its money, security and data-loss code (U.5 loans, U.7 pay-off and reactivation, U.8 staff and access).
 - U.5 Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status. The loans list on member detail exists since U.3f. The owner asked for a loan date (D-91), so U.5 split at its start:
   - U.5a (M) Server: `Loan.givenOn`, migration that fills old rows, store field in both adapters, `givenOn` in `POST /loans` (checked, in the hash when sent, view, list, audit). Done (D-91, A-214): 1871 server tests.
-  - U.5b (M) Web: `createLoan` in `web/src/api.ts`, `givenOn` in the loan reads, the "Give loan" form on member detail (date, principal, method, interest note, notes; one key per attempt), the loans table by `givenOn`.
+  - U.5b (M) Web: `createLoan` in `web/src/api.ts`, `givenOn` in the loan reads, the "Give loan" form on member detail (date, principal, method, interest note, notes; one key per attempt), the loans table by `givenOn`. Done (A-215): 154 web tests; the table shows `givenOn`, rows keep the server order.
 - U.6 (M) Expenses: record, list with filters and total, edit, delete.
 - U.7 (M) Pay-off confirmation at the bottom of member detail (R-13; balances from U.3a, `total` sent back, `payout_changed` shown, DR-05, A-185) and the reactivate button on an Inactive member (D-80).
 - U.8 (M) Staff and access (create, permissions, deactivate, reactivate, reset password); audit viewer.

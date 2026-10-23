@@ -587,6 +587,7 @@ const LOAN = {
   principal: "50000.00",
   interestNote: "",
   notes: "",
+  givenOn: "2026-10-20",
   expenseId: "e1",
   createdById: "u1",
   createdAt: "2026-10-23T09:00:00.000Z",
@@ -660,6 +661,10 @@ describe("payment and loan lists", () => {
       { loans: [{ ...LOAN, outstanding: "40000" }] },
       { loans: [{ ...LOAN, notes: null }] },
       { loans: [{ ...LOAN, expenseId: undefined }] },
+      { loans: [{ ...LOAN, givenOn: undefined }] },
+      { loans: [{ ...LOAN, givenOn: 20261020 }] },
+      { loans: [{ ...LOAN, givenOn: "20-10-2026" }] },
+      { loans: [{ ...LOAN, givenOn: "2026-10-20T00:00:00.000Z" }] },
     ];
     for (const body of bad) {
       const { api } = signedIn(() => json(200, body));
@@ -839,5 +844,128 @@ describe("createPayment", () => {
     }
     const wrong = signedIn(() => json(200, { payment: PAYMENT, sms: { status: "sent" } }));
     expect(await wrong.api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "server" });
+  });
+});
+
+/** The loan as POST /loans sends it: LOAN without what GET /loans works out on read. */
+const GIVEN_LOAN = {
+  id: LOAN.id,
+  memberId: LOAN.memberId,
+  membershipId: LOAN.membershipId,
+  principal: LOAN.principal,
+  interestNote: LOAN.interestNote,
+  notes: LOAN.notes,
+  givenOn: LOAN.givenOn,
+  expenseId: LOAN.expenseId,
+  createdById: LOAN.createdById,
+  createdAt: LOAN.createdAt,
+};
+
+const NEW_LOAN = {
+  idempotencyKey: "key-0000000000000002",
+  memberId: "m1",
+  method: "CASH" as const,
+  givenOn: "2026-10-20",
+  principal: "50000.00",
+  interestNote: "5% flat",
+  notes: "",
+};
+
+const SENT_LOAN = {
+  memberId: "m1",
+  method: "CASH",
+  givenOn: "2026-10-20",
+  principal: "50000.00",
+  interestNote: "5% flat",
+  notes: "",
+};
+
+describe("createLoan", () => {
+  it("posts the loan with the key in the Idempotency-Key header, not in the body", async () => {
+    const { api, calls, keys } = signedIn(() => json(201, { loan: GIVEN_LOAN }));
+    expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: true, loan: GIVEN_LOAN, replayed: false });
+    expect(calls).toEqual([{ path: "/api/loans", method: "POST", auth: "Bearer acc1", body: SENT_LOAN }]);
+    expect(keys).toEqual(["key-0000000000000002"]);
+  });
+
+  it("reads the Idempotent-Replayed header", async () => {
+    const { api } = signedIn(() => replayed({ loan: GIVEN_LOAN }));
+    expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: true, loan: GIVEN_LOAN, replayed: true });
+  });
+
+  it("on a 401 refreshes once and sends the same key and body again", async () => {
+    const { api, calls, keys } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(201, { loan: GIVEN_LOAN }) : json(401, {});
+    });
+    expect(await api.createLoan(NEW_LOAN)).toMatchObject({ ok: true, replayed: false });
+    expect(calls.map((c) => c.path)).toEqual(["/api/loans", "/api/refresh", "/api/loans"]);
+    expect(calls[2]?.body).toEqual(SENT_LOAN);
+    expect(keys[2]).toBe("key-0000000000000002");
+  });
+
+  it("passes each 409 reason on, and answers server for a 409 it does not know", async () => {
+    for (const error of ["member_inactive", "active_loan", "idempotency_conflict"]) {
+      const { api } = signedIn(() => json(409, { error }));
+      expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: error });
+    }
+    for (const body of [{ error: "loan_overpayment" }, { error: "toString" }, null, "x"]) {
+      const { api } = signedIn(() => json(409, body));
+      expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("passes the code of a 400 on", async () => {
+    const date = signedIn(() => json(400, { error: "invalid_input", code: "future_given_on" }));
+    expect(await date.api.createLoan(NEW_LOAN)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "future_given_on",
+    });
+    for (const body of [{ error: "invalid_input", code: 3 }, { error: "invalid_input" }, null]) {
+      const { api } = signedIn(() => json(400, body));
+      expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "invalid_input" });
+    }
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 201 of the wrong shape and for a 200", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { loan: null },
+      { loan: { ...GIVEN_LOAN, givenOn: undefined } },
+      { loan: { ...GIVEN_LOAN, givenOn: "20-10-2026" } },
+      { loan: { ...GIVEN_LOAN, principal: 50000 } },
+      { loan: { ...GIVEN_LOAN, principal: "50000" } },
+      { loan: { ...GIVEN_LOAN, expenseId: undefined } },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(201, body));
+      expect(await api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, { loan: GIVEN_LOAN }));
+    expect(await wrong.api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "server" });
   });
 });

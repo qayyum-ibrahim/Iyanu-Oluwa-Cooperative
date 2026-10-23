@@ -1,7 +1,6 @@
 // Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36), record a payment
 // from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
-// R-03). Search by name or
-// Membership ID runs in the browser over the list the server sent (A-191 item 2). The server
+// R-03), give a loan from member detail (U.5b, R-08, D-91). Search by name or Membership ID runs in the browser over the list the server sent (A-191 item 2). The server
 // checks every field again. Amounts stay the naira strings the server sent (A-18); the browser
 // only adds the naira sign and thousands commas. The one sum is the payment form's breakdown
 // check, in whole kobo as BigInt (U.4e, A-209); the server checks again.
@@ -10,11 +9,13 @@ import type {
   Api,
   CallFailure,
   CallResult,
+  CreateLoanResult,
   CreatePaymentResult,
   Loan,
   Member,
   MemberBalances,
   MemberStatusFilter,
+  NewLoan,
   NewMember,
   NewPayment,
   Payment,
@@ -338,6 +339,106 @@ export function newIdempotencyKey(
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Loan form helpers (U.5b, R-08). The form is LoanForm below.
+
+/** LOAN_TEXT_MAX in server/src/loans.ts: the longest interest note or notes, after trimming. */
+export const LOAN_TEXT_MAX = 200;
+
+/** What the loan form holds, as typed. */
+export interface LoanFormInput {
+  givenOn: string;
+  method: PaymentMethod;
+  principal: string;
+  interestNote: string;
+  notes: string;
+}
+
+/** The body fields ready to send, the principal as "50000.00" (A-18) and the texts trimmed. */
+export type CheckedLoan = Omit<NewLoan, "idempotencyKey" | "memberId">;
+
+/**
+ * Checks the form in the server's order (date, principal, interest note, notes) and gives the
+ * fields to send, or a message. `today` is the day in Lagos. The server checks again.
+ */
+export function checkLoan(
+  input: LoanFormInput,
+  today: string,
+): { ok: true; value: CheckedLoan } | { ok: false; message: string } {
+  const refuse = (message: string) => ({ ok: false as const, message });
+  if (!isCalendarDay(input.givenOn)) return refuse("Enter the loan date.");
+  if (input.givenOn > today) return refuse("The loan date cannot be after today.");
+  const principal = nairaToKobo(input.principal);
+  if (principal === null || principal <= 0n) {
+    return refuse("Enter a loan amount above ₦0.00, with at most 2 decimals.");
+  }
+  const interestNote = input.interestNote.trim();
+  if (interestNote.length > LOAN_TEXT_MAX) {
+    return refuse(`The interest note may have at most ${LOAN_TEXT_MAX} characters.`);
+  }
+  const notes = input.notes.trim();
+  if (notes.length > LOAN_TEXT_MAX) {
+    return refuse(`The notes may have at most ${LOAN_TEXT_MAX} characters.`);
+  }
+  return {
+    ok: true,
+    value: {
+      givenOn: input.givenOn,
+      method: input.method,
+      principal: koboToNaira(principal),
+      interestNote,
+      notes,
+    },
+  };
+}
+
+/** Messages for the 400 codes of POST /loans (server/src/loans.ts). */
+const LOAN_CODE_MESSAGES: ReadonlyMap<string, string> = new Map([
+  ["invalid_method", "Choose Cash or Bank transfer."],
+  ["invalid_given_on", "The loan date was refused. Enter a real date."],
+  ["future_given_on", "The loan date cannot be after today."],
+  ["invalid_principal", "The loan amount was refused. Enter an amount with at most 2 decimals."],
+  ["principal_not_positive", "The loan amount must be above ₦0.00."],
+  ["invalid_interest_note", `The interest note may have at most ${LOAN_TEXT_MAX} characters.`],
+  ["invalid_notes", `The notes may have at most ${LOAN_TEXT_MAX} characters.`],
+]);
+
+/**
+ * The message for a refused loan. Null for signed_out: the sign-in screen already shows.
+ * After network and server the loan may be saved; the form keeps the key, so pressing again
+ * sends the same attempt and the server never saves it twice (D-60).
+ */
+export function loanMessage(result: Extract<CreateLoanResult, { ok: false }>): string | null {
+  switch (result.reason) {
+    case "member_inactive":
+      return "This member is Inactive. Reactivate the member before giving a loan.";
+    case "active_loan":
+      return "This member already has an active loan.";
+    case "idempotency_conflict":
+      return "This attempt was already sent with other details. Check the member's loans, then start again.";
+    case "invalid_input": {
+      const known = result.code === undefined ? undefined : LOAN_CODE_MESSAGES.get(result.code);
+      return known ?? "The loan was refused. Check the fields and try again.";
+    }
+    case "forbidden":
+      return "You do not have permission to do this.";
+    case "not_found":
+      return "Member not found.";
+    case "signed_out":
+      return null;
+    case "network":
+      return "Cannot reach the server. Press Give loan again: it will not be saved twice.";
+    default:
+      return "Something went wrong. Press Give loan again: it will not be saved twice.";
+  }
+}
+
+type SavedLoan = Extract<CreateLoanResult, { ok: true }>;
+
+/** The notice after a loan is given: the amount and the day. */
+export function savedLoanMessage(saved: SavedLoan): string {
+  return `Loan of ${formatNaira(saved.loan.principal)} on ${formatDay(saved.loan.givenOn)} given.`;
+}
+
 const EMPTY: NewMember = { fullName: "", phone: "", address: "", occupation: "" };
 
 type ListState =
@@ -347,7 +448,7 @@ type ListState =
 
 type DetailApi = Pick<
   Api,
-  "getMember" | "memberBalances" | "listPayments" | "listLoans" | "createPayment"
+  "getMember" | "memberBalances" | "listPayments" | "listLoans" | "createPayment" | "createLoan"
 >;
 
 export interface MembersProps {
@@ -356,6 +457,7 @@ export interface MembersProps {
   canViewPayments: boolean;
   canViewLoans: boolean;
   canRecordPayment: boolean;
+  canGiveLoan: boolean;
 }
 
 export default function Members({
@@ -364,6 +466,7 @@ export default function Members({
   canViewPayments,
   canViewLoans,
   canRecordPayment,
+  canGiveLoan,
 }: MembersProps) {
   const [filter, setFilter] = useState<MemberStatusFilter>("active");
   const [search, setSearch] = useState("");
@@ -421,6 +524,7 @@ export default function Members({
         canViewPayments={canViewPayments}
         canViewLoans={canViewLoans}
         canRecordPayment={canRecordPayment}
+        canGiveLoan={canGiveLoan}
         firstPayment={firstPayment !== null && firstPayment.id === openId ? firstPayment : null}
         onBack={() => {
           setFirstPayment(null);
@@ -872,20 +976,145 @@ function PaymentForm({ api, memberId, onSaved, onCancel }: PaymentFormProps) {
   );
 }
 
+interface LoanFormProps {
+  api: Pick<Api, "createLoan">;
+  memberId: string;
+  onSaved(saved: SavedLoan): void;
+  onCancel(): void;
+}
+
+/**
+ * Give a loan to the member on screen (date, amount, method, interest note, notes, as the
+ * prototype's Loans form). One Idempotency-Key per attempt, as PaymentForm (D-60, A-215).
+ */
+function LoanForm({ api, memberId, onSaved, onCancel }: LoanFormProps) {
+  const [form, setForm] = useState<LoanFormInput>(() => ({
+    givenOn: lagosToday(),
+    method: "BANK_TRANSFER",
+    principal: "",
+    interestNote: "",
+    notes: "",
+  }));
+  const [key, setKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function change(next: LoanFormInput) {
+    setForm(next);
+    setKey(null);
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const checked = checkLoan(form, lagosToday());
+    if (!checked.ok) {
+      setError(checked.message);
+      return;
+    }
+    const attemptKey = key ?? newIdempotencyKey();
+    setKey(attemptKey);
+    setBusy(true);
+    setError(null);
+    const result = await api.createLoan({ ...checked.value, idempotencyKey: attemptKey, memberId });
+    if (result.ok) {
+      onSaved(result);
+      return;
+    }
+    setBusy(false);
+    // The key was used with other details: the next press is a new attempt.
+    if (result.reason === "idempotency_conflict") setKey(null);
+    const message = loanMessage(result);
+    if (message !== null) setError(message);
+  }
+
+  const text = (name: "interestNote" | "notes", label: string) => (
+    <label className="field">
+      <span>{label}</span>
+      <input
+        type="text"
+        name={name}
+        maxLength={LOAN_TEXT_MAX}
+        value={form[name]}
+        onChange={(e) => change({ ...form, [name]: e.target.value })}
+      />
+    </label>
+  );
+
+  return (
+    <form className="form loan-form" onSubmit={submit}>
+      <h2 className="form-title">Give loan</h2>
+      <fieldset disabled={busy}>
+        <label className="field">
+          <span>Date</span>
+          <input
+            type="date"
+            name="givenOn"
+            required
+            max={lagosToday()}
+            value={form.givenOn}
+            onChange={(e) => change({ ...form, givenOn: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Loan amount (₦)</span>
+          <input
+            type="text"
+            name="principal"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={form.principal}
+            onChange={(e) => change({ ...form, principal: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Payment method</span>
+          <select
+            name="method"
+            value={form.method}
+            onChange={(e) => change({ ...form, method: e.target.value as PaymentMethod })}
+          >
+            <option value="BANK_TRANSFER">{METHOD_LABELS.BANK_TRANSFER}</option>
+            <option value="CASH">{METHOD_LABELS.CASH}</option>
+          </select>
+        </label>
+        {text("interestNote", "Interest note")}
+        {text("notes", "Notes")}
+        <p className="form-note">The loan is also recorded as a Loan expense.</p>
+      </fieldset>
+      {error && (
+        <em role="alert" className="error">
+          {error}
+        </em>
+      )}
+      <div className="form-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="submit" className="primary-btn" disabled={busy}>
+          {busy ? "Saving…" : "Give loan"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 interface MemberDetailProps {
   api: DetailApi;
   id: string;
   canViewPayments: boolean;
   canViewLoans: boolean;
   canRecordPayment: boolean;
+  canGiveLoan: boolean;
   /** The member just added: open with the payment form and a first-payment notice (U.4f, R-03). */
   firstPayment: Member | null;
   onBack(): void;
 }
 
 /**
- * One member: profile, balances (D-86), loans and payments (U.3f), and the payment form for an
- * Active member with payments.create (U.4e2, D-89). The payments and loans sections show only
+ * One member: profile, balances (D-86), loans and payments (U.3f), the payment form for an
+ * Active member with payments.create (U.4e2, D-89) and the loan form for an Active member with
+ * loans.disburse and no active loan seen (U.5b). One form shows at a time. The payments and loans sections show only
  * with payments.view and loans.view (A-201). Pay-offs are not listed: there is no pay-off read
  * (A-186); the balances already take them off.
  */
@@ -895,6 +1124,7 @@ function MemberDetail({
   canViewPayments,
   canViewLoans,
   canRecordPayment,
+  canGiveLoan,
   firstPayment,
   onBack,
 }: MemberDetailProps) {
@@ -906,13 +1136,15 @@ function MemberDetail({
   const [loans, setLoans] = useState<Section<Loan[]>>(
     canViewLoans ? { kind: "loading" } : { kind: "hidden" },
   );
-  const [paying, setPaying] = useState(firstPayment !== null && canRecordPayment);
+  const [open, setOpen] = useState<"payment" | "loan" | null>(
+    firstPayment !== null && canRecordPayment ? "payment" : null,
+  );
   const [notice, setNotice] = useState<string | null>(
     firstPayment === null
       ? null
       : `${firstPayment.fullName} was added as ${firstPayment.membershipId}. Record the first payment now.`,
   );
-  // Bumped after a saved payment, so balances, payments and loans are read again.
+  // Bumped after a saved payment or loan, so balances, payments and loans are read again.
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -940,10 +1172,15 @@ function MemberDetail({
     };
   }, [api, id, canViewPayments, canViewLoans, reload]);
 
-  function saved(result: SavedPayment) {
-    setPaying(false);
-    setNotice(savedPaymentMessage(result));
+  function saved(message: string) {
+    setOpen(null);
+    setNotice(message);
     setReload((n) => n + 1);
+  }
+
+  function openForm(form: "payment" | "loan") {
+    setNotice(null);
+    setOpen(form);
   }
 
   const back = (
@@ -980,16 +1217,14 @@ function MemberDetail({
             {m.status === "ACTIVE" ? "Active" : "Inactive"}
           </span>
           {onLoan && <span className="loan">On loan</span>}
-          {canRecordPayment && m.status === "ACTIVE" && !paying && (
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => {
-                setNotice(null);
-                setPaying(true);
-              }}
-            >
+          {canRecordPayment && m.status === "ACTIVE" && open === null && (
+            <button type="button" className="primary-btn" onClick={() => openForm("payment")}>
               Record payment
+            </button>
+          )}
+          {canGiveLoan && m.status === "ACTIVE" && !onLoan && open === null && (
+            <button type="button" className="primary-btn" onClick={() => openForm("loan")}>
+              Give loan
             </button>
           )}
         </div>
@@ -999,12 +1234,20 @@ function MemberDetail({
           {notice}
         </p>
       )}
-      {paying && canRecordPayment && m.status === "ACTIVE" && (
+      {open === "payment" && canRecordPayment && m.status === "ACTIVE" && (
         <PaymentForm
           api={api}
           memberId={m.id}
-          onSaved={saved}
-          onCancel={() => setPaying(false)}
+          onSaved={(result) => saved(savedPaymentMessage(result))}
+          onCancel={() => setOpen(null)}
+        />
+      )}
+      {open === "loan" && canGiveLoan && m.status === "ACTIVE" && (
+        <LoanForm
+          api={api}
+          memberId={m.id}
+          onSaved={(result) => saved(savedLoanMessage(result))}
+          onCancel={() => setOpen(null)}
         />
       )}
 
@@ -1084,7 +1327,7 @@ function MemberDetail({
                     .reverse()
                     .map((l) => (
                       <tr key={l.id}>
-                        <td>{formatDate(l.createdAt)}</td>
+                        <td>{formatDay(l.givenOn)}</td>
                         <td className="amount">{formatNaira(l.principal)}</td>
                         <td className="amount">{formatNaira(l.repaid)}</td>
                         <td className="amount">{formatNaira(l.outstanding)}</td>

@@ -15,6 +15,7 @@ import type {
   Api,
   CallResult,
   ChangePasswordResult,
+  CreateLoanResult,
   CreatePaymentResult,
   LoginResult,
   Loan,
@@ -22,15 +23,18 @@ import type {
   Member,
   MemberBalances,
   MemberStatusFilter,
+  NewLoan,
   NewPayment,
   Payment,
   SmsOutcome,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
+  LOAN_TEXT_MAX,
   PAYMENT_CATEGORIES,
   PAYMENT_LINES_MAX,
   breakdownKobo,
+  checkLoan,
   checkNewMember,
   checkPayment,
   formatDate,
@@ -39,14 +43,17 @@ import {
   isCalendarDay,
   koboToNaira,
   lagosToday,
+  loanMessage,
   memberMessage,
   nairaToKobo,
   newIdempotencyKey,
   paymentMessage,
   recordButtonLabel,
+  savedLoanMessage,
   savedPaymentMessage,
   searchMembers,
   smsMessage,
+  type LoanFormInput,
   type PaymentFormInput,
 } from "../src/Members.tsx";
 import SignIn from "../src/SignIn.tsx";
@@ -64,6 +71,7 @@ const idleApi: Api = {
   listPayments: async () => ({ ok: false, reason: "server" }),
   listLoans: async () => ({ ok: false, reason: "server" }),
   createPayment: async () => ({ ok: false, reason: "server" }),
+  createLoan: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -142,6 +150,8 @@ interface FakeApi extends Api {
   calls: string[];
   /** Every payment the screen sent, in order. */
   paid: NewPayment[];
+  /** Every loan the screen sent, in order. */
+  lent: NewLoan[];
   signOutFromServer(): void;
 }
 
@@ -182,14 +192,18 @@ function fakeApi(
     loans?: CallResult<Loan[]>;
     /** Answers to createPayment in turn; the last one repeats. */
     pay?: CreatePaymentResult[];
+    /** Answers to createLoan in turn; the last one repeats. */
+    lend?: CreateLoanResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
     const calls: string[] = [];
     const paid: NewPayment[] = [];
+    const lent: NewLoan[] = [];
     return {
       calls,
       paid,
+      lent,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -236,6 +250,12 @@ function fakeApi(
         paid.push(input);
         const answers = opts.pay ?? [];
         return answers[Math.min(paid.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      createLoan: async (input) => {
+        calls.push("lend");
+        lent.push(input);
+        const answers = opts.lend ?? [];
+        return answers[Math.min(lent.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
     };
   };
@@ -641,6 +661,7 @@ const ACTIVE_LOAN: Loan = {
   principal: "50000.00",
   interestNote: "",
   notes: "",
+  givenOn: "2026-10-20",
   expenseId: "e1",
   createdById: "u1",
   createdAt: "2026-10-20T09:00:00.000Z",
@@ -730,7 +751,7 @@ describe("member detail (jsdom)", () => {
   });
 
   it("shows loans newest first, and each payment's method, lines and own total", async () => {
-    const older: Loan = { ...ACTIVE_LOAN, id: "l0", createdAt: "2026-10-01T09:00:00.000Z", repaid: "20000.00", outstanding: "0.00", status: "FULLY_REPAID" };
+    const older: Loan = { ...ACTIVE_LOAN, id: "l0", givenOn: "2026-10-01", createdAt: "2026-10-01T09:00:00.000Z", repaid: "20000.00", outstanding: "0.00", status: "FULLY_REPAID" };
     const transfer: Payment = {
       ...payment("p3", "2026-10-22T09:00:00.000Z", "7000.50"),
       method: "BANK_TRANSFER",
@@ -757,6 +778,15 @@ describe("member detail (jsdom)", () => {
     ]);
     expect(el("table.payments tbody tr").textContent).toBe(
       "22 Oct 2026Bank transferSavings ₦5,000.50, Shares ₦2,000.00₦7,000.50",
+    );
+  });
+
+  it("lists each loan by the day it was given, not the time it was recorded", async () => {
+    const late: Loan = { ...ACTIVE_LOAN, givenOn: "2026-09-30", createdAt: "2026-10-23T09:00:00.000Z" };
+    await mount(fakeApi({ restore: FULL, members: [ACTIVE_ONE], loans: { ok: true, value: [late] } }));
+    await openDetail("Test Member One");
+    expect(el("table.loans tbody tr").textContent).toBe(
+      "30 Sep 2026₦50,000.00₦10,000.00₦40,000.00Active",
     );
   });
 
@@ -1441,5 +1471,298 @@ describe("first payment after adding a member (jsdom)", () => {
     expect(container?.querySelector(".payment-form")).toBeNull();
     expect(container?.querySelector("[role=status]")).toBeNull();
     expect(button("Record payment")).toBeTruthy();
+  });
+});
+
+const LOAN_FORM: LoanFormInput = {
+  givenOn: "2026-10-20",
+  method: "CASH",
+  principal: "50000.5",
+  interestNote: "  5% flat  ",
+  notes: " ",
+};
+
+describe("loan form helpers", () => {
+  it("checks the form and gives the fields to send, the principal as the server writes it", () => {
+    expect(checkLoan(LOAN_FORM, "2026-10-23")).toEqual({
+      ok: true,
+      value: {
+        givenOn: "2026-10-20",
+        method: "CASH",
+        principal: "50000.50",
+        interestNote: "5% flat",
+        notes: "",
+      },
+    });
+    expect(checkLoan({ ...LOAN_FORM, givenOn: "2026-10-23" }, "2026-10-23").ok).toBe(true);
+    const long = ` ${"a".repeat(LOAN_TEXT_MAX)} `;
+    expect(checkLoan({ ...LOAN_FORM, interestNote: long, notes: long }, "2026-10-23").ok).toBe(true);
+  });
+
+  it("refuses each bad field with its own message, in the server's order", () => {
+    const today = "2026-10-23";
+    const tooLong = "a".repeat(LOAN_TEXT_MAX + 1);
+    const cases: [Partial<LoanFormInput>, string][] = [
+      [{ givenOn: "" }, "Enter the loan date."],
+      [{ givenOn: "2026-02-30" }, "Enter the loan date."],
+      [{ givenOn: "2026-10-24", principal: "x" }, "The loan date cannot be after today."],
+      [{ principal: "" }, "Enter a loan amount above ₦0.00, with at most 2 decimals."],
+      [{ principal: "0.00" }, "Enter a loan amount above ₦0.00, with at most 2 decimals."],
+      [{ principal: "1.005" }, "Enter a loan amount above ₦0.00, with at most 2 decimals."],
+      [{ principal: "-5", interestNote: tooLong }, "Enter a loan amount above ₦0.00, with at most 2 decimals."],
+      [{ interestNote: tooLong, notes: tooLong }, `The interest note may have at most ${LOAN_TEXT_MAX} characters.`],
+      [{ notes: tooLong }, `The notes may have at most ${LOAN_TEXT_MAX} characters.`],
+    ];
+    for (const [patch, message] of cases) {
+      expect(checkLoan({ ...LOAN_FORM, ...patch }, today)).toEqual({ ok: false, message });
+    }
+  });
+
+  it("maps each refused loan to a message", () => {
+    const cases: [Extract<CreateLoanResult, { ok: false }>, string | null][] = [
+      [{ ok: false, reason: "member_inactive" }, "This member is Inactive. Reactivate the member before giving a loan."],
+      [{ ok: false, reason: "active_loan" }, "This member already has an active loan."],
+      [
+        { ok: false, reason: "idempotency_conflict" },
+        "This attempt was already sent with other details. Check the member's loans, then start again.",
+      ],
+      [{ ok: false, reason: "invalid_input", code: "invalid_method" }, "Choose Cash or Bank transfer."],
+      [{ ok: false, reason: "invalid_input", code: "invalid_given_on" }, "The loan date was refused. Enter a real date."],
+      [{ ok: false, reason: "invalid_input", code: "future_given_on" }, "The loan date cannot be after today."],
+      [
+        { ok: false, reason: "invalid_input", code: "invalid_principal" },
+        "The loan amount was refused. Enter an amount with at most 2 decimals.",
+      ],
+      [{ ok: false, reason: "invalid_input", code: "principal_not_positive" }, "The loan amount must be above ₦0.00."],
+      [
+        { ok: false, reason: "invalid_input", code: "invalid_interest_note" },
+        `The interest note may have at most ${LOAN_TEXT_MAX} characters.`,
+      ],
+      [{ ok: false, reason: "invalid_input", code: "invalid_notes" }, `The notes may have at most ${LOAN_TEXT_MAX} characters.`],
+      [{ ok: false, reason: "invalid_input", code: "invalid_idempotency_key" }, "The loan was refused. Check the fields and try again."],
+      [{ ok: false, reason: "invalid_input" }, "The loan was refused. Check the fields and try again."],
+      [{ ok: false, reason: "forbidden" }, "You do not have permission to do this."],
+      [{ ok: false, reason: "not_found" }, "Member not found."],
+      [{ ok: false, reason: "signed_out" }, null],
+      [{ ok: false, reason: "network" }, "Cannot reach the server. Press Give loan again: it will not be saved twice."],
+      [{ ok: false, reason: "server" }, "Something went wrong. Press Give loan again: it will not be saved twice."],
+    ];
+    for (const [result, message] of cases) expect(loanMessage(result)).toBe(message);
+  });
+
+  it("says what loan was given and on which day", () => {
+    expect(savedLoanMessage(givenLoan("50000.50", "2026-10-20"))).toBe(
+      "Loan of ₦50,000.50 on 20 Oct 2026 given.",
+    );
+  });
+});
+
+const LENDER: Me = {
+  ...ME,
+  user: { ...ME.user, role: "STAFF" },
+  permissions: ["members.view", "payments.view", "loans.view", "payments.create", "loans.disburse"],
+};
+
+function givenLoan(principal: string, givenOn: string): Extract<CreateLoanResult, { ok: true }> {
+  const { id, memberId, membershipId, interestNote, notes, expenseId, createdById, createdAt } =
+    ACTIVE_LOAN;
+  const loan = { id, memberId, membershipId, principal, interestNote, notes, givenOn, expenseId, createdById, createdAt };
+  return { ok: true, loan, replayed: false };
+}
+
+async function openLoanForm() {
+  await openDetail("Test Member One");
+  await click(button("Give loan"));
+}
+
+async function submitLoan() {
+  await click(el(".loan-form button[type=submit]"));
+}
+
+describe("loan form (jsdom)", () => {
+  it("has no Give loan button without loans.disburse", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openDetail("Test Member One");
+    expect(button("Record payment")).toBeTruthy();
+    expect(() => button("Give loan")).toThrow();
+  });
+
+  it("has no Give loan button for an Inactive member", async () => {
+    await mount(fakeApi({ restore: LENDER, members: [INACTIVE_ONE] }));
+    await openMembers();
+    await click(button("All"));
+    await click(el('button[aria-label="View Example Inactive"]'));
+    expect(el("h1").textContent).toBe("Example Inactive");
+    expect(() => button("Give loan")).toThrow();
+  });
+
+  it("has no Give loan button while the member has an active loan", async () => {
+    await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE], loans: { ok: true, value: [ACTIVE_LOAN] } }));
+    await openDetail("Test Member One");
+    expect(el(".loan").textContent).toBe("On loan");
+    expect(() => button("Give loan")).toThrow();
+  });
+
+  it("has a Give loan button when the member's loan is fully repaid", async () => {
+    const repaid: Loan = { ...ACTIVE_LOAN, repaid: "50000.00", outstanding: "0.00", status: "FULLY_REPAID" };
+    await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE], loans: { ok: true, value: [repaid] } }));
+    await openDetail("Test Member One");
+    expect(button("Give loan")).toBeTruthy();
+  });
+
+  it("opens with today's day in Lagos, Bank transfer and empty fields; one form at a time", async () => {
+    await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE] }));
+    await openLoanForm();
+    expect(el<HTMLInputElement>("input[name=givenOn]").value).toBe(lagosToday());
+    expect(el<HTMLInputElement>("input[name=givenOn]").max).toBe(lagosToday());
+    expect(el<HTMLSelectElement>(".loan-form select[name=method]").value).toBe("BANK_TRANSFER");
+    expect(el<HTMLInputElement>("input[name=principal]").value).toBe("");
+    expect(el<HTMLInputElement>("input[name=interestNote]").maxLength).toBe(LOAN_TEXT_MAX);
+    expect(el<HTMLInputElement>("input[name=notes]").maxLength).toBe(LOAN_TEXT_MAX);
+    expect(el(".loan-form button[type=submit]").textContent).toBe("Give loan");
+    expect(() => button("Record payment")).toThrow();
+    await click(button("Cancel"));
+    await click(button("Record payment"));
+    expect(container?.querySelector(".payment-form")).not.toBeNull();
+    expect(() => button("Give loan")).toThrow();
+  });
+
+  it("stops a loan date after today in Lagos, with no call", async () => {
+    const api = await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE] }));
+    await openLoanForm();
+    const tomorrow = lagosToday(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    await type(el("input[name=givenOn]"), tomorrow);
+    await type(el("input[name=principal]"), "50000");
+    // As the payment form test: the input's max stops a button press in jsdom (A-213).
+    await act(async () => {
+      el<HTMLFormElement>(".loan-form").dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(el(".loan-form [role=alert]").textContent).toBe("The loan date cannot be after today.");
+    expect(api.lent).toEqual([]);
+  });
+
+  it("stops a loan amount of ₦0.00, with no call", async () => {
+    const api = await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE] }));
+    await openLoanForm();
+    await type(el("input[name=principal]"), "0");
+    await submitLoan();
+    expect(el("[role=alert]").textContent).toBe(
+      "Enter a loan amount above ₦0.00, with at most 2 decimals.",
+    );
+    expect(api.lent).toEqual([]);
+  });
+
+  it("gives the loan, shows the notice and reads balances, payments and loans again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: LENDER,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
+        lend: [givenLoan("50000.00", "2026-10-20")],
+      }),
+    );
+    await openLoanForm();
+    await type(el("input[name=givenOn]"), "2026-10-20");
+    await type(el("input[name=principal]"), "50000");
+    await choose(el(".loan-form select[name=method]"), "CASH");
+    await type(el("input[name=interestNote]"), " 5% flat ");
+    await type(el("input[name=notes]"), "School fees");
+    // The reload after the save finds the new loan.
+    api.listLoans = async (id) => {
+      api.calls.push(`loans ${id}`);
+      return { ok: true, value: [{ ...ACTIVE_LOAN, repaid: "0.00", outstanding: "50000.00" }] };
+    };
+    await submitLoan();
+
+    expect(api.lent).toHaveLength(1);
+    const sent = api.lent[0]!;
+    expect(sent.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
+    expect({ ...sent, idempotencyKey: "" }).toEqual({
+      idempotencyKey: "",
+      memberId: "m1",
+      method: "CASH",
+      givenOn: "2026-10-20",
+      principal: "50000.00",
+      interestNote: "5% flat",
+      notes: "School fees",
+    });
+    expect(el("[role=status]").textContent).toBe("Loan of ₦50,000.00 on 20 Oct 2026 given.");
+    expect(container?.querySelector(".loan-form")).toBeNull();
+    expect(countCalls(api, "get m1")).toBe(1);
+    expect(countCalls(api, "balances m1")).toBe(2);
+    expect(countCalls(api, "payments m1")).toBe(2);
+    expect(countCalls(api, "loans m1")).toBe(2);
+    expect(el(".loan").textContent).toBe("On loan");
+    expect(() => button("Give loan")).toThrow();
+    expect(button("Record payment")).toBeTruthy();
+  });
+
+  it("sends the same key after a network failure, and a new key after any change", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: LENDER,
+        members: [ACTIVE_ONE],
+        lend: [
+          { ok: false, reason: "network" },
+          { ok: false, reason: "server" },
+          givenLoan("60000.00", lagosToday()),
+        ],
+      }),
+    );
+    await openLoanForm();
+    await type(el("input[name=principal]"), "50000");
+    await submitLoan();
+    expect(el("[role=alert]").textContent).toBe(
+      "Cannot reach the server. Press Give loan again: it will not be saved twice.",
+    );
+    await submitLoan();
+    expect(el("[role=alert]").textContent).toContain("Something went wrong.");
+    expect(api.lent[1]).toEqual(api.lent[0]);
+
+    await type(el("input[name=principal]"), "60000");
+    await submitLoan();
+    expect(api.lent).toHaveLength(3);
+    expect(api.lent[2]!.principal).toBe("60000.00");
+    expect(api.lent[2]!.idempotencyKey).not.toBe(api.lent[0]!.idempotencyKey);
+    expect(el("[role=status]").textContent).toContain("Loan of ₦60,000.00");
+  });
+
+  it("makes a new key after idempotency_conflict", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: LENDER,
+        members: [ACTIVE_ONE],
+        lend: [{ ok: false, reason: "idempotency_conflict" }],
+      }),
+    );
+    await openLoanForm();
+    await type(el("input[name=principal]"), "50000");
+    await submitLoan();
+    await submitLoan();
+    expect(api.lent).toHaveLength(2);
+    expect(api.lent[1]!.idempotencyKey).not.toBe(api.lent[0]!.idempotencyKey);
+  });
+
+  it("keeps the form and shows the server's refusal", async () => {
+    await mount(
+      fakeApi({ restore: LENDER, members: [ACTIVE_ONE], lend: [{ ok: false, reason: "active_loan" }] }),
+    );
+    await openLoanForm();
+    await type(el("input[name=principal]"), "50000");
+    await submitLoan();
+    expect(el("[role=alert]").textContent).toBe("This member already has an active loan.");
+    expect(el<HTMLInputElement>("input[name=principal]").value).toBe("50000");
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("closes on Cancel with no call", async () => {
+    const api = await mount(fakeApi({ restore: LENDER, members: [ACTIVE_ONE] }));
+    await openLoanForm();
+    await click(button("Cancel"));
+    expect(container?.querySelector(".loan-form")).toBeNull();
+    expect(button("Give loan")).toBeTruthy();
+    expect(api.lent).toEqual([]);
   });
 });

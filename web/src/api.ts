@@ -1,6 +1,6 @@
 // API client for the auth routes (server/src/auth-routes.ts), the member routes
-// (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f) and recording a payment
-// (server/src/payments-routes.ts, U.4d). Tokens travel in the JSON body
+// (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
+// (server/src/payments-routes.ts, U.4d) and giving a loan (server/src/loans-routes.ts, U.5b). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -99,21 +99,42 @@ export type PaymentConflict =
   | "no_active_loan"
   | "loan_overpayment";
 
-/** A loan as GET /loans?memberId= sends it (LoanListView in server/src/loans.ts). */
-export interface Loan {
+/** A loan as POST /loans sends it (LoanView in server/src/loans.ts). */
+export interface GivenLoan {
   id: string;
   memberId: string;
   membershipId: string;
   principal: string;
   interestNote: string;
   notes: string;
+  /** The day the loan was given, "YYYY-MM-DD" in Lagos (D-91). */
+  givenOn: string;
   expenseId: string;
   createdById: string;
   createdAt: string;
+}
+
+/** A loan as GET /loans?memberId= sends it (LoanListView in server/src/loans.ts). */
+export interface Loan extends GivenLoan {
   repaid: string;
   outstanding: string;
   status: "ACTIVE" | "FULLY_REPAID";
 }
+
+/** The body of POST /loans plus its Idempotency-Key header. The principal is a naira string (A-18). */
+export interface NewLoan {
+  /** Made by the caller once per loan attempt; a retry sends the same key (D-60). */
+  idempotencyKey: string;
+  memberId: string;
+  method: PaymentMethod;
+  givenOn: string;
+  principal: string;
+  interestNote: string;
+  notes: string;
+}
+
+/** The 409 answers of POST /loans (LoanFailure in server/src/loans.ts). */
+export type LoanConflict = "member_inactive" | "active_loan" | "idempotency_conflict";
 
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
@@ -135,6 +156,11 @@ export type CallResult<T> = { ok: true; value: T } | { ok: false; reason: CallFa
 export type CreatePaymentResult =
   | { ok: true; payment: Payment; replayed: boolean; sms: SmsOutcome }
   | { ok: false; reason: CallFailure | PaymentConflict; code?: string; lineIndex?: number };
+
+/** replayed: the key had been used and the server sent back the first loan. */
+export type CreateLoanResult =
+  | { ok: true; loan: GivenLoan; replayed: boolean }
+  | { ok: false; reason: CallFailure | LoanConflict; code?: string };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -184,6 +210,7 @@ export interface Api {
   listPayments(memberId: string): Promise<CallResult<Payment[]>>;
   createPayment(input: NewPayment): Promise<CreatePaymentResult>;
   listLoans(memberId: string): Promise<CallResult<Loan[]>>;
+  createLoan(input: NewLoan): Promise<CreateLoanResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -336,37 +363,37 @@ const LOAN_TEXT_FIELDS = [
   "createdAt",
 ] as const;
 
-const LOAN_AMOUNT_FIELDS = ["principal", "repaid", "outstanding"] as const;
-
-function loanOf(value: unknown): Loan | null {
+function givenLoanOf(value: unknown): GivenLoan | null {
   if (!isObject(value)) return null;
   for (const field of LOAN_TEXT_FIELDS) {
     if (typeof value[field] !== "string") return null;
   }
-  for (const field of LOAN_AMOUNT_FIELDS) {
-    const amount = value[field];
-    if (typeof amount !== "string" || !NAIRA.test(amount)) return null;
-  }
-  const status = value["status"];
-  if (status !== "ACTIVE" && status !== "FULLY_REPAID") return null;
-  const v = value as Record<
-    (typeof LOAN_TEXT_FIELDS)[number] | (typeof LOAN_AMOUNT_FIELDS)[number],
-    string
-  >;
+  const { principal, givenOn } = value;
+  if (typeof principal !== "string" || !NAIRA.test(principal)) return null;
+  if (typeof givenOn !== "string" || !DAY.test(givenOn)) return null;
+  const v = value as Record<(typeof LOAN_TEXT_FIELDS)[number], string>;
   return {
     id: v.id,
     memberId: v.memberId,
     membershipId: v.membershipId,
-    principal: v.principal,
+    principal,
     interestNote: v.interestNote,
     notes: v.notes,
+    givenOn,
     expenseId: v.expenseId,
     createdById: v.createdById,
     createdAt: v.createdAt,
-    repaid: v.repaid,
-    outstanding: v.outstanding,
-    status,
   };
+}
+
+function loanOf(value: unknown): Loan | null {
+  const loan = givenLoanOf(value);
+  if (loan === null || !isObject(value)) return null;
+  const { repaid, outstanding, status } = value;
+  if (typeof repaid !== "string" || !NAIRA.test(repaid)) return null;
+  if (typeof outstanding !== "string" || !NAIRA.test(outstanding)) return null;
+  if (status !== "ACTIVE" && status !== "FULLY_REPAID") return null;
+  return { ...loan, repaid, outstanding, status };
 }
 
 /** Every item read by `read`, or null if any one is of the wrong shape. */
@@ -430,6 +457,20 @@ function paymentFailureOf(
       ? { lineIndex: lineIndex as number }
       : {}),
   };
+}
+
+const LOAN_CONFLICTS = ["member_inactive", "active_loan", "idempotency_conflict"] as const;
+
+/** A refused POST /loans. A 409 with an error we do not know answers server. */
+function loanFailureOf(status: number, body: unknown): Extract<CreateLoanResult, { ok: false }> {
+  const reply = isObject(body) ? body : {};
+  if (status === 409) {
+    const conflict = LOAN_CONFLICTS.find((c) => c === reply["error"]);
+    return { ok: false, reason: conflict ?? "server" };
+  }
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  const { code } = reply;
+  return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -678,6 +719,27 @@ export function createApi(deps: ApiDeps): Api {
     listLoans(memberId) {
       const query = `?memberId=${encodeURIComponent(memberId)}`;
       return call(`/loans${query}`, {}, 200, "loans", listOf(loanOf));
+    },
+
+    async createLoan(input) {
+      const { idempotencyKey, ...body } = input;
+      let response: Response | null;
+      try {
+        response = await authed("/loans", {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status !== 201) return loanFailureOf(response.status, reply);
+      const loan = isObject(reply) ? givenLoanOf(reply["loan"]) : null;
+      if (loan === null) return { ok: false, reason: "server" };
+      const replayed = response.headers.get("Idempotent-Replayed") === "true";
+      return { ok: true, loan, replayed };
     },
   };
 }

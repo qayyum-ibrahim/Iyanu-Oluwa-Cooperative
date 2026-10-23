@@ -1,5 +1,6 @@
 // Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36), record a payment
-// from member detail (U.4e2, R-04, R-06, D-89). Search by name or
+// from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
+// R-03). Search by name or
 // Membership ID runs in the browser over the list the server sent (A-191 item 2). The server
 // checks every field again. Amounts stay the naira strings the server sent (A-18); the browser
 // only adds the naira sign and thousands commas. The one sum is the payment form's breakdown
@@ -371,6 +372,8 @@ export default function Members({
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // The member just added, opened with the payment form for the first payment (U.4f, R-03).
+  const [firstPayment, setFirstPayment] = useState<Member | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -393,11 +396,17 @@ export default function Members({
     setFilter(next);
   }
 
-  function added(member: Member) {
+  function added(member: Member, recordPayment: boolean) {
     setShowForm(false);
-    setNotice(`${member.fullName} was added as ${member.membershipId}.`);
     setList({ kind: "loading" });
     setReload((n) => n + 1);
+    if (recordPayment) {
+      setNotice(null);
+      setFirstPayment(member);
+      setOpenId(member.id);
+      return;
+    }
+    setNotice(`${member.fullName} was added as ${member.membershipId}.`);
   }
 
   const rows = list.kind === "loaded" ? searchMembers(list.members, search) : [];
@@ -412,7 +421,11 @@ export default function Members({
         canViewPayments={canViewPayments}
         canViewLoans={canViewLoans}
         canRecordPayment={canRecordPayment}
-        onBack={() => setOpenId(null)}
+        firstPayment={firstPayment !== null && firstPayment.id === openId ? firstPayment : null}
+        onBack={() => {
+          setFirstPayment(null);
+          setOpenId(null);
+        }}
       />
     );
   }
@@ -443,7 +456,12 @@ export default function Members({
         </p>
       )}
       {showForm && (
-        <AddMemberForm api={api} onAdded={added} onCancel={() => setShowForm(false)} />
+        <AddMemberForm
+          api={api}
+          canRecordPayment={canRecordPayment}
+          onAdded={added}
+          onCancel={() => setShowForm(false)}
+        />
       )}
       <div className="member-toolbar">
         <input
@@ -515,6 +533,7 @@ export default function Members({
                         aria-label={`View ${m.fullName}`}
                         onClick={() => {
                           setNotice(null);
+                          setFirstPayment(null);
                           setOpenId(m.id);
                         }}
                       >
@@ -534,24 +553,36 @@ export default function Members({
 
 interface AddMemberFormProps {
   api: Pick<Api, "createMember">;
-  onAdded(member: Member): void;
+  canRecordPayment: boolean;
+  onAdded(member: Member, recordPayment: boolean): void;
   onCancel(): void;
 }
 
-function AddMemberForm({ api, onAdded, onCancel }: AddMemberFormProps) {
+/**
+ * With payments.create the main button saves the member and opens the first payment, and "Save
+ * without payment" saves only (R-03, as legacy-prototype/src/App.jsx). Without it there is one
+ * button that saves only.
+ */
+function AddMemberForm({ api, canRecordPayment, onAdded, onCancel }: AddMemberFormProps) {
   const [form, setForm] = useState<NewMember>(EMPTY);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Which button is saving: "pay" for the main button with payments.create, else "plain".
+  const [saving, setSaving] = useState<"pay" | "plain" | null>(null);
+  const busy = saving !== null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    await save(canRecordPayment);
+  }
+
+  async function save(recordPayment: boolean) {
     if (busy) return;
     const problem = checkNewMember(form);
     if (problem !== null) {
       setError(problem);
       return;
     }
-    setBusy(true);
+    setSaving(recordPayment ? "pay" : "plain");
     setError(null);
     const result = await api.createMember({
       fullName: form.fullName.trim(),
@@ -560,10 +591,10 @@ function AddMemberForm({ api, onAdded, onCancel }: AddMemberFormProps) {
       occupation: form.occupation.trim(),
     });
     if (result.ok) {
-      onAdded(result.value);
+      onAdded(result.value, recordPayment);
       return;
     }
-    setBusy(false);
+    setSaving(null);
     const message = memberMessage(result.reason);
     if (message !== null) setError(message);
   }
@@ -589,7 +620,10 @@ function AddMemberForm({ api, onAdded, onCancel }: AddMemberFormProps) {
       {field("phone", "Phone number", MEMBER_TEXT_MAX)}
       {field("address", "Address", MEMBER_TEXT_MAX)}
       {field("occupation", "Occupation", MEMBER_TEXT_MAX)}
-      <p className="form-note">New members are Active. The Membership ID is given by the system.</p>
+      <p className="form-note">
+        New members are Active. The Membership ID is given by the system.
+        {canRecordPayment && " After saving, the payment form opens for the first payment."}
+      </p>
       {error && (
         <em role="alert" className="error">
           {error}
@@ -599,8 +633,22 @@ function AddMemberForm({ api, onAdded, onCancel }: AddMemberFormProps) {
         <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
+        {canRecordPayment && (
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => void save(false)}
+            disabled={busy}
+          >
+            {saving === "plain" ? "Saving…" : "Save without payment"}
+          </button>
+        )}
         <button type="submit" className="primary-btn" disabled={busy}>
-          {busy ? "Saving…" : "Save member"}
+          {busy && saving === (canRecordPayment ? "pay" : "plain")
+            ? "Saving…"
+            : canRecordPayment
+              ? "Add member & record payment"
+              : "Save member"}
         </button>
       </div>
     </form>
@@ -830,6 +878,8 @@ interface MemberDetailProps {
   canViewPayments: boolean;
   canViewLoans: boolean;
   canRecordPayment: boolean;
+  /** The member just added: open with the payment form and a first-payment notice (U.4f, R-03). */
+  firstPayment: Member | null;
   onBack(): void;
 }
 
@@ -845,6 +895,7 @@ function MemberDetail({
   canViewPayments,
   canViewLoans,
   canRecordPayment,
+  firstPayment,
   onBack,
 }: MemberDetailProps) {
   const [member, setMember] = useState<Section<Member>>({ kind: "loading" });
@@ -855,8 +906,12 @@ function MemberDetail({
   const [loans, setLoans] = useState<Section<Loan[]>>(
     canViewLoans ? { kind: "loading" } : { kind: "hidden" },
   );
-  const [paying, setPaying] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [paying, setPaying] = useState(firstPayment !== null && canRecordPayment);
+  const [notice, setNotice] = useState<string | null>(
+    firstPayment === null
+      ? null
+      : `${firstPayment.fullName} was added as ${firstPayment.membershipId}. Record the first payment now.`,
+  );
   // Bumped after a saved payment, so balances, payments and loans are read again.
   const [reload, setReload] = useState(0);
 
@@ -944,7 +999,7 @@ function MemberDetail({
           {notice}
         </p>
       )}
-      {paying && m.status === "ACTIVE" && (
+      {paying && canRecordPayment && m.status === "ACTIVE" && (
         <PaymentForm
           api={api}
           memberId={m.id}

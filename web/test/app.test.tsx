@@ -521,6 +521,8 @@ describe("members screen (jsdom)", () => {
     await type(el("input[name=fullName]"), "  New Test Member ");
     await type(el("input[name=phone]"), "08000000009");
     await type(el("input[name=occupation]"), "Trader");
+    expect(() => button("Save without payment")).toThrow(); // no payments.create
+    expect(text()).not.toContain("payment form opens");
     await click(button("Save member"));
     expect(api.calls).toEqual([
       "list active",
@@ -1318,5 +1320,99 @@ describe("payment form (jsdom)", () => {
     );
     await openDetail("Test Member One");
     expect(el("table.payments tbody tr").textContent).toBe("30 Sep 2026CashShares ₦1,000.00₦1,000.00");
+  });
+});
+
+const ADD_PAYER: Me = {
+  ...PAYER,
+  permissions: ["members.view", "members.create", "payments.view", "loans.view", "payments.create"],
+};
+
+const NEW_MEMBER = member("m9", "IO-009", "New Test Member");
+
+async function fillNewMember() {
+  await openMembers();
+  await click(button("+ Add member"));
+  await type(el("input[name=fullName]"), "New Test Member");
+}
+
+describe("first payment after adding a member (jsdom)", () => {
+  it("opens the new member's detail with the payment form, then records the first payment", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: ADD_PAYER,
+        members: [ACTIVE_ONE],
+        create: { ok: true, value: NEW_MEMBER },
+        pay: [savedPayment("20000.00", lagosToday(), { status: "sent" })],
+      }),
+    );
+    await fillNewMember();
+    expect(text()).toContain("After saving, the payment form opens for the first payment.");
+    await click(button("Add member & record payment"));
+
+    expect(el("h1").textContent).toBe("New Test Member");
+    expect(el("[role=status]").textContent).toBe(
+      "New Test Member was added as IO-009. Record the first payment now.",
+    );
+    expect(container?.querySelector(".payment-form")).not.toBeNull();
+    expect(() => button("Record payment")).toThrow();
+    expect(api.calls).toContain("get m9");
+    expect(countCalls(api, "list active")).toBe(2); // the list is read again for the way back
+
+    await fillTwentyThousand();
+    await submitPayment();
+    expect(api.paid).toHaveLength(1);
+    expect(api.paid[0]!.memberId).toBe("m9");
+    expect(el("[role=status]").textContent).toBe(
+      `Payment of ₦20,000.00 on ${formatDay(lagosToday())} recorded. SMS receipt sent.`,
+    );
+    expect(container?.querySelector(".payment-form")).toBeNull();
+
+    await click(button("← Back to members"));
+    expect(rowTexts()).toHaveLength(2);
+    expect(rowTexts()[1]).toContain("IO-009");
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("saves without payment and stays on the list", async () => {
+    const api = await mount(
+      fakeApi({ restore: ADD_PAYER, members: [ACTIVE_ONE], create: { ok: true, value: NEW_MEMBER } }),
+    );
+    await fillNewMember();
+    await click(button("Save without payment"));
+    expect(el("h1").textContent).toBe("Members");
+    expect(el("[role=status]").textContent).toBe("New Test Member was added as IO-009.");
+    expect(container?.querySelector("form")).toBeNull();
+    expect(rowTexts()).toHaveLength(2);
+    expect(api.calls).not.toContain("get m9");
+  });
+
+  it("stays on the add form when the server refuses, from either button", async () => {
+    const api = await mount(
+      fakeApi({ restore: ADD_PAYER, create: { ok: false, reason: "network" } }),
+    );
+    await fillNewMember();
+    await click(button("Add member & record payment"));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    await click(button("Save without payment"));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(el<HTMLInputElement>("input[name=fullName]").value).toBe("New Test Member");
+    expect(container?.querySelector(".payment-form")).toBeNull();
+    expect(api.calls.filter((c) => c.startsWith("create "))).toHaveLength(2);
+    expect(api.calls.some((c) => c.startsWith("get "))).toBe(false);
+  });
+
+  it("opens a member from the list without the first-payment notice or the form", async () => {
+    await mount(
+      fakeApi({ restore: ADD_PAYER, members: [ACTIVE_ONE], create: { ok: true, value: NEW_MEMBER } }),
+    );
+    await fillNewMember();
+    await click(button("Add member & record payment"));
+    await click(button("← Back to members"));
+    await click(el('button[aria-label="View New Test Member"]'));
+    expect(el("h1").textContent).toBe("New Test Member");
+    expect(container?.querySelector(".payment-form")).toBeNull();
+    expect(container?.querySelector("[role=status]")).toBeNull();
+    expect(button("Record payment")).toBeTruthy();
   });
 });

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4f (size S), 2026-10-23: first-payment flow after adding a member (R-03, A-211)
+
+The owner said: "fix inconsistencies and go". So "Save without payment" is a new button (there was only "Save member"), and a user without `payments.create` keeps the one "Save member" button.
+**Changed:** `web/src/Members.tsx` (`AddMemberForm` takes `canRecordPayment`: "Add member & record payment" and "Save without payment", or "Save member" alone; `Members` opens the new member's detail with `firstPayment`; `MemberDetail` starts with the payment form open and a first-payment notice; the list is read again either way), `web/test/app.test.tsx` (4 tests: add and record the first payment then Back shows the new member, save without payment, a refusal from either button keeps the form, View opens without the form; the old add test checks there is no "Save without payment" without `payments.create`). `web/src/styles.css` was named in the step but needed no change. No new decision (choices in A-211).
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean, 4 files, 128 passed (124 before). `npm run check` (server): 47 files, 1847 passed.
+**Not verified:** not run in a browser; break-on-purpose (owed at U.4g).
+
+---
+
 ## Step U.4e2 (size M), 2026-10-23: payment form on member detail (D-89, A-210)
 
 The owner said: "fix Inconsistencies and go". So the payments table now shows `paidOn` (planned for U.4f), and the stale TRACEABILITY R-04 line is fixed.

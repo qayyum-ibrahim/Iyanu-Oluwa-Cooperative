@@ -1169,6 +1169,33 @@ describe("payment form (jsdom)", () => {
     expect(el(".breakdown-head span").textContent).toBe("Breakdown: ₦20,000.00 ✓ matches the total");
   });
 
+  it("shows no match for a total of ₦0.00", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    await type(el("input[name=total]"), "0");
+    await type(amountInput(1), "0");
+    expect(el(".breakdown-head span").textContent).toBe("Breakdown: ₦0.00 · must match the total");
+  });
+
+  it("stops a payment date after today in Lagos, with no call", async () => {
+    const api = await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    const tomorrow = lagosToday(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    await type(el("input[name=paidOn]"), tomorrow);
+    await fillTwentyThousand();
+    // The input's max stops a button press in jsdom; send submit straight to the form so the
+    // form's own date check runs, as it must where the browser does not enforce max.
+    await act(async () => {
+      el<HTMLFormElement>(".payment-form").dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(el(".payment-form [role=alert]").textContent).toBe(
+      "The payment date cannot be after today.",
+    );
+    expect(api.paid).toEqual([]);
+  });
+
   it("stops a breakdown that does not add up, with no call", async () => {
     const api = await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
     await openPaymentForm();

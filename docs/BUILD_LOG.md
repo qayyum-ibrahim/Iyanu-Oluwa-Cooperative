@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.4g2 (size S), 2026-10-23: tests for the U.4g gaps (A-212, A-213)
+
+The owner said "go".
+**Changed:** `web/test/api.test.ts` (C3: a day with text before it is refused; C19: an unknown SMS status with a known reason is refused), `web/test/app.test.tsx` (F10: no match shown for a total of ₦0.00; F7: a date after today in Lagos is stopped by the form, no call), docs.
+**Works (verified in this session):** `npm run check` (web): 4 files, 130 passed. `npm run check` (server): 47 files, 1847 passed. Rerun of the U.4g mutations (scratchpad copy of `~/Desktop/mutate-U.4g.mjs` that allows the two changed test files, A-213): baseline 116; 91 mutations, 83 caught, 8 escaped (F5, F16, F17, G5, G6, G8, G11, G13, equivalent as tested); "files restored: yes". Output in `~/Desktop/mutate-U.4g2.out`.
+**Found on the way:** the first F7 test pressed the button, and jsdom blocked the submit because of the input's `max`; the test now sends submit to the form (A-213).
+**Not verified:** not run in a browser; what a real browser does with `max` on submit (docs not read).
+
+---
+
 ## Step D.90 (size S), 2026-10-23: leaner process, same tests (D-90)
 
 The owner said: "draft D-90 with all four after U.4g", then "go D.90".

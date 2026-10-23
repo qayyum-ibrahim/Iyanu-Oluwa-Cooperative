@@ -36,7 +36,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         occupation: "",
         createdById,
       });
-      const l = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById });
+      const l = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 30_000_000n, createdById });
       return l.id;
     };
 

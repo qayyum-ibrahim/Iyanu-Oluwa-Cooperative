@@ -207,7 +207,7 @@ describe("processPayOff: success (DR-05)", () => {
     const { store, a, addMember, pay, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
-    const loan = await store.loans.create({ memberId: m.id, principal: 1_000_000n, createdById: a.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 1_000_000n, createdById: a.id });
     await pay(m.id, a.id, [["Loan Repaid", 10000]], loan.id);
     const v = must(await processPayOff(store, actorOf(a), payOffBody(m.id)));
     expect(v.total).toBe("25000.00");
@@ -315,7 +315,7 @@ describe("processPayOff: refusals", () => {
     const { store, admin, a, addMember, pay, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
-    const loan = await store.loans.create({ memberId: m.id, principal: 1_000_001n, createdById: a.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 1_000_001n, createdById: a.id });
     await pay(m.id, a.id, [["Loan Repaid", 10000]], loan.id);
     for (const u of [a, admin]) {
       expect(await processPayOff(store, actorOf(u), payOffBody(m.id))).toEqual({ ok: false, reason: "active_loan" });
@@ -327,9 +327,9 @@ describe("processPayOff: refusals", () => {
     const { store, a, addMember, pay, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
-    const repaid = await store.loans.create({ memberId: m.id, principal: 1_000_000n, createdById: a.id });
+    const repaid = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 1_000_000n, createdById: a.id });
     await pay(m.id, a.id, [["Loan Repaid", 10000]], repaid.id);
-    await store.loans.create({ memberId: m.id, principal: 500_000n, createdById: a.id });
+    await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 500_000n, createdById: a.id });
     expect(await processPayOff(store, actorOf(a), payOffBody(m.id))).toEqual({ ok: false, reason: "active_loan" });
     await expectNothingSaved(store, m.id, a.id);
   });
@@ -339,7 +339,7 @@ describe("processPayOff: refusals", () => {
     const m = await addMember(a.id, "A One");
     const other = await addMember(a.id, "A Two");
     await payExample(m.id, a.id);
-    await store.loans.create({ memberId: other.id, principal: 1_000_000n, createdById: a.id });
+    await store.loans.create({ givenOn: "2026-10-20", memberId: other.id, principal: 1_000_000n, createdById: a.id });
     must(await processPayOff(store, actorOf(a), payOffBody(m.id)));
   });
 
@@ -514,7 +514,7 @@ describe("processPayOff: idempotency key (as D-48)", () => {
     const { store, a, addMember, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
-    const loan = await store.loans.create({ memberId: m.id, principal: 100n, createdById: a.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 100n, createdById: a.id });
     const body = payOffBody(m.id);
     expect(await processPayOff(store, actorOf(a), body)).toEqual({ ok: false, reason: "active_loan" });
     await store.payments.create({

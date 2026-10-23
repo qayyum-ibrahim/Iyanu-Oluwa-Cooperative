@@ -1,14 +1,14 @@
-// Loan logic (step 5.4, idempotency key in 5.4c, list in 5.6; D-54, D-59, D-60, DR-08, DR-10, DR-13, DR-14,
-// DR-15). Rules over the Store: no HTTP here.
+// Loan logic (step 5.4, idempotency key in 5.4c, list in 5.6, loan date in U.5a; D-54, D-59, D-60,
+// DR-08, DR-10, DR-13, DR-14, DR-15). Rules over the Store: no HTTP here.
 // Giving a loan needs loans.disburse (A-149). The key lookup, the member checks, the
 // one-active-loan check, the loan, its one Loan expense and the audit entry run inside one store
 // transaction, so all of them are saved or none (D-45).
-// Audit details hold the Membership ID, the principal in kobo and the expense id: no name, no
-// phone, no key.
+// Audit details hold the Membership ID, the principal in kobo, the expense id and the day given: no
+// name, no phone, no key.
 
 import { createHash } from "node:crypto";
 import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
-import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, isCalendarDay, koboToNairaString, lagosDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import {
   DuplicateLoanKeyError,
@@ -39,6 +39,8 @@ export interface LoanView {
   principal: string;
   interestNote: string;
   notes: string;
+  /** The day the loan was given, "YYYY-MM-DD" in Lagos (U.5a). */
+  givenOn: string;
   /** The Loan expense saved with the loan (DR-10). */
   expenseId: string;
   createdById: string;
@@ -96,15 +98,27 @@ function optionalText(value: unknown): Text {
   return { ok: true, value: trimmed };
 }
 
-/** A fingerprint of the checked request: member, method, exact kobo, trimmed texts. */
+/**
+ * A fingerprint of the checked request: member, method, exact kobo, trimmed texts, and the loan
+ * date as sent. A request without a date hashes as before U.5a, so a retry of a loan saved before
+ * the date existed still matches, and a retry after midnight too (as payments, A-205 item 1).
+ */
 function hashRequest(
   memberId: string,
   method: PaymentMethod,
   principal: Kobo,
   interestNote: string,
   notes: string,
+  givenOn: string | undefined,
 ): string {
-  const canonical = JSON.stringify({ memberId, method, principal: principal.toString(), interestNote, notes });
+  const canonical = JSON.stringify({
+    memberId,
+    method,
+    principal: principal.toString(),
+    interestNote,
+    notes,
+    ...(givenOn !== undefined ? { givenOn } : {}),
+  });
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -116,6 +130,7 @@ function toView(loan: LoanRecord, membershipId: string, expenseId: string): Loan
     principal: koboToNairaString(loan.principal),
     interestNote: loan.interestNote,
     notes: loan.notes,
+    givenOn: loan.givenOn,
     expenseId,
     createdById: loan.createdById,
     createdAt: loan.createdAt.toISOString(),
@@ -128,6 +143,8 @@ export interface NewLoanInput {
   memberId?: unknown;
   principal?: unknown;
   method?: unknown;
+  /** "YYYY-MM-DD", the day in Lagos. Missing means today in Lagos (U.5a, as D-88). */
+  givenOn?: unknown;
   interestNote?: unknown;
   notes?: unknown;
 }
@@ -135,8 +152,9 @@ export interface NewLoanInput {
 /**
  * Gives a loan to a member: saves the loan, its one Loan expense (DR-10) and one audit entry
  * "loan.disbursed".
- * Order: permission, idempotency key shape, member id, method, principal (a naira string above
- * ₦0), interest note and notes, then one transaction: look the key up (a repeat returns the first
+ * Order: permission, idempotency key shape, member id, method, loan date (a real day, not after
+ * today in Lagos; missing means today), principal (a naira string above ₦0), interest note and
+ * notes, then one transaction: look the key up (a repeat returns the first
  * loan, a different request with the same key is refused), find the member, check who may see
  * it, check it is Active (A-147), check it has no active loan (DR-08), save the loan with its key,
  * save the expense, write the audit entry. Staff may give loans only to members they recorded
@@ -162,6 +180,16 @@ export async function disburseLoan(
   }
   const method = parseMethod(input.method);
   if (method === null) return failure("invalid_input", "invalid_method");
+  const sentGivenOn = input.givenOn;
+  if (sentGivenOn !== undefined && !isCalendarDay(sentGivenOn)) {
+    return failure("invalid_input", "invalid_given_on");
+  }
+  const today = lagosDay(new Date());
+  // Both are "YYYY-MM-DD", so text order is day order.
+  if (sentGivenOn !== undefined && sentGivenOn > today) {
+    return failure("invalid_input", "future_given_on");
+  }
+  const givenOn = sentGivenOn ?? today;
 
   let principal: Kobo;
   try {
@@ -176,7 +204,14 @@ export async function disburseLoan(
   if (!interestNote.ok) return failure("invalid_input", "invalid_interest_note");
   const notes = optionalText(input.notes);
   if (!notes.ok) return failure("invalid_input", "invalid_notes");
-  const requestHash = hashRequest(memberId, method, principal, interestNote.value, notes.value);
+  const requestHash = hashRequest(
+    memberId,
+    method,
+    principal,
+    interestNote.value,
+    notes.value,
+    sentGivenOn,
+  );
 
   const attempt = (): Promise<LoanResult> =>
     store.transaction<LoanResult>(async (tx) => {
@@ -211,6 +246,7 @@ export async function disburseLoan(
         principal,
         interestNote: interestNote.value,
         notes: notes.value,
+        givenOn,
         idempotencyKey: key,
         requestHash,
         createdById: actor.id,
@@ -227,7 +263,7 @@ export async function disburseLoan(
         action: "loan.disbursed",
         entityType: "Loan",
         entityId: loan.id,
-        detail: `membership_id=${member.membershipId} principal_kobo=${principal.toString()} expense_id=${expense.id}`,
+        detail: `membership_id=${member.membershipId} principal_kobo=${principal.toString()} expense_id=${expense.id} given_on=${givenOn}`,
       });
       return { ok: true, value: toView(loan, member.membershipId, expense.id), replayed: false };
     });

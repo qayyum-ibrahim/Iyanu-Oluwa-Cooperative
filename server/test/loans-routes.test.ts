@@ -75,7 +75,7 @@ describe("POST /loans", () => {
       .post("/loans")
       .set("Authorization", bearer(a))
       .set("Idempotency-Key", newKey())
-      .send(loanBody(m.id, { interestNote: "5% flat", notes: "school fees" }));
+      .send(loanBody(m.id, { interestNote: "5% flat", notes: "school fees", givenOn: "2026-10-15" }));
     expect(res.status).toBe(201);
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.headers["idempotent-replayed"]).toBeUndefined();
@@ -84,6 +84,7 @@ describe("POST /loans", () => {
       "createdAt",
       "createdById",
       "expenseId",
+      "givenOn",
       "id",
       "interestNote",
       "memberId",
@@ -97,6 +98,7 @@ describe("POST /loans", () => {
       principal: "300000.00",
       interestNote: "5% flat",
       notes: "school fees",
+      givenOn: "2026-10-15",
       createdById: a.id,
     });
     expect(new Date(res.body.loan.createdAt as string).toISOString()).toBe(res.body.loan.createdAt);
@@ -162,6 +164,8 @@ describe("POST /loans", () => {
     { label: "an unknown method", over: { method: "cash" }, code: "invalid_method" },
     { label: "a long interest note", over: { interestNote: "n".repeat(201) }, code: "invalid_interest_note" },
     { label: "notes that are not text", over: { notes: ["x"] }, code: "invalid_notes" },
+    { label: "a loan date that is not a real day", over: { givenOn: "2026-02-30" }, code: "invalid_given_on" },
+    { label: "a loan date after today", over: { givenOn: "2999-01-01" }, code: "future_given_on" },
   ])("answers 400 with the code for $label", async ({ over, code }) => {
     const { app, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");
@@ -336,6 +340,7 @@ describe("GET /loans (step 5.6)", () => {
       "createdAt",
       "createdById",
       "expenseId",
+      "givenOn",
       "id",
       "interestNote",
       "membershipId",

@@ -844,7 +844,7 @@ async function buildDelete(store: Store = createMemoryStore()) {
     occupation: "",
     createdById: base.admin.id,
   });
-  const loan = await store.loans.create({ memberId: member.id, principal: 30_000_000n, createdById: base.admin.id });
+  const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: member.id, principal: 30_000_000n, createdById: base.admin.id });
   const loanExpense = await store.expenses.create({
     category: "Loan",
     amount: 30_000_000n,
@@ -1018,7 +1018,7 @@ describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
       occupation: "",
       createdById: admin.id,
     });
-    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: member.id, principal: 100n, createdById: admin.id });
     const linked = await store.expenses.create({
       category: "Allowances",
       amount: 100n,
@@ -1311,7 +1311,7 @@ describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-1
       occupation: "",
       createdById: admin.id,
     });
-    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: member.id, principal: 100n, createdById: admin.id });
     const linked = await store.expenses.create({
       category: "Allowances",
       amount: 100n,

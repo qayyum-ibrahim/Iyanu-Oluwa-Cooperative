@@ -471,6 +471,8 @@ export interface LoanRecord {
   /** Information only, no formula (D-02, A-146). Empty when not given. */
   interestNote: string;
   notes: string;
+  /** The day the loan was given, "YYYY-MM-DD" in Lagos (step U.5a). */
+  givenOn: string;
   /** The caller's idempotency key, or null (step 5.4c, D-60). Unique per user. */
   idempotencyKey: string | null;
   /** SHA-256 of the checked request, or null. Used to tell a repeat from a different request. */
@@ -487,6 +489,8 @@ export interface NewLoan {
   interestNote?: string;
   /** Defaults to "". */
   notes?: string;
+  /** "YYYY-MM-DD". The store saves it as given: checking it is the logic code's job. */
+  givenOn: string;
   idempotencyKey?: string;
   requestHash?: string;
   createdById: string;

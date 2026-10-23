@@ -458,6 +458,7 @@ export function createMemoryStore(): Store {
             principal: input.principal,
             interestNote: input.interestNote ?? "",
             notes: input.notes ?? "",
+            givenOn: input.givenOn,
             idempotencyKey: input.idempotencyKey ?? null,
             requestHash: input.requestHash ?? null,
             createdById: input.createdById,

@@ -453,7 +453,7 @@ const repay = (memberId: string, amount: string, lines = [{ category: "Loan Repa
 
 // A ₦300,000 loan saved straight into the store (DR-08 example).
 const addLoan = (store: Store, memberId: string, createdById: string, principal = 30_000_000n) =>
-  store.loans.create({ memberId, principal, createdById });
+  store.loans.create({ givenOn: "2026-10-20", memberId, principal, createdById });
 
 describe("createPayment: Loan Repaid (DR-08, DR-09, A-145)", () => {
   it("links a Loan Repaid line to the active loan: ₦300,000 less ₦20,000 leaves ₦280,000", async () => {

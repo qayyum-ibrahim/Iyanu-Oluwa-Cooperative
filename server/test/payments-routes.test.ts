@@ -194,7 +194,7 @@ describe("POST /payments", () => {
   it("answers 409 loan_overpayment above the outstanding amount, and 201 at it", async () => {
     const { app, a, bearer, addMember, store } = await build();
     const m = await addMember(a.id, "A One");
-    await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: a.id });
+    await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 30_000_000n, createdById: a.id });
     const send = (amount: string) =>
       request(app)
         .post("/payments").set("Idempotency-Key", key())

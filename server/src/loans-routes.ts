@@ -1,6 +1,6 @@
-// Loan routes (step 5.4, idempotency key in 5.4c, list in 5.6). Thin: all rules live in loans.ts.
-// Guards run first (401, then 403), then the body is read, so a caller without the right
-// never reaches the parser. Never log a body or a key.
+// Loan routes (step 5.4, idempotency key in 5.4c, list in 5.6, loan date in U.5a). Thin: all rules
+// live in loans.ts. Guards run first (401, then 403), then the body is read, so a caller without
+// the right never reaches the parser. Never log a body or a key.
 
 import express, { Router, type Request, type Response } from "express";
 import {
@@ -67,6 +67,7 @@ export function createLoansRouter(deps: GuardDeps): Router {
         memberId: body["memberId"],
         principal: body["principal"],
         method: body["method"],
+        givenOn: body["givenOn"],
         interestNote: body["interestNote"],
         notes: body["notes"],
       });

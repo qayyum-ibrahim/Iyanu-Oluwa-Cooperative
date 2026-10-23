@@ -39,6 +39,7 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
       memberId,
       createdById,
       principal: 30_000_000n,
+      givenOn: "2026-10-20",
       ...over,
     });
 
@@ -53,6 +54,7 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
         principal: 30_000_000n,
         interestNote: "",
         notes: "",
+        givenOn: "2026-10-20",
         idempotencyKey: null,
         requestHash: null,
         createdById: u.id,
@@ -75,6 +77,18 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
         interestNote: "5% flat, for information",
         notes: "School fees",
       });
+    });
+
+    it("keeps the loan date as given, in every read (U.5a)", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "l-given");
+      const m = await newMember(store, u.id);
+      const key = uniqueKey();
+      const l = await store.loans.create(loan(m.id, u.id, { givenOn: "2025-02-28", idempotencyKey: key }));
+      expect(l.givenOn).toBe("2025-02-28");
+      expect((await store.loans.findById(l.id))?.givenOn).toBe("2025-02-28");
+      expect((await store.loans.listByMember(m.id)).map((x) => x.givenOn)).toEqual(["2025-02-28"]);
+      expect((await store.loans.findByKey(u.id, key))?.givenOn).toBe("2025-02-28");
     });
 
     it("returns null for an unknown id", async () => {

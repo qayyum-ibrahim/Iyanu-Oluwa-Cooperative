@@ -208,7 +208,7 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       const store = await makeStore();
       const u = await newUser(store, "p-loan");
       const m = await newMember(store, u.id);
-      const loan = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: u.id });
+      const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 30_000_000n, createdById: u.id });
       const p = await store.payments.create(
         payment(m.id, u.id, {
           total: 2_500_000n,
@@ -230,7 +230,7 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       const store = await makeStore();
       const u = await newUser(store, "p-noloan");
       const m = await newMember(store, u.id);
-      const loan = await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: u.id });
+      const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 30_000_000n, createdById: u.id });
       await expect(
         store.payments.create(
           payment(m.id, u.id, {

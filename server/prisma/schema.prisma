@@ -190,6 +190,9 @@ model Loan {
   // Information only, no formula (D-02, A-146).
   interestNote  String   @default("")
   notes         String   @default("")
+  // The day the loan was given, "YYYY-MM-DD" in Lagos (step U.5a). Old rows get the day of
+  // createdAt in Lagos (migration 20261023120000_loan_given_on).
+  givenOn       String
   // Set from the Idempotency-Key header (step 5.4c, D-60). Old rows have none.
   idempotencyKey String?
   requestHash    String?

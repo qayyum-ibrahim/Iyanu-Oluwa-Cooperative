@@ -425,7 +425,7 @@ describe("DELETE /expenses/:id (5.9b)", () => {
       occupation: "",
       createdById: admin.id,
     });
-    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: member.id, principal: 100n, createdById: admin.id });
     const loanExpense = await store.expenses.create({
       category: "Loan",
       amount: 100n,
@@ -562,7 +562,7 @@ describe("PUT /expenses/:id (5.9c)", () => {
       occupation: "",
       createdById: admin.id,
     });
-    const loan = await store.loans.create({ memberId: member.id, principal: 100n, createdById: admin.id });
+    const loan = await store.loans.create({ givenOn: "2026-10-20", memberId: member.id, principal: 100n, createdById: admin.id });
     const loanExpense = await store.expenses.create({
       category: "Loan",
       amount: 100n,

@@ -173,8 +173,8 @@ describe("database (real migration, temporary SQLite file)", () => {
   it("refuses to delete a loan that has a repayment line or an expense", async () => {
     const u = await newUser("loan-keep@example.test");
     const m = await newMember(9004, u.id);
-    const repaid = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, createdById: u.id } });
-    const paidOut = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, createdById: u.id } });
+    const repaid = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, givenOn: "2026-10-20", createdById: u.id } });
+    const paidOut = await db.loan.create({ data: { memberId: m.id, principalKobo: 100n, givenOn: "2026-10-20", createdById: u.id } });
     await db.payment.create({
       data: {
         memberId: m.id,

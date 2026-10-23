@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.5a (size M), 2026-10-23: loan date `givenOn` on the server (D-91, A-214)
+
+The owner said: "loans should have a date field, and go". U.5 split: U.5a server, U.5b web form.
+**Changed:** `server/prisma/schema.prisma`, new migration `server/prisma/migrations/20261023120000_loan_given_on/migration.sql` (SQL from `prisma migrate diff` on a temporary database in the scratchpad, row copy edited by hand), `server/src/store.ts`, `server/src/memory-store.ts`, `server/src/prisma-store.ts`, `server/src/loans.ts` (check, hash when sent, view, audit), `server/src/loans-routes.ts` (passes `givenOn`), tests: `test/helpers/loans-contract.ts` (one case), `test/loans.test.ts` (loan date block, 15 tests), `test/loans-routes.test.ts` (two codes, field lists), new `test/migration-loan-given-on.test.ts` (5), and `givenOn` added to direct loan saves in `test/db.test.ts`, `test/expenses.test.ts`, `test/expenses-routes.test.ts`, `test/payments.test.ts`, `test/payments-routes.test.ts`, `test/payoffs.test.ts`, `test/payoffs-routes.test.ts`, `test/helpers/payments-contract.ts`, `test/helpers/expenses-contract.ts`. Docs: DECISIONS (D-91; correction to D-90: the end run covers U.8 too), ASSUMPTIONS (A-214; A-104, A-147, A-191 item 4 marked superseded), PHASE_PLAN, TRACEABILITY, DATA_MODEL, STATUS.
+**Works (verified in this session):** `npm run check` (server): 48 files, 1871 passed.
+After the owner's yes: `npm run db:deploy` applied `20261023120000_loan_given_on` to the dev database ("All migrations have been successfully applied.", verified in this session).
+**Not verified:** dev database rows not read; no live check; web not changed in this step.
+
+---
+
 ## Step U.4g2 (size S), 2026-10-23: tests for the U.4g gaps (A-212, A-213)
 
 The owner said "go".

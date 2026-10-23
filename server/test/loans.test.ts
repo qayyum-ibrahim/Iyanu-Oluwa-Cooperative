@@ -12,7 +12,9 @@ import {
   type LoanResult,
   type LoanView,
 } from "../src/loans.js";
+import { createHash } from "node:crypto";
 import { createMemoryStore } from "../src/memory-store.js";
+import { lagosDay } from "../src/payments.js";
 import { createPrismaStore } from "../src/prisma-store.js";
 import type { LoanRecord, PaymentRecord, Role, Store, UserRecord } from "../src/store.js";
 import { createTempDb, type TempDb } from "./helpers/temp-db.js";
@@ -101,6 +103,7 @@ describe("disburseLoan: success", () => {
       "createdAt",
       "createdById",
       "expenseId",
+      "givenOn",
       "id",
       "interestNote",
       "memberId",
@@ -163,14 +166,16 @@ describe("disburseLoan: success", () => {
   it("writes one loan.disbursed entry with ids and amounts only", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    const r = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { notes: "private note" })));
+    const r = must(
+      await disburseLoan(store, actorOf(a), loanBody(m.id, { notes: "private note", givenOn: "2026-10-01" })),
+    );
     const entries = await store.audit.listByActor(a.id);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       action: "loan.disbursed",
       entityType: "Loan",
       entityId: r.id,
-      detail: `membership_id=IO-001 principal_kobo=30000000 expense_id=${r.expenseId}`,
+      detail: `membership_id=IO-001 principal_kobo=30000000 expense_id=${r.expenseId} given_on=2026-10-01`,
     });
     const text = JSON.stringify(entries);
     expect(text).not.toContain("A One");
@@ -188,6 +193,122 @@ describe("disburseLoan: success", () => {
     expect(second.id).not.toBe(first.id);
     expect(await store.loans.listByMember(m.id)).toHaveLength(2);
     expect(await store.expenses.list({})).toHaveLength(2);
+  });
+});
+
+describe("disburseLoan: loan date (U.5a)", () => {
+  const lagosToday = () => lagosDay(new Date());
+
+  it("saves the date sent and shows it in the view and the list", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const r = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn: "2019-03-07" })));
+    expect(r.givenOn).toBe("2019-03-07");
+    expect((await store.loans.findById(r.id))?.givenOn).toBe("2019-03-07");
+    expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))[0]?.givenOn).toBe("2019-03-07");
+  });
+
+  it("accepts today in Lagos", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const today = lagosToday();
+    expect(must(await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn: today }))).givenOn).toBe(today);
+  });
+
+  it("saves today in Lagos when no date is sent", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const before = lagosToday();
+    const r = must(await disburseLoan(store, actorOf(a), loanBody(m.id)));
+    const after = lagosToday();
+    expect([before, after]).toContain(r.givenOn);
+    expect((await store.loans.findById(r.id))?.givenOn).toBe(r.givenOn);
+  });
+
+  it.each([
+    { label: "not a real day", value: "2026-02-30" },
+    { label: "a five-digit year", value: "12026-10-01" },
+    { label: "a time", value: "2026-10-01T00:00:00.000Z" },
+    { label: "another order", value: "01-10-2026" },
+    { label: "empty", value: "" },
+    { label: "null", value: null },
+    { label: "a number", value: 20261001 },
+  ])("refuses a loan date that is $label, and saves nothing", async ({ value }) => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_given_on",
+    });
+    expect(await store.loans.listByMember(m.id)).toEqual([]);
+    expect(await store.expenses.list({})).toEqual([]);
+  });
+
+  it("refuses a loan date after today in Lagos, and saves nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const tomorrow = lagosDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    for (const givenOn of [tomorrow, "2999-01-01"]) {
+      expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn }))).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "future_given_on",
+      });
+    }
+    expect(await store.loans.listByMember(m.id)).toEqual([]);
+  });
+
+  it("checks the date after the method and before the principal", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(
+      await disburseLoan(store, actorOf(a), loanBody(m.id, { method: "x", givenOn: "bad" })),
+    ).toMatchObject({ code: "invalid_method" });
+    expect(
+      await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn: "bad", principal: "x" })),
+    ).toMatchObject({ code: "invalid_given_on" });
+  });
+
+  it("replays the same key with the same date, and refuses it with another date or none", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    const first = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, givenOn: "2026-10-01" })));
+    const again = await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, givenOn: "2026-10-01" }));
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again).id).toBe(first.id);
+    for (const givenOn of ["2026-10-02", undefined]) {
+      expect(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, givenOn }))).toEqual({
+        ok: false,
+        reason: "idempotency_conflict",
+      });
+    }
+    expect(await store.loans.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("refuses a key first sent without a date when it comes back with today's date", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    must(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k })));
+    expect(
+      await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k, givenOn: lagosToday() })),
+    ).toEqual({ ok: false, reason: "idempotency_conflict" });
+  });
+
+  it("replays a request without a date against a loan saved before the date existed (same hash)", async () => {
+    // A loan saved before U.5a has a hash of member, method, principal and texts only. A request
+    // without a date must still match it.
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const k = newKey();
+    const first = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { idempotencyKey: k })));
+    const saved = await store.loans.findById(first.id);
+    const oldHash = createHash("sha256")
+      .update(JSON.stringify({ memberId: m.id, method: "BANK_TRANSFER", principal: "30000000", interestNote: "", notes: "" }))
+      .digest("hex");
+    expect(saved?.requestHash).toBe(oldHash);
   });
 });
 
@@ -252,6 +373,7 @@ describe("loanOutstanding and isLoanActive", () => {
     principal: 30_000_000n,
     interestNote: "",
     notes: "",
+    givenOn: "1970-01-01",
     idempotencyKey: null,
     requestHash: null,
     createdById: "u",
@@ -892,7 +1014,7 @@ describe("listLoans (step 5.6)", () => {
   it("fails loudly when a saved loan has no Loan expense", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    await store.loans.create({ memberId: m.id, principal: 100n, createdById: a.id });
+    await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 100n, createdById: a.id });
     await expect(listLoans(store, actorOf(a), { memberId: m.id })).rejects.toThrow(
       "The Loan expense of a saved loan is missing",
     );

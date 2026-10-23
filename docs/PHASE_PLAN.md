@@ -101,7 +101,9 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.4g (S) Break-on-purpose for U.4d to U.4f. Done (A-212): 91 mutations, 79 caught; C3, C19, F7, F10 test gaps; 8 equivalent as tested.
   - U.4g2 (S, proposed at U.4g) Tests for the U.4g gaps (C3, C19, F7, F10), then a rerun of `mutate-U.4g.mjs`. Done (A-213): web 130 tests; rerun 83 of 91 caught, only the 8 equivalent escape.
   - D.90 (S, docs) Leaner process (D-90). Done. From U.5 on: one screen or feature per M step; one break-on-purpose run at the end of Phase U for its money, security and data-loss code (U.5 loans, U.7 pay-off and reactivation, U.8 staff and access).
-- U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.
+- U.5 Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status. The loans list on member detail exists since U.3f. The owner asked for a loan date (D-91), so U.5 split at its start:
+  - U.5a (M) Server: `Loan.givenOn`, migration that fills old rows, store field in both adapters, `givenOn` in `POST /loans` (checked, in the hash when sent, view, list, audit). Done (D-91, A-214): 1871 server tests.
+  - U.5b (M) Web: `createLoan` in `web/src/api.ts`, `givenOn` in the loan reads, the "Give loan" form on member detail (date, principal, method, interest note, notes; one key per attempt), the loans table by `givenOn`.
 - U.6 (M) Expenses: record, list with filters and total, edit, delete.
 - U.7 (M) Pay-off confirmation at the bottom of member detail (R-13; balances from U.3a, `total` sent back, `payout_changed` shown, DR-05, A-185) and the reactivate button on an Inactive member (D-80).
 - U.8 (M) Staff and access (create, permissions, deactivate, reactivate, reset password); audit viewer.
@@ -117,7 +119,7 @@ Sizes stay a first look; an M step may split when it starts.
 | Add member | `POST /members` | `members.create` | none |
 | Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, `GET /members/:id/balances` (U.3a) | `members.view`, `payments.view`, `loans.view` | no member edit route (`members.edit` is used only by reactivation) |
 | Record payment | `POST /payments` | `payments.create` | payment date `paidOn` added at U.4a and taken from the request since U.4b (D-87, D-88; the prototype README orders the form member, date, method, total, breakdown) |
-| Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); no loan date (time recorded) |
+| Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); loan date `givenOn` since U.5a (D-91) |
 | Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | no "date spent" (A-172); no paging |
 | Pay-off | `GET /members/:id/balances` (U.3a), `POST /payoffs` | `payoff.process` | no pay-off read (A-186) |
 | Reactivate member | `POST /members/:id/reactivate` | `members.edit` | none |

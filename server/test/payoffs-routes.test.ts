@@ -183,7 +183,7 @@ describe("POST /payoffs", () => {
     const { app, store, a, bearer, addMember, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
-    await store.loans.create({ memberId: m.id, principal: 30_000_000n, createdById: a.id });
+    await store.loans.create({ givenOn: "2026-10-20", memberId: m.id, principal: 30_000_000n, createdById: a.id });
     const res = await request(app)
       .post("/payoffs")
       .set("Authorization", bearer(a))

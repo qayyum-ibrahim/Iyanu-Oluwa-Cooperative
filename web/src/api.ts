@@ -1,7 +1,8 @@
 // API client for the auth routes (server/src/auth-routes.ts), the member routes
 // (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
 // (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b) and the
-// expense list (server/src/expenses-routes.ts, U.6c). Tokens travel in the JSON body
+// expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e).
+// Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -163,6 +164,9 @@ export interface NewExpense {
   narration: string;
 }
 
+/** The body of PUT /expenses/:id: every field again (A-177). No key: the same edit sent twice is the same. */
+export type ExpenseEdit = Omit<NewExpense, "idempotencyKey">;
+
 /** The query of GET /expenses (D-94). A field left out is not filtered on. */
 export interface ExpenseFilter {
   category?: string;
@@ -209,6 +213,16 @@ export type CreateLoanResult =
 export type CreateExpenseResult =
   | { ok: true; expense: Expense; replayed: boolean }
   | { ok: false; reason: CallFailure | "idempotency_conflict"; code?: string };
+
+/** code comes with not_editable ("loan_linked", "pay_off") and with invalid_input. */
+export type UpdateExpenseResult =
+  | { ok: true; expense: Expense }
+  | { ok: false; reason: CallFailure | "not_editable"; code?: string };
+
+/** code comes with not_deletable ("loan_linked", "pay_off"). */
+export type DeleteExpenseResult =
+  | { ok: true }
+  | { ok: false; reason: CallFailure | "not_deletable"; code?: string };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -261,6 +275,8 @@ export interface Api {
   createLoan(input: NewLoan): Promise<CreateLoanResult>;
   listExpenses(filter: ExpenseFilter): Promise<CallResult<ExpenseList>>;
   createExpense(input: NewExpense): Promise<CreateExpenseResult>;
+  updateExpense(id: string, input: ExpenseEdit): Promise<UpdateExpenseResult>;
+  deleteExpense(id: string): Promise<DeleteExpenseResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -579,6 +595,25 @@ function expenseFailureOf(
   return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
 }
 
+/**
+ * A refused PUT or DELETE /expenses/:id. A 409 passes on only as `conflict` (not_editable or
+ * not_deletable) with its code; any other 409 answers server.
+ */
+function expenseChangeFailureOf<C extends "not_editable" | "not_deletable">(
+  status: number,
+  body: unknown,
+  conflict: C,
+): { ok: false; reason: CallFailure | C; code?: string } {
+  const reply = isObject(body) ? body : {};
+  const { code } = reply;
+  const withCode = typeof code === "string" ? { code } : {};
+  if (status === 409) {
+    return reply["error"] === conflict ? { ok: false, reason: conflict, ...withCode } : { ok: false, reason: "server" };
+  }
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  return { ok: false, reason: "invalid_input", ...withCode };
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export function createApi(deps: ApiDeps): Api {
@@ -701,6 +736,7 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   const memberPath = (id: string) => `/members/${encodeURIComponent(id)}`;
+  const expensePath = (id: string) => `/expenses/${encodeURIComponent(id)}`;
 
   return {
     async login(email, password) {
@@ -878,6 +914,33 @@ export function createApi(deps: ApiDeps): Api {
       if (expense === null) return { ok: false, reason: "server" };
       const replayed = response.headers.get("Idempotent-Replayed") === "true";
       return { ok: true, expense, replayed };
+    },
+
+    async updateExpense(id, input) {
+      let response: Response | null;
+      try {
+        response = await authed(expensePath(id), { method: "PUT", body: JSON.stringify(input) });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status !== 200) return expenseChangeFailureOf(response.status, reply, "not_editable");
+      const expense = isObject(reply) ? expenseOf(reply["expense"]) : null;
+      if (expense === null) return { ok: false, reason: "server" };
+      return { ok: true, expense };
+    },
+
+    async deleteExpense(id) {
+      let response: Response | null;
+      try {
+        response = await authed(expensePath(id), { method: "DELETE" });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      if (response.status === 204) return { ok: true };
+      return expenseChangeFailureOf(response.status, await readJson(response), "not_deletable");
     },
   };
 }

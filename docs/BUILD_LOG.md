@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.6e (size M), 2026-10-23: edit and delete an expense on the Expenses page (D-95, A-221)
+
+The owner said "go".
+**Changed:** `web/src/api.ts` (`ExpenseEdit`, `UpdateExpenseResult`, `DeleteExpenseResult`, `expenseChangeFailureOf`, `updateExpense` with `PUT /expenses/:id` and the reply shape checked, `deleteExpense` with `DELETE /expenses/:id`; header comment), `web/src/Expenses.tsx` (`isChangeable`, `editExpenseMessage`, `deleteExpenseMessage`, `editedExpenseMessage`, `deletedExpenseMessage`; `ExpenseForm` edits when given an expense; `DeleteConfirm`; one panel at a time; Action column with Edit and Delete; header comment), `web/src/App.tsx` (passes `expenses.edit` and `expenses.delete`; header comment), `web/src/styles.css` (delete confirm beside the forms, `.row-actions`, `.danger-btn`). Tests: `web/test/api.test.ts` (`updateExpense` 6, `deleteExpense` 3), `web/test/app.test.tsx` (helpers 2, edit and delete 9; fakes have `updateExpense` and `deleteExpense`). Docs: ASSUMPTIONS (A-221), PHASE_PLAN (U.6e done), TRACEABILITY (R-10, R-11), STATUS.
+**Works (verified in this session):** `npm run check` (web): 4 files, 208 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (delete goes into the Phase U end run, D-90).
+
+---
+
 ## Step U.6d (size M), 2026-10-23: record an expense on the Expenses page (D-95, A-220)
 
 The owner said "go" after Claude proposed splitting U.6d (L) into U.6d record and U.6e edit and delete (D-95).

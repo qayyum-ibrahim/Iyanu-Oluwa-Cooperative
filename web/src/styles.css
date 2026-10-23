@@ -401,10 +401,12 @@ td.amount {
   }
 }
 
-/* Payment form (U.4e2), from the prototype's breakdown box; loan form (U.5b); expense form (U.6d) */
+/* Payment form (U.4e2), from the prototype's breakdown box; loan form (U.5b); expense form (U.6d);
+   expense delete confirm (U.6e) */
 .payment-form,
 .loan-form,
-.expense-form {
+.expense-form,
+.expense-delete {
   margin-bottom: 18px;
 }
 .payment-form fieldset,
@@ -516,4 +518,13 @@ td.amount {
   color: #065f46;
   font-size: 15px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Expense edit and delete (U.6e); the delete button in the colours of Sign out */
+.row-actions {
+  white-space: nowrap;
+}
+.danger-btn {
+  background: #fff2f0;
+  color: #a51d16;
 }

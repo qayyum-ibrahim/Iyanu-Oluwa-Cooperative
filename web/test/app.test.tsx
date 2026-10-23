@@ -18,7 +18,9 @@ import type {
   CreateExpenseResult,
   CreateLoanResult,
   CreatePaymentResult,
+  DeleteExpenseResult,
   Expense,
+  ExpenseEdit,
   ExpenseFilter,
   ExpenseList,
   LoginResult,
@@ -32,6 +34,7 @@ import type {
   NewPayment,
   Payment,
   SmsOutcome,
+  UpdateExpenseResult,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
@@ -41,9 +44,14 @@ import {
   NO_FILTER,
   checkExpense,
   checkExpenseFilter,
+  deleteExpenseMessage,
+  deletedExpenseMessage,
+  editExpenseMessage,
+  editedExpenseMessage,
   expenseCount,
   expenseListMessage,
   expenseMessage,
+  isChangeable,
   savedExpenseMessage,
   type ExpenseFormInput,
 } from "../src/Expenses.tsx";
@@ -92,6 +100,8 @@ const idleApi: Api = {
   createLoan: async () => ({ ok: false, reason: "server" }),
   listExpenses: async () => ({ ok: false, reason: "server" }),
   createExpense: async () => ({ ok: false, reason: "server" }),
+  updateExpense: async () => ({ ok: false, reason: "server" }),
+  deleteExpense: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -176,6 +186,10 @@ interface FakeApi extends Api {
   expenseQueries: ExpenseFilter[];
   /** Every expense the screen recorded, in order. */
   spent: NewExpense[];
+  /** Every expense edit the screen sent, in order. */
+  edited: { id: string; input: ExpenseEdit }[];
+  /** Every expense id the screen deleted, in order. */
+  deleted: string[];
   signOutFromServer(): void;
 }
 
@@ -221,6 +235,10 @@ function fakeApi(
     expenses?: CallResult<ExpenseList>;
     /** Answers to createExpense in turn; the last one repeats. */
     spend?: CreateExpenseResult[];
+    /** Answers to updateExpense in turn; the last one repeats. */
+    edit?: UpdateExpenseResult[];
+    /** Answers to deleteExpense in turn; the last one repeats. */
+    remove?: DeleteExpenseResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -229,12 +247,16 @@ function fakeApi(
     const lent: NewLoan[] = [];
     const expenseQueries: ExpenseFilter[] = [];
     const spent: NewExpense[] = [];
+    const edited: { id: string; input: ExpenseEdit }[] = [];
+    const deleted: string[] = [];
     return {
       calls,
       paid,
       lent,
       expenseQueries,
       spent,
+      edited,
+      deleted,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -298,6 +320,18 @@ function fakeApi(
         spent.push(input);
         const answers = opts.spend ?? [];
         return answers[Math.min(spent.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      updateExpense: async (id, input) => {
+        calls.push(`edit ${id}`);
+        edited.push({ id, input });
+        const answers = opts.edit ?? [];
+        return answers[Math.min(edited.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      deleteExpense: async (id) => {
+        calls.push(`delete ${id}`);
+        deleted.push(id);
+        const answers = opts.remove ?? [];
+        return answers[Math.min(deleted.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
     };
   };
@@ -2253,5 +2287,237 @@ describe("expense form (jsdom)", () => {
     expect(container?.querySelector(".expense-form")).toBeNull();
     expect(button("+ Record expense")).toBeTruthy();
     expect(api.spent).toEqual([]);
+  });
+});
+
+describe("expense edit and delete helpers", () => {
+  it("lets only the hand-picked categories be changed on screen", () => {
+    for (const category of MANUAL_EXPENSE_CATEGORIES) {
+      expect(isChangeable(expense("e1", "2026-10-01", "5.00", { category }))).toBe(true);
+    }
+    for (const category of ["Loan", "Membership Withdrawal", "Food"]) {
+      expect(isChangeable(expense("e1", "2026-10-01", "5.00", { category }))).toBe(false);
+    }
+  });
+
+  it("maps each edit and delete refusal to a message, and names the changed expense", () => {
+    expect(editExpenseMessage({ ok: false, reason: "not_editable", code: "loan_linked" })).toBe(
+      "This expense is linked to a loan and cannot be edited.",
+    );
+    expect(editExpenseMessage({ ok: false, reason: "not_editable", code: "pay_off" })).toBe(
+      "This expense is part of a pay-off and cannot be edited.",
+    );
+    expect(editExpenseMessage({ ok: false, reason: "not_editable" })).toBe("This expense cannot be edited.");
+    expect(editExpenseMessage({ ok: false, reason: "not_found" })).toBe(
+      "This expense was not found. It may have been deleted.",
+    );
+    expect(editExpenseMessage({ ok: false, reason: "invalid_input", code: "missing_narration" })).toBe(
+      "Others needs a narration: say what the money was for.",
+    );
+    expect(editExpenseMessage({ ok: false, reason: "invalid_input", code: "toString" })).toMatch(/changes were refused/);
+    expect(editExpenseMessage({ ok: false, reason: "forbidden" })).toMatch(/permission/);
+    expect(editExpenseMessage({ ok: false, reason: "signed_out" })).toBeNull();
+    expect(editExpenseMessage({ ok: false, reason: "network" })).toMatch(/Cannot reach/);
+    expect(editExpenseMessage({ ok: false, reason: "server" })).toMatch(/went wrong/);
+
+    expect(deleteExpenseMessage({ ok: false, reason: "not_deletable", code: "loan_linked" })).toBe(
+      "This expense is linked to a loan and cannot be deleted.",
+    );
+    expect(deleteExpenseMessage({ ok: false, reason: "not_deletable", code: "pay_off" })).toBe(
+      "This expense is part of a pay-off and cannot be deleted.",
+    );
+    expect(deleteExpenseMessage({ ok: false, reason: "not_found" })).toMatch(/may have been deleted/);
+    expect(deleteExpenseMessage({ ok: false, reason: "forbidden" })).toMatch(/permission/);
+    expect(deleteExpenseMessage({ ok: false, reason: "signed_out" })).toBeNull();
+    expect(deleteExpenseMessage({ ok: false, reason: "network" })).toMatch(/Cannot reach/);
+    expect(deleteExpenseMessage({ ok: false, reason: "server" })).toMatch(/went wrong/);
+
+    const e = expense("e3", "2026-10-03", "16000.00", { category: "Office Maintenance" });
+    expect(editedExpenseMessage(e)).toBe("Office Maintenance expense of ₦16,000.00 on 3 Oct 2026 saved.");
+    expect(deletedExpenseMessage(e)).toBe("Office Maintenance expense of ₦16,000.00 on 3 Oct 2026 deleted.");
+  });
+});
+
+const EXPENSE_EDITOR: Me = {
+  ...ME,
+  user: { ...ME.user, role: "STAFF" },
+  permissions: ["expenses.view", "expenses.create", "expenses.edit", "expenses.delete"],
+};
+
+const PLUMBER = expense("e3", "2026-10-03", "15000.00", { category: "Office Maintenance", description: "Plumber" });
+
+/** Oldest first, as the server sends them: a Loan, a pay-off, then two a person picked. */
+const MIXED_EXPENSES: CallResult<ExpenseList> = {
+  ok: true,
+  value: {
+    expenses: [
+      expense("e1", "2026-10-01", "50000.00", { category: "Loan" }),
+      expense("e2", "2026-10-02", "20000.00", { category: "Membership Withdrawal" }),
+      PLUMBER,
+      expense("e4", "2026-10-04", "700.00", { category: "Others", method: "BANK_TRANSFER", narration: "Fuel" }),
+    ],
+    total: "85700.00",
+  },
+};
+
+/** The buttons of the row at `index` (newest first), by their text. */
+function rowButtons(index: number): string[] {
+  const row = container?.querySelectorAll("tbody tr")[index];
+  return Array.from(row?.querySelectorAll("button") ?? [], (b) => b.textContent ?? "");
+}
+
+async function clickRow(index: number, text: string) {
+  const row = container?.querySelectorAll("tbody tr")[index];
+  const found = Array.from(row?.querySelectorAll("button") ?? []).find((b) => b.textContent === text);
+  if (!found) throw new Error(`no ${text} on row ${index}`);
+  await click(found);
+}
+
+describe("expense edit and delete (jsdom)", () => {
+  it("has no Action column without expenses.edit and expenses.delete", async () => {
+    await mount(fakeApi({ restore: EXPENSE_CREATOR, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    expect(el("thead").textContent).not.toContain("Action");
+    expect(rowButtons(0)).toEqual([]);
+  });
+
+  it("shows Edit and Delete only on the rows a person may change", async () => {
+    await mount(fakeApi({ restore: EXPENSE_EDITOR, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    expect(el("thead").textContent).toContain("Action");
+    expect([0, 1, 2, 3].map(rowButtons)).toEqual([["Edit", "Delete"], ["Edit", "Delete"], [], []]);
+    expect(rowTexts()[2]).toContain("Membership Withdrawal");
+    expect(rowTexts()[3]).toContain("Loan");
+  });
+
+  it("shows only the button the user has the permission for", async () => {
+    const editOnly: Me = { ...EXPENSE_EDITOR, permissions: ["expenses.view", "expenses.edit"] };
+    await mount(fakeApi({ restore: editOnly, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    expect(rowButtons(0)).toEqual(["Edit"]);
+    await act(async () => root?.unmount());
+    container?.remove();
+    const deleteOnly: Me = { ...EXPENSE_EDITOR, permissions: ["expenses.view", "expenses.delete"] };
+    await mount(fakeApi({ restore: deleteOnly, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    expect(rowButtons(0)).toEqual(["Delete"]);
+  });
+
+  it("opens the edit form with the saved fields, sends every field, then reads the list again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_EDITOR,
+        expenses: MIXED_EXPENSES,
+        edit: [{ ok: true, expense: { ...PLUMBER, amount: "16000.00" } }],
+      }),
+    );
+    await openExpenses();
+    await choose(select("method"), "CASH");
+    await click(button("Apply"));
+    await clickRow(1, "Edit");
+    expect(el(".expense-form h2").textContent).toBe("Edit expense");
+    expect(el<HTMLInputElement>("input[name=spentOn]").value).toBe("2026-10-03");
+    expect(formSelect("category").value).toBe("Office Maintenance");
+    expect(formSelect("method").value).toBe("CASH");
+    expect(el<HTMLInputElement>("input[name=amount]").value).toBe("15000.00");
+    expect(el<HTMLInputElement>("input[name=description]").value).toBe("Plumber");
+    expect(() => button("+ Record expense")).toThrow();
+    expect(rowButtons(0)).toEqual([]);
+
+    await type(el("input[name=amount]"), "16000");
+    expect(el(".expense-form button[type=submit]").textContent).toBe("Save changes");
+    await submitExpense();
+    expect(api.edited).toEqual([
+      {
+        id: "e3",
+        input: {
+          category: "Office Maintenance",
+          method: "CASH",
+          spentOn: "2026-10-03",
+          amount: "16000.00",
+          description: "Plumber",
+          narration: "",
+        },
+      },
+    ]);
+    expect(api.spent).toEqual([]);
+    expect(el("[role=status]").textContent).toBe("Office Maintenance expense of ₦16,000.00 on 3 Oct 2026 saved.");
+    expect(container?.querySelector(".expense-form")).toBeNull();
+    expect(api.expenseQueries).toEqual([{}, { method: "CASH" }, { method: "CASH" }]);
+  });
+
+  it("opens an Others expense with its narration", async () => {
+    await mount(fakeApi({ restore: EXPENSE_EDITOR, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    await clickRow(0, "Edit");
+    expect(formSelect("category").value).toBe("Others");
+    expect(el<HTMLInputElement>("input[name=narration]").value).toBe("Fuel");
+    expect(formSelect("method").value).toBe("BANK_TRANSFER");
+  });
+
+  it("keeps the edit form and shows a 409 from the server", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_EDITOR,
+        expenses: MIXED_EXPENSES,
+        edit: [{ ok: false, reason: "not_editable", code: "pay_off" }],
+      }),
+    );
+    await openExpenses();
+    await clickRow(1, "Edit");
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toBe(
+      "This expense is part of a pay-off and cannot be edited.",
+    );
+    expect(api.edited).toHaveLength(1);
+    expect(api.expenseQueries).toHaveLength(1);
+  });
+
+  it("stops a bad edit before sending it", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_EDITOR, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    await clickRow(1, "Edit");
+    await type(el("input[name=amount]"), "0");
+    await submitExpense();
+    expect(el(".expense-form [role=alert]").textContent).toBe("Enter an amount above ₦0.00, with at most 2 decimals.");
+    expect(api.edited).toEqual([]);
+  });
+
+  it("asks before a delete, deletes, then reads the list again", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_EDITOR, expenses: MIXED_EXPENSES, remove: [{ ok: true }] }));
+    await openExpenses();
+    await clickRow(1, "Delete");
+    expect(api.deleted).toEqual([]);
+    expect(el(".expense-delete").textContent).toContain(
+      "Delete the Office Maintenance expense of ₦15,000.00 on 3 Oct 2026? It leaves the list and the total.",
+    );
+    expect(() => button("+ Record expense")).toThrow();
+    await click(button("Delete expense"));
+    expect(api.deleted).toEqual(["e3"]);
+    expect(el("[role=status]").textContent).toBe("Office Maintenance expense of ₦15,000.00 on 3 Oct 2026 deleted.");
+    expect(container?.querySelector(".expense-delete")).toBeNull();
+    expect(api.expenseQueries).toEqual([{}, {}]);
+  });
+
+  it("keeps the confirm and shows a refused delete; Cancel closes it with no call", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_EDITOR,
+        expenses: MIXED_EXPENSES,
+        remove: [{ ok: false, reason: "not_deletable", code: "loan_linked" }],
+      }),
+    );
+    await openExpenses();
+    await clickRow(0, "Delete");
+    await click(button("Delete expense"));
+    expect(el(".expense-delete [role=alert]").textContent).toBe(
+      "This expense is linked to a loan and cannot be deleted.",
+    );
+    expect(api.deleted).toEqual(["e4"]);
+    await click(button("Cancel"));
+    expect(container?.querySelector(".expense-delete")).toBeNull();
+    expect(rowButtons(0)).toEqual(["Edit", "Delete"]);
+    expect(api.deleted).toEqual(["e4"]);
+    expect(api.expenseQueries).toHaveLength(1);
   });
 });

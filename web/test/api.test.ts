@@ -1162,3 +1162,117 @@ describe("createExpense", () => {
     expect(await wrong.api.createExpense(NEW_EXPENSE)).toEqual({ ok: false, reason: "server" });
   });
 });
+
+const EXPENSE_EDIT = { ...SENT_EXPENSE, method: "CASH" as const };
+
+describe("updateExpense", () => {
+  it("puts every field to the expense's path, with no Idempotency-Key", async () => {
+    const { api, calls, keys } = signedIn(() => json(200, { expense: EXPENSE }));
+    expect(await api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: true, expense: EXPENSE });
+    expect(calls).toEqual([{ path: "/api/expenses/e1", method: "PUT", auth: "Bearer acc1", body: SENT_EXPENSE }]);
+    expect(keys).toEqual([null]);
+  });
+
+  it("makes the id safe for the path", async () => {
+    const { api, calls } = signedIn(() => json(200, { expense: EXPENSE }));
+    await api.updateExpense("a/b?c", EXPENSE_EDIT);
+    expect(calls[0]?.path).toBe("/api/expenses/a%2Fb%3Fc");
+  });
+
+  it("passes not_editable on with its code, and answers server for any other 409", async () => {
+    for (const code of ["loan_linked", "pay_off"]) {
+      const { api } = signedIn(() => json(409, { error: "not_editable", code }));
+      expect(await api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "not_editable", code });
+    }
+    const bare = signedIn(() => json(409, { error: "not_editable" }));
+    expect(await bare.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "not_editable" });
+    for (const body of [{ error: "not_deletable", code: "pay_off" }, { error: "idempotency_conflict" }, null]) {
+      const other = signedIn(() => json(409, body));
+      expect(await other.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("passes the code of a 400 on", async () => {
+    const day = signedIn(() => json(400, { error: "invalid_input", code: "narration_not_allowed" }));
+    expect(await day.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "narration_not_allowed",
+    });
+    const bare = signedIn(() => json(400, { error: "invalid_input", code: 3 }));
+    expect(await bare.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "invalid_input" });
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 200 of the wrong shape and for a 201", async () => {
+    for (const body of [null, {}, { expense: { ...EXPENSE, amount: "15000.5" } }, { expense: { ...EXPENSE, spentOn: 1 } }]) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, { expense: EXPENSE }));
+    expect(await wrong.api.updateExpense("e1", EXPENSE_EDIT)).toEqual({ ok: false, reason: "server" });
+  });
+});
+
+describe("deleteExpense", () => {
+  it("deletes the expense's path and answers ok on 204", async () => {
+    const { api, calls, keys } = signedIn(() => new Response(null, { status: 204 }));
+    expect(await api.deleteExpense("a/b")).toEqual({ ok: true });
+    expect(calls).toEqual([{ path: "/api/expenses/a%2Fb", method: "DELETE", auth: "Bearer acc1", body: null }]);
+    expect(keys).toEqual([null]);
+  });
+
+  it("passes not_deletable on with its code, and answers server for any other 409 and for a 200", async () => {
+    for (const code of ["loan_linked", "pay_off"]) {
+      const { api } = signedIn(() => json(409, { error: "not_deletable", code }));
+      expect(await api.deleteExpense("e1")).toEqual({ ok: false, reason: "not_deletable", code });
+    }
+    for (const body of [{ error: "not_editable", code: "pay_off" }, null]) {
+      const other = signedIn(() => json(409, body));
+      expect(await other.api.deleteExpense("e1")).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, {}));
+    expect(await wrong.api.deleteExpense("e1")).toEqual({ ok: false, reason: "server" });
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.deleteExpense("e1")).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.deleteExpense("e1")).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+});

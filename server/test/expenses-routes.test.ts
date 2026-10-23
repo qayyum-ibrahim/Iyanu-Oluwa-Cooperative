@@ -83,6 +83,7 @@ describe("POST /expenses", () => {
       "id",
       "method",
       "narration",
+      "spentOn",
     ]);
     expect(res.body.expense).toMatchObject({
       category: "Allowances",
@@ -93,6 +94,31 @@ describe("POST /expenses", () => {
       createdById: a.id,
     });
     expect(new Date(res.body.expense.createdAt as string).toISOString()).toBe(res.body.expense.createdAt);
+  });
+
+  it("takes the day spent from the body (U.6b)", async () => {
+    const { app, store, a, bearer } = await build();
+    const res = await request(app)
+      .post("/expenses").set("Idempotency-Key", newKey())
+      .set("Authorization", bearer(a))
+      .send(expenseBody({ spentOn: "2026-10-01" }));
+    expect(res.status).toBe(201);
+    expect(res.body.expense.spentOn).toBe("2026-10-01");
+    expect((await store.expenses.findById(res.body.expense.id as string))?.spentOn).toBe("2026-10-01");
+  });
+
+  it.each([
+    { spentOn: "2026-02-30", code: "invalid_spent_on" },
+    { spentOn: "2999-01-01", code: "future_spent_on" },
+  ])("answers 400 $code for a day spent of $spentOn, and saves nothing", async ({ spentOn, code }) => {
+    const { app, store, a, bearer } = await build();
+    const res = await request(app)
+      .post("/expenses").set("Idempotency-Key", newKey())
+      .set("Authorization", bearer(a))
+      .send(expenseBody({ spentOn }));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code });
+    expect(await store.expenses.list({})).toEqual([]);
   });
 
   it("saves one expense and one audit entry", async () => {
@@ -299,6 +325,7 @@ describe("GET /expenses (5.8b)", () => {
       "id",
       "method",
       "narration",
+      "spentOn",
     ]);
   });
 
@@ -469,7 +496,7 @@ describe("PUT /expenses/:id (5.9c)", () => {
         .set("Authorization", base.bearer(u))
         .send(expenseBody());
       expect(res.status).toBe(201);
-      return res.body.expense as { id: string; createdAt: string };
+      return res.body.expense as { id: string; createdAt: string; spentOn: string };
     };
     const f1 = await post(f);
     const ad = await post(base.admin);
@@ -514,6 +541,7 @@ describe("PUT /expenses/:id (5.9c)", () => {
         category: "Asset Purchase",
         amount: "1500.75",
         method: "BANK_TRANSFER",
+        spentOn: f1.spentOn,
         description: "chairs",
         narration: "",
         createdById: f.id,
@@ -521,6 +549,31 @@ describe("PUT /expenses/:id (5.9c)", () => {
       },
     });
     expect((await store.audit.listByActor(f.id)).map((x) => x.action)).toEqual(["expense.created", "expense.updated"]);
+  });
+
+  it("takes the day spent from the body, and keeps the saved day when none is sent (U.6b)", async () => {
+    const { app, store, f, f1, bearer } = await buildEdit();
+    const moved = await request(app)
+      .put(`/expenses/${f1.id}`)
+      .set("Authorization", bearer(f))
+      .send({ ...editBody, spentOn: "2026-09-30" });
+    expect(moved.status).toBe(200);
+    expect(moved.body.expense.spentOn).toBe("2026-09-30");
+    const kept = await request(app).put(`/expenses/${f1.id}`).set("Authorization", bearer(f)).send(editBody);
+    expect(kept.status).toBe(200);
+    expect(kept.body.expense.spentOn).toBe("2026-09-30");
+    expect((await store.expenses.findById(f1.id))?.spentOn).toBe("2026-09-30");
+  });
+
+  it("answers 400 future_spent_on for a day after today, and changes nothing", async () => {
+    const { app, store, f, f1, bearer } = await buildEdit();
+    const res = await request(app)
+      .put(`/expenses/${f1.id}`)
+      .set("Authorization", bearer(f))
+      .send({ ...editBody, spentOn: "2999-01-01" });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code: "future_spent_on" });
+    expect(await store.expenses.findById(f1.id)).toMatchObject({ category: "Allowances", spentOn: f1.spentOn });
   });
 
   it("shows the edit in GET /expenses and its total", async () => {

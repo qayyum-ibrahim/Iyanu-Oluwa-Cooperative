@@ -7,11 +7,11 @@ docs/DECISIONS.md
 docs/DATA_MODEL.md
 server/src/expenses.ts
 server/src/expenses-routes.ts
-server/src/payments.ts
 server/src/store.ts
 server/src/memory-store.ts
 server/src/prisma-store.ts
 server/test/expenses.test.ts
 server/test/expenses-routes.test.ts
 server/test/helpers/expenses-contract.ts
-scripts/live-check-auth.sh
+server/test/prisma-store.test.ts
+server/test/memory-store.test.ts

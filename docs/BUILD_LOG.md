@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.6b (size M), 2026-10-23: `spentOn` in `POST /expenses` and `PUT /expenses/:id` (D-93, A-217)
+
+The owner said "fix inconsistencies and go". U.6b would have been L with the day filter, so the `GET /expenses` day filter moved to U.6b2 (D-93).
+**Changed:** `server/src/expenses.ts` (`spentOn` checked in `checkFields` after the method: `invalid_spent_on`, `future_spent_on`; in the hash only when sent; `createExpense` saves it or today; `updateExpense` keeps the saved day when none is sent and counts a day change as a change; view; `expense.created` and `expense.updated` details), `server/src/expenses-routes.ts` (passes `spentOn` in POST and PUT). Tests: `test/expenses.test.ts` (day spent blocks for create, 15, and edit, 9; field list, audit details, the edit view; the edit fixture now saves `2026-10-01`), `test/expenses-routes.test.ts` (POST day and two codes, PUT day kept and moved, PUT `future_spent_on`; field lists). Docs: DECISIONS (D-93), ASSUMPTIONS (A-217; A-216 item 4 corrected), PHASE_PLAN (U.6b split, U.6b2), TRACEABILITY, DATA_MODEL (header fixed; `spentOn` from the request), STATUS.
+**Works (verified in this session):** `npx vitest run test/expenses.test.ts test/expenses-routes.test.ts`: first run 1 failed, 251 passed (my test listed as Staff without `expenses.view`; the test now lists as the Super Admin; no source change). `npm run check` (server): 49 files, 1911 passed.
+**Not verified:** no live check (the script has no expense checks); web not changed; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.6a (size M), 2026-10-23: expense date `spentOn` in the store (D-92, A-216)
 
 The owner said "fix inconsistencies and go" and chose "Yes, add spentOn". U.6 split into U.6a to U.6d (PHASE_PLAN).

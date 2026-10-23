@@ -1,16 +1,17 @@
-// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b, edit in 5.9c;
-// D-54, DR-11, DR-12, DR-13, DR-15, A-148, A-150, A-173, A-176, A-177). Rules over the Store: no HTTP here.
+// Expense logic (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b, edit in 5.9c,
+// day spent in U.6b; D-54, D-92, DR-11, DR-12, DR-13, DR-15, A-148, A-150, A-173, A-176, A-177).
+// Rules over the Store: no HTTP here.
 // Recording an expense by hand needs expenses.create. Only the categories a person may pick are
 // accepted (parseManualExpenseCategory): Loan and Membership Withdrawal are set by the system.
 // The key lookup, the expense and its audit entry run inside one store transaction, so both are
-// saved or neither (D-45). Audit details hold the category and the amount in kobo: no description,
-// no narration, no key.
+// saved or neither (D-45). Audit details hold the category, the amount in kobo and the day spent:
+// no description, no narration, no key.
 
 import { createHash } from "node:crypto";
 import { CategoryError } from "./categories.js";
 import { isExpenseCategory, parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
 import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
-import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString, lagosDay } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, isCalendarDay, koboToNairaString, lagosDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import { DuplicateExpenseKeyError, type ExpenseRecord, type PaymentMethod, type Store } from "./store.js";
 
@@ -33,6 +34,8 @@ export interface ExpenseView {
   /** Naira as text, always 2 decimals, for example "15000.00". */
   amount: string;
   method: PaymentMethod;
+  /** The day the money left, "YYYY-MM-DD" in Lagos (D-92). */
+  spentOn: string;
   description: string;
   narration: string;
   createdById: string;
@@ -76,15 +79,27 @@ function optionalText(value: unknown): Text {
   return { ok: true, value: trimmed };
 }
 
-/** A fingerprint of the checked request: category, method, exact kobo, trimmed texts. */
+/**
+ * A fingerprint of the checked request: category, method, exact kobo, trimmed texts, and the day
+ * spent as sent. A request without a day hashes as before U.6b, so a retry of an expense saved
+ * before the day existed still matches, and a retry after midnight too (as loans, A-214 item 3).
+ */
 function hashRequest(
   category: string,
   method: PaymentMethod,
   amount: Kobo,
   description: string,
   narration: string,
+  spentOn: string | undefined,
 ): string {
-  const canonical = JSON.stringify({ category, method, amount: amount.toString(), description, narration });
+  const canonical = JSON.stringify({
+    category,
+    method,
+    amount: amount.toString(),
+    description,
+    narration,
+    ...(spentOn !== undefined ? { spentOn } : {}),
+  });
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -94,6 +109,7 @@ function toView(e: ExpenseRecord): ExpenseView {
     category: e.category,
     amount: koboToNairaString(e.amount),
     method: e.method,
+    spentOn: e.spentOn,
     description: e.description,
     narration: e.narration,
     createdById: e.createdById,
@@ -106,6 +122,8 @@ export interface ExpenseFieldsInput {
   category?: unknown;
   amount?: unknown;
   method?: unknown;
+  /** "YYYY-MM-DD", the day in Lagos. Missing means today for a new expense, the saved day for an edit (D-92). */
+  spentOn?: unknown;
   description?: unknown;
   narration?: unknown;
 }
@@ -118,6 +136,8 @@ interface CheckedFields {
   category: ExpenseCategory;
   amount: Kobo;
   method: PaymentMethod;
+  /** As sent, or undefined when missing. */
+  spentOn: string | undefined;
   description: string;
   narration: string;
 }
@@ -126,10 +146,11 @@ type FieldsCheck = { ok: true; value: CheckedFields } | ExpenseFailureResult;
 
 /**
  * Checks the fields of an expense picked by hand, for a new one and for an edit.
- * Order: category (unknown_category, system_only), method, amount (a naira string above ₦0),
- * description, narration. "Others" needs a narration; every other category must leave it empty (A-169).
+ * Order: category (unknown_category, system_only), method, day spent (a real day, not after today
+ * in Lagos; no earliest day; as D-88 and D-91), amount (a naira string above ₦0), description,
+ * narration. "Others" needs a narration; every other category must leave it empty (A-169).
  */
-function checkFields(input: ExpenseFieldsInput): FieldsCheck {
+function checkFields(input: ExpenseFieldsInput, today: string): FieldsCheck {
   let category: ExpenseCategory;
   try {
     category = parseManualExpenseCategory(input.category);
@@ -142,6 +163,11 @@ function checkFields(input: ExpenseFieldsInput): FieldsCheck {
 
   const method = parseMethod(input.method);
   if (method === null) return failure("invalid_input", "invalid_method");
+
+  const spentOn = input.spentOn;
+  if (spentOn !== undefined && !isCalendarDay(spentOn)) return failure("invalid_input", "invalid_spent_on");
+  // Both are "YYYY-MM-DD", so text order is day order.
+  if (spentOn !== undefined && spentOn > today) return failure("invalid_input", "future_spent_on");
 
   let amount: Kobo;
   try {
@@ -164,19 +190,19 @@ function checkFields(input: ExpenseFieldsInput): FieldsCheck {
 
   return {
     ok: true,
-    value: { category, amount, method, description: description.value, narration: narration.value },
+    value: { category, amount, method, spentOn, description: description.value, narration: narration.value },
   };
 }
 
 /**
  * Records an expense picked by hand and one audit entry "expense.created".
  * Order: permission, idempotency key shape, category (unknown_category, system_only), method,
- * amount (a naira string above ₦0), description, narration. "Others" needs a narration; every
- * other category must leave it empty (A-169). Then one transaction looks the key up (a repeat
- * returns the first expense, a different request with the same key is refused), saves the expense
- * with its key and writes the audit entry. If either write fails, nothing is saved (D-45). A
- * refused request does not use up the key (as D-48). The expense is not linked to a loan (DR-10, A-148).
- * Until U.6b the day spent is today in Lagos (step U.6a, as U.4a).
+ * day spent (missing means today in Lagos), amount (a naira string above ₦0), description,
+ * narration. "Others" needs a narration; every other category must leave it empty (A-169). Then
+ * one transaction looks the key up (a repeat returns the first expense, a different request with
+ * the same key is refused), saves the expense with its key and writes the audit entry. If either
+ * write fails, nothing is saved (D-45). A refused request does not use up the key (as D-48). The
+ * expense is not linked to a loan (DR-10, A-148).
  */
 export async function createExpense(
   store: Store,
@@ -191,12 +217,13 @@ export async function createExpense(
     return failure("invalid_input", "invalid_idempotency_key");
   }
 
-  const checked = checkFields(input);
+  const today = lagosDay(new Date());
+  const checked = checkFields(input, today);
   if (!checked.ok) return checked;
   const { category, amount, method, description, narration } = checked.value;
 
-  const requestHash = hashRequest(category, method, amount, description, narration);
-  const spentOn = lagosDay(new Date());
+  const requestHash = hashRequest(category, method, amount, description, narration, checked.value.spentOn);
+  const spentOn = checked.value.spentOn ?? today;
 
   const attempt = (): Promise<ExpenseResult> =>
     store.transaction<ExpenseResult>(async (tx) => {
@@ -221,7 +248,7 @@ export async function createExpense(
         action: "expense.created",
         entityType: "Expense",
         entityId: saved.id,
-        detail: `category=${category} amount_kobo=${amount.toString()}`,
+        detail: `category=${category} amount_kobo=${amount.toString()} spent_on=${spentOn}`,
       });
       return { ok: true, value: toView(saved), replayed: false };
     });
@@ -371,15 +398,16 @@ export type ExpenseUpdateResult = { ok: true; value: ExpenseView } | ExpenseFail
 
 /**
  * Edits one expense (step 5.9c, OQ-08 default). PUT: every field is sent again and checked as
- * for a new expense (checkFields); a field left out of the body counts as empty (A-177).
+ * for a new expense (checkFields); a field left out of the body counts as empty (A-177), except
+ * the day spent: left out, the saved day is kept (D-92).
  * Order: permission, id, fields, then the expense. An unknown id, a deleted expense and, for
  * Staff, an expense someone else recorded give not_found (DR-13, as deleteExpense). A Loan-linked
  * expense gives not_editable "loan_linked", a pay-off expense (Membership Withdrawal, or any
  * expense that names a pay-off, step 6.4c) not_editable "pay_off".
  * The lookup, the change and one audit entry "expense.updated" run in one store transaction
  * (D-45). An edit that changes nothing writes nothing and returns the expense. The audit detail
- * holds the old and new category, kobo amount and method, and only whether the description and
- * the narration changed, as they may hold personal details (A-169, A-177).
+ * holds the old and new category, kobo amount and method, only whether the description and the
+ * narration changed, as they may hold personal details (A-169, A-177), then the old and new day spent.
  */
 export async function updateExpense(
   store: Store,
@@ -390,9 +418,9 @@ export async function updateExpense(
   if (!hasPermission(actor.subject, "expenses.edit")) return failure("forbidden");
   if (typeof id !== "string" || id.length === 0) return failure("not_found");
 
-  const checked = checkFields(input);
+  const checked = checkFields(input, lagosDay(new Date()));
   if (!checked.ok) return checked;
-  const next = checked.value;
+  const { spentOn: sentSpentOn, ...next } = checked.value;
 
   return store.transaction<ExpenseUpdateResult>(async (tx) => {
     const expense = await tx.expenses.findById(id);
@@ -407,17 +435,19 @@ export async function updateExpense(
 
     const descriptionChanged = expense.description !== next.description;
     const narrationChanged = expense.narration !== next.narration;
+    const spentOn = sentSpentOn ?? expense.spentOn;
     if (
       expense.category === next.category &&
       expense.amount === next.amount &&
       expense.method === next.method &&
+      expense.spentOn === spentOn &&
       !descriptionChanged &&
       !narrationChanged
     ) {
       return { ok: true, value: toView(expense) };
     }
 
-    const updated = await tx.expenses.update(expense.id, next);
+    const updated = await tx.expenses.update(expense.id, { ...next, spentOn });
     if (updated === null) return failure("not_found");
     await tx.audit.append({
       actorId: actor.id,
@@ -427,7 +457,8 @@ export async function updateExpense(
       detail:
         `old_category=${expense.category} old_amount_kobo=${expense.amount.toString()} old_method=${expense.method} ` +
         `new_category=${updated.category} new_amount_kobo=${updated.amount.toString()} new_method=${updated.method} ` +
-        `description_changed=${String(descriptionChanged)} narration_changed=${String(narrationChanged)}`,
+        `description_changed=${String(descriptionChanged)} narration_changed=${String(narrationChanged)} ` +
+        `old_spent_on=${expense.spentOn} new_spent_on=${updated.spentOn}`,
     });
     return { ok: true, value: toView(updated) };
   });

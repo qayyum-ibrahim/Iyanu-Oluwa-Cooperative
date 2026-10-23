@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MANUAL_EXPENSE_CATEGORIES } from "../src/expense-categories.js";
 import {
@@ -81,6 +82,7 @@ describe("createExpense: success", () => {
       "id",
       "method",
       "narration",
+      "spentOn",
     ]);
     expect(new Date(r.createdAt).toISOString()).toBe(r.createdAt);
 
@@ -104,7 +106,7 @@ describe("createExpense: success", () => {
       action: "expense.created",
       entityType: "Expense",
       entityId: r.id,
-      detail: "category=Office Maintenance amount_kobo=1500000",
+      detail: `category=Office Maintenance amount_kobo=1500000 spent_on=${r.spentOn}`,
     });
   });
 
@@ -162,6 +164,115 @@ describe("createExpense: success", () => {
     const after = lagosDay(new Date());
     const saved = await store.expenses.findById(r.id);
     expect([before, after]).toContain(saved?.spentOn);
+  });
+});
+
+describe("createExpense: day spent (U.6b, D-92)", () => {
+  const lagosToday = () => lagosDay(new Date());
+
+  it("saves the day sent and shows it in the view, the list and the audit entry", async () => {
+    const { store, admin, a } = await build();
+    const r = must(await createExpense(store, actorOf(a), body({ spentOn: "2019-03-07" })));
+    expect(r.spentOn).toBe("2019-03-07");
+    expect((await store.expenses.findById(r.id))?.spentOn).toBe("2019-03-07");
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).expenses[0]?.spentOn).toBe("2019-03-07");
+    expect((await store.audit.listByActor(a.id))[0]?.detail).toBe(
+      "category=Office Maintenance amount_kobo=1500000 spent_on=2019-03-07",
+    );
+  });
+
+  it("accepts today in Lagos", async () => {
+    const { store, a } = await build();
+    const today = lagosToday();
+    expect(must(await createExpense(store, actorOf(a), body({ spentOn: today }))).spentOn).toBe(today);
+  });
+
+  it("shows today in Lagos when no day is sent", async () => {
+    const { store, a } = await build();
+    const before = lagosToday();
+    const r = must(await createExpense(store, actorOf(a), body()));
+    const after = lagosToday();
+    expect([before, after]).toContain(r.spentOn);
+    expect((await store.expenses.findById(r.id))?.spentOn).toBe(r.spentOn);
+  });
+
+  it.each([
+    { label: "not a real day", value: "2026-02-30" },
+    { label: "a five-digit year", value: "12026-10-01" },
+    { label: "a time", value: "2026-10-01T00:00:00.000Z" },
+    { label: "another order", value: "01-10-2026" },
+    { label: "empty", value: "" },
+    { label: "null", value: null },
+    { label: "a number", value: 20261001 },
+  ])("refuses a day spent that is $label, and saves nothing", async ({ value }) => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), body({ spentOn: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_spent_on",
+    });
+    expect(await store.expenses.list({})).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("refuses a day spent after today in Lagos, and saves nothing", async () => {
+    const { store, a } = await build();
+    const tomorrow = lagosDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    for (const spentOn of [tomorrow, "2999-01-01"]) {
+      expect(await createExpense(store, actorOf(a), body({ spentOn }))).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "future_spent_on",
+      });
+    }
+    expect(await store.expenses.list({})).toEqual([]);
+  });
+
+  it("checks the day after the method and before the amount", async () => {
+    const { store, a } = await build();
+    expect(await createExpense(store, actorOf(a), body({ method: "x", spentOn: "bad" }))).toMatchObject({
+      code: "invalid_method",
+    });
+    expect(await createExpense(store, actorOf(a), body({ spentOn: "bad", amount: "x" }))).toMatchObject({
+      code: "invalid_spent_on",
+    });
+  });
+
+  it("replays the same key with the same day, and refuses it with another day or none", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    const first = must(await createExpense(store, actorOf(a), body({ idempotencyKey: k, spentOn: "2026-10-01" })));
+    const again = await createExpense(store, actorOf(a), body({ idempotencyKey: k, spentOn: "2026-10-01" }));
+    expect(again).toMatchObject({ ok: true, replayed: true });
+    expect(must(again)).toEqual(first);
+    for (const spentOn of ["2026-10-02", undefined]) {
+      expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k, spentOn }))).toEqual({
+        ok: false,
+        reason: "idempotency_conflict",
+      });
+    }
+    expect(await store.expenses.list({})).toHaveLength(1);
+  });
+
+  it("refuses a key first sent without a day when it comes back with today's day", async () => {
+    const { store, a } = await build();
+    const k = newKey();
+    must(await createExpense(store, actorOf(a), body({ idempotencyKey: k })));
+    expect(await createExpense(store, actorOf(a), body({ idempotencyKey: k, spentOn: lagosToday() }))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+  });
+
+  it("hashes a request without a day as before U.6b, so an older expense still replays", async () => {
+    const { store, a } = await build();
+    const r = must(await createExpense(store, actorOf(a), body()));
+    const oldHash = createHash("sha256")
+      .update(
+        JSON.stringify({ category: "Office Maintenance", method: "CASH", amount: "1500000", description: "", narration: "" }),
+      )
+      .digest("hex");
+    expect((await store.expenses.findById(r.id))?.requestHash).toBe(oldHash);
   });
 });
 
@@ -1161,7 +1272,7 @@ async function buildEdit(store: Store = createMemoryStore()) {
     });
   const f = await editor("staff-f");
   const g = await editor("staff-g");
-  const f1Body = body({ category: "Allowances", amount: "0.20" });
+  const f1Body = body({ category: "Allowances", amount: "0.20", spentOn: "2026-10-01" });
   const f1 = must(await createExpense(store, actorOf(f), f1Body));
   const g1 = must(await createExpense(store, actorOf(g), body({ amount: "0.40" })));
   return { ...base, f, g, f1, f1Body, g1 };
@@ -1179,7 +1290,8 @@ const edit = (over: Record<string, unknown> = {}) => ({
 const EDIT_DETAIL =
   "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
   "new_category=Asset Purchase new_amount_kobo=150075 new_method=BANK_TRANSFER " +
-  "description_changed=true narration_changed=false";
+  "description_changed=true narration_changed=false " +
+  "old_spent_on=2026-10-01 new_spent_on=2026-10-01";
 
 const updatedActions = async (store: Store, actorId: string) =>
   (await store.audit.listByActor(actorId)).filter((x) => x.action === "expense.updated");
@@ -1217,6 +1329,7 @@ describe("updateExpense: who may edit what (5.9c, DR-13)", () => {
       category: "Asset Purchase",
       amount: "1500.75",
       method: "BANK_TRANSFER",
+      spentOn: "2026-10-01",
       description: "chairs",
       narration: "",
       createdById: f.id,
@@ -1412,7 +1525,8 @@ describe("updateExpense: the fields (PUT, as createExpense)", () => {
     expect((await updatedActions(store, f.id))[0]?.detail).toBe(
       "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
         "new_category=Others new_amount_kobo=150075 new_method=BANK_TRANSFER " +
-        "description_changed=false narration_changed=true",
+        "description_changed=false narration_changed=true " +
+        "old_spent_on=2026-10-01 new_spent_on=2026-10-01",
     );
   });
 
@@ -1424,7 +1538,8 @@ describe("updateExpense: the fields (PUT, as createExpense)", () => {
     expect((await updatedActions(store, f.id))[0]?.detail).toBe(
       "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
         "new_category=Allowances new_amount_kobo=20 new_method=CASH " +
-        "description_changed=true narration_changed=false",
+        "description_changed=true narration_changed=false " +
+        "old_spent_on=2026-10-01 new_spent_on=2026-10-01",
     );
   });
 
@@ -1438,7 +1553,8 @@ describe("updateExpense: the fields (PUT, as createExpense)", () => {
     expect((await updatedActions(store, f.id)).map((x) => x.detail)).toContain(
       "old_category=Others old_amount_kobo=20 old_method=CASH " +
         "new_category=Others new_amount_kobo=20 new_method=CASH " +
-        "description_changed=false narration_changed=true",
+        "description_changed=false narration_changed=true " +
+        "old_spent_on=2026-10-01 new_spent_on=2026-10-01",
     );
   });
 
@@ -1467,6 +1583,75 @@ describe("updateExpense: the fields (PUT, as createExpense)", () => {
     const repeat = await createExpense(store, actorOf(f), f1Body);
     expect(repeat).toEqual({ ok: true, value: edited, replayed: true });
     expect((await store.expenses.list({ createdById: f.id })).map((x) => x.id)).toEqual([f1.id]);
+  });
+});
+
+describe("updateExpense: day spent (U.6b, D-92)", () => {
+  /** The fields f1 was saved with, so only the day can change. */
+  const same = { category: "Allowances", amount: "0.20", method: "CASH" };
+
+  it("changes the day alone: saved, shown, one audit entry with the old and new day", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    const r = mustEdit(await updateExpense(store, actorOf(f), f1.id, { ...same, spentOn: "2026-09-30" }));
+    expect(r).toEqual({ ...f1, spentOn: "2026-09-30" });
+    expect(await store.expenses.findById(f1.id)).toEqual({ ...before, spentOn: "2026-09-30" });
+    expect((await updatedActions(store, f.id)).map((x) => x.detail)).toEqual([
+      "old_category=Allowances old_amount_kobo=20 old_method=CASH " +
+        "new_category=Allowances new_amount_kobo=20 new_method=CASH " +
+        "description_changed=false narration_changed=false " +
+        "old_spent_on=2026-10-01 new_spent_on=2026-09-30",
+    ]);
+  });
+
+  it("keeps the saved day when none is sent", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const r = mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
+    expect(r.spentOn).toBe("2026-10-01");
+    expect((await store.expenses.findById(f1.id))?.spentOn).toBe("2026-10-01");
+  });
+
+  it("writes nothing when the day sent is the saved day and nothing else changes", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    expect(await updateExpense(store, actorOf(f), f1.id, { ...same, spentOn: "2026-10-01" })).toEqual({
+      ok: true,
+      value: f1,
+    });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("accepts today in Lagos", async () => {
+    const { store, f, f1 } = await buildEdit();
+    const today = lagosDay(new Date());
+    expect(mustEdit(await updateExpense(store, actorOf(f), f1.id, { ...same, spentOn: today })).spentOn).toBe(today);
+  });
+
+  it.each([
+    { label: "not a real day", value: "2026-02-30", code: "invalid_spent_on" },
+    { label: "null", value: null, code: "invalid_spent_on" },
+    { label: "a time", value: "2026-10-01T00:00:00.000Z", code: "invalid_spent_on" },
+    { label: "after today in Lagos", value: "2999-01-01", code: "future_spent_on" },
+  ])("refuses a day spent that is $label with $code, and changes nothing", async ({ value, code }) => {
+    const { store, f, f1 } = await buildEdit();
+    const before = await store.expenses.findById(f1.id);
+    expect(await updateExpense(store, actorOf(f), f1.id, edit({ spentOn: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code,
+    });
+    expect(await store.expenses.findById(f1.id)).toEqual(before);
+    expect(await updatedActions(store, f.id)).toEqual([]);
+  });
+
+  it("checks the day before looking the expense up", async () => {
+    const { store, admin } = await buildEdit();
+    expect(await updateExpense(store, actorOf(admin), "no-such-expense", edit({ spentOn: "bad" }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_spent_on",
+    });
   });
 });
 

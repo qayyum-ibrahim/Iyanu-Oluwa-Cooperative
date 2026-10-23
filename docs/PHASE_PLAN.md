@@ -86,7 +86,7 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
 - U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments). Split at its start (A-199):
   - U.3d (S) Member calls in `web/src/api.ts` (list, read one, add, balances). Done: 62 web tests.
   - U.3e (M) Members list screen and add member form. Done (A-200): 74 web tests.
-  - U.3f (M) Member detail: profile, balances, payments, loans; the payments and loans list calls in `api.ts`.
+  - U.3f (M) Member detail: profile, balances, payments, loans; the payments and loans list calls in `api.ts`. Done (A-201): 87 web tests.
   - U.3g (S) Break-on-purpose for the new `api.ts` code and the money display (CLAUDE.md rule 10).
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).
 - U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.

@@ -330,6 +330,71 @@ th {
   background: #f3f4f6;
   color: #4b5563;
 }
+
+/* Member detail (U.3f) */
+.back {
+  margin-bottom: 14px;
+}
+.badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.loan {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 99px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 700;
+}
+.detail-panel {
+  margin-bottom: 18px;
+}
+.profile {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 16px 19px;
+  font-size: 13px;
+}
+.profile dt {
+  color: #6b7771;
+  font-weight: 700;
+}
+.profile dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.balance-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 19px 4px;
+}
+.balance-summary > div {
+  flex: 1 1 200px;
+  background: #ecfdf5;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.balance-summary span {
+  display: block;
+  color: #53605a;
+  font-size: 12px;
+}
+.balance-summary b {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  color: #065f46;
+}
+td.amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 600px) {
   .search {
     max-width: none;

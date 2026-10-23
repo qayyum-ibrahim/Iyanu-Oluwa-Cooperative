@@ -16,12 +16,21 @@ import type {
   CallResult,
   ChangePasswordResult,
   LoginResult,
+  Loan,
   Me,
   Member,
+  MemberBalances,
   MemberStatusFilter,
+  Payment,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
-import { checkNewMember, memberMessage, searchMembers } from "../src/Members.tsx";
+import {
+  checkNewMember,
+  formatDate,
+  formatNaira,
+  memberMessage,
+  searchMembers,
+} from "../src/Members.tsx";
 import SignIn from "../src/SignIn.tsx";
 
 const idleApi: Api = {
@@ -34,6 +43,8 @@ const idleApi: Api = {
   getMember: async () => ({ ok: false, reason: "server" }),
   createMember: async () => ({ ok: false, reason: "server" }),
   memberBalances: async () => ({ ok: false, reason: "server" }),
+  listPayments: async () => ({ ok: false, reason: "server" }),
+  listLoans: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -145,6 +156,9 @@ function fakeApi(
     members?: Member[];
     list?: CallResult<Member[]>;
     create?: CallResult<Member>;
+    balances?: CallResult<MemberBalances>;
+    payments?: CallResult<Payment[]>;
+    loans?: CallResult<Loan[]>;
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -169,14 +183,29 @@ function fakeApi(
         calls.push(`list ${status}`);
         return opts.list ?? { ok: true, value: byStatus(opts.members ?? [], status) };
       },
-      getMember: idleApi.getMember,
+      getMember: async (id) => {
+        calls.push(`get ${id}`);
+        const found = (opts.members ?? []).find((m) => m.id === id);
+        return found ? { ok: true, value: found } : { ok: false, reason: "not_found" };
+      },
       createMember: async (input) => {
         calls.push(`create ${JSON.stringify(input)}`);
         const result = opts.create ?? { ok: false, reason: "server" };
         if (result.ok) opts.members = [...(opts.members ?? []), result.value];
         return result;
       },
-      memberBalances: idleApi.memberBalances,
+      memberBalances: async (id) => {
+        calls.push(`balances ${id}`);
+        return opts.balances ?? { ok: false, reason: "server" };
+      },
+      listPayments: async (id) => {
+        calls.push(`payments ${id}`);
+        return opts.payments ?? { ok: true, value: [] };
+      },
+      listLoans: async (id) => {
+        calls.push(`loans ${id}`);
+        return opts.loans ?? { ok: true, value: [] };
+      },
     };
   };
 }
@@ -506,5 +535,200 @@ describe("members screen (jsdom)", () => {
     await click(button("Cancel"));
     expect(container?.querySelector("form")).toBeNull();
     expect(api.calls).toEqual(["list active"]);
+  });
+});
+
+describe("member detail helpers", () => {
+  it("adds the naira sign and thousands commas to a naira string, nothing else", () => {
+    expect(formatNaira("0.00")).toBe("₦0.00");
+    expect(formatNaira("999.99")).toBe("₦999.99");
+    expect(formatNaira("1000.00")).toBe("₦1,000.00");
+    expect(formatNaira("25000.05")).toBe("₦25,000.05");
+    expect(formatNaira("1234567890123.40")).toBe("₦1,234,567,890,123.40");
+    expect(formatNaira("12.5")).toBe("12.5");
+    expect(formatNaira("")).toBe("");
+  });
+
+  it("shows the day in Lagos", () => {
+    expect(formatDate("2026-10-23T09:00:00.000Z")).toBe("23 Oct 2026");
+    // 23:30 UTC on 31 October is 00:30 on 1 November in Lagos (UTC+1).
+    expect(formatDate("2026-10-31T23:30:00.000Z")).toBe("1 Nov 2026");
+    expect(formatDate("not a date")).toBe("not a date");
+  });
+});
+
+const FULL: Me = {
+  ...ME,
+  permissions: ["members.view", "payments.view", "loans.view"],
+};
+
+const DETAIL_BALANCES: MemberBalances = {
+  memberId: "m1",
+  categories: [
+    { category: "Shares", balance: "25000.05", refundable: true },
+    { category: "Development Levy", balance: "1500.00", refundable: false },
+  ],
+  refundableTotal: "25000.05",
+  nonRefundableTotal: "1500.00",
+};
+
+function payment(id: string, createdAt: string, total: string): Payment {
+  return {
+    id,
+    memberId: "m1",
+    membershipId: "IO-001",
+    method: "CASH",
+    total,
+    lines: [{ category: "Shares", amount: total }],
+    createdById: "u1",
+    createdAt,
+  };
+}
+
+const ACTIVE_LOAN: Loan = {
+  id: "l1",
+  memberId: "m1",
+  membershipId: "IO-001",
+  principal: "50000.00",
+  interestNote: "",
+  notes: "",
+  expenseId: "e1",
+  createdById: "u1",
+  createdAt: "2026-10-20T09:00:00.000Z",
+  repaid: "10000.00",
+  outstanding: "40000.00",
+  status: "ACTIVE",
+};
+
+async function openDetail(name: string) {
+  await openMembers();
+  await click(el(`button[aria-label="View ${name}"]`));
+}
+
+function sectionText(title: string): string {
+  const section = Array.from(container?.querySelectorAll("section") ?? []).find(
+    (s) => s.querySelector("h2")?.textContent === title,
+  );
+  if (!section) throw new Error(`no section: ${title}`);
+  return section.textContent ?? "";
+}
+
+describe("member detail (jsdom)", () => {
+  it("shows the profile, balances, loans and payments, newest payment first", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: FULL,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
+        loans: { ok: true, value: [ACTIVE_LOAN] },
+        payments: {
+          ok: true,
+          value: [
+            payment("p1", "2026-10-21T09:00:00.000Z", "1000.00"),
+            payment("p2", "2026-10-22T09:00:00.000Z", "24000.05"),
+          ],
+        },
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(api.calls).toEqual(["list active", "get m1", "balances m1", "payments m1", "loans m1"]);
+    expect(el("h1").textContent).toBe("Test Member One");
+    expect(text()).toContain("IO-001 · Joined 23 Oct 2026");
+    expect(el(".loan").textContent).toBe("On loan");
+    expect(sectionText("Profile")).toContain("Phone08000000000");
+    expect(sectionText("Profile")).toContain("Address—");
+
+    const balances = sectionText("Balances");
+    expect(balances).toContain("Refundable total (paid out at pay-off)₦25,000.05");
+    expect(balances).toContain("Retained by cooperative₦1,500.00");
+    expect(balances).toContain("Development Levy₦1,500.00No, retained");
+
+    expect(sectionText("Loans")).toContain("20 Oct 2026₦50,000.00₦10,000.00₦40,000.00Active");
+
+    const rows = Array.from(
+      container?.querySelectorAll("table.payments tbody tr") ?? [],
+    ).map((r) => r.textContent);
+    expect(rows).toEqual([
+      "22 Oct 2026CashShares ₦24,000.05₦24,000.05",
+      "21 Oct 2026CashShares ₦1,000.00₦1,000.00",
+    ]);
+  });
+
+  it("leaves out payments and loans without payments.view and loans.view", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: VIEWER,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(api.calls).toEqual(["list active", "get m1", "balances m1"]);
+    expect(() => sectionText("Payments")).toThrow();
+    expect(() => sectionText("Loans")).toThrow();
+    expect(sectionText("Balances")).toContain("₦25,000.05");
+    expect(container?.querySelector(".loan")).toBeNull();
+  });
+
+  it("says when there are no loans or payments", async () => {
+    await mount(
+      fakeApi({ restore: FULL, members: [ACTIVE_ONE], balances: { ok: true, value: DETAIL_BALANCES } }),
+    );
+    await openDetail("Test Member One");
+    expect(sectionText("Loans")).toContain("No loans.");
+    expect(sectionText("Payments")).toContain("No payments yet.");
+    expect(container?.querySelector(".loan")).toBeNull();
+  });
+
+  it("shows a fully repaid loan without the On loan badge", async () => {
+    const repaid: Loan = { ...ACTIVE_LOAN, repaid: "50000.00", outstanding: "0.00", status: "FULLY_REPAID" };
+    await mount(
+      fakeApi({ restore: FULL, members: [ACTIVE_ONE], loans: { ok: true, value: [repaid] } }),
+    );
+    await openDetail("Test Member One");
+    expect(sectionText("Loans")).toContain("₦0.00Fully repaid");
+    expect(container?.querySelector(".loan")).toBeNull();
+  });
+
+  it("shows each section's own message when one read fails", async () => {
+    await mount(
+      fakeApi({
+        restore: FULL,
+        members: [ACTIVE_ONE],
+        balances: { ok: false, reason: "network" },
+        payments: { ok: false, reason: "forbidden" },
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(sectionText("Balances")).toContain("Cannot reach the server. Try again.");
+    expect(sectionText("Payments")).toContain("You do not have permission to do this.");
+    expect(sectionText("Loans")).toContain("No loans.");
+    expect(el("h1").textContent).toBe("Test Member One");
+  });
+
+  it("shows only the message when the member cannot be read", async () => {
+    const api = await mount(fakeApi({ restore: FULL, members: [ACTIVE_ONE] }));
+    await openMembers();
+    // The member is gone from the fake server after the list was read.
+    api.getMember = async () => ({ ok: false, reason: "not_found" });
+    await click(el('button[aria-label="View Test Member One"]'));
+    expect(el("[role=alert]").textContent).toBe("Member not found.");
+    expect(container?.querySelector("section")).toBeNull();
+  });
+
+  it("goes back to the list with the filter and search kept, without a new list call", async () => {
+    const api = await mount(
+      fakeApi({ restore: FULL, members: [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE] }),
+    );
+    await openMembers();
+    await click(button("All"));
+    await type(el("input[type=search]"), "example");
+    await click(el('button[aria-label="View Example Inactive"]'));
+    expect(text()).toContain("Inactive");
+    await click(button("← Back to members"));
+    expect(el<HTMLInputElement>("input[type=search]").value).toBe("example");
+    expect(el("button[aria-pressed=true]").textContent).toBe("All");
+    expect(rowTexts()).toHaveLength(1);
+    expect(api.calls.filter((c) => c.startsWith("list"))).toEqual(["list active", "list all"]);
   });
 });

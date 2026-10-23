@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.3f (size M), 2026-10-23: member detail (A-201)
+
+**Works (verified in this session):** `web/src/api.ts`: `listPayments(memberId)` (`GET /payments?memberId=`) and `listLoans(memberId)` (`GET /loans?memberId=`), id put in the query with `encodeURIComponent`, every field checked, amounts must be two-decimal naira strings, one bad item refuses the whole list. `web/src/Members.tsx`: a View button per row opens member detail: profile, balances (refundable total, "Retained by cooperative", each category), loans (with `loans.view`), payments newest first (with `payments.view`), "On loan" badge, Back keeps the filter and search; `formatNaira` (adds ₦ and commas to the string) and `formatDate` (day in Lagos). `App.tsx` passes the two view permissions; `styles.css` has the detail styles. Docs fixes: TRACEABILITY R-01 ("No screen yet" removed) and STATUS Next step brief (one review order). `npm run check` (web): 4 files, 87 passed. `npm run check` (server): 46 files, 1794 passed.
+**Tests:** web 74 to 87 (4 in `api.test.ts`, 9 in `app.test.tsx`); server 1794 unchanged.
+**Not verified:** the screen in a real browser against the running server; no live check; dev database not touched. Break-on-purpose owed at U.3g.
+
+---
+
 ## Step U.3e (size M), 2026-10-23: members list and add member (A-200)
 
 **Works (verified in this session):** new `web/src/Members.tsx`: members list with Active (default), Inactive and All filters, search by name or Membership ID in the browser (A-191 item 2), and the add member form (full name 1 to 100 characters; phone, address, occupation up to 200; trimmed before sending; notice with the new Membership ID; list reloads). `App.tsx`: header nav with Home and Members (Members only with `members.view`; add button only with `members.create`). `styles.css`: nav, title, toolbar, filters, panel, table and status pills from the prototype. 12 tests in `web/test/app.test.tsx` (search, field checks, messages, filters, add, refusal, cancel, permissions). `npm run check` (web): 4 files, 74 passed. `npm run check` (server): 46 files, 1794 passed.

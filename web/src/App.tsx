@@ -1,5 +1,5 @@
-// Sign-in, sign-out and change own password (U.2, D-81), members list and add member (U.3e).
-// Other screens come in U.3f to U.8.
+// Sign-in, sign-out and change own password (U.2, D-81), members list and add member (U.3e),
+// member detail (U.3f). Other screens come in U.4 to U.8.
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import ChangePassword from "./ChangePassword.tsx";
@@ -155,7 +155,12 @@ export default function App({ makeApi = browserApi }: AppProps) {
         {view.page === "password" ? (
           <ChangePassword onSubmit={changePassword} onCancel={() => go("home")} />
         ) : view.page === "members" && can("members.view") ? (
-          <Members api={api} canCreate={can("members.create")} />
+          <Members
+            api={api}
+            canCreate={can("members.create")}
+            canViewPayments={can("payments.view")}
+            canViewLoans={can("loans.view")}
+          />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

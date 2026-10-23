@@ -1,5 +1,5 @@
-// API client for the auth routes (server/src/auth-routes.ts) and the member routes
-// (server/src/members-routes.ts, U.3d). Tokens travel in the JSON body
+// API client for the auth routes (server/src/auth-routes.ts), the member routes
+// (server/src/members-routes.ts, U.3d) and the payment and loan lists (U.3f). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; the browser does no money sums.
@@ -53,6 +53,36 @@ export interface MemberBalances {
   categories: { category: string; balance: string; refundable: boolean }[];
   refundableTotal: string;
   nonRefundableTotal: string;
+}
+
+export type PaymentMethod = "CASH" | "BANK_TRANSFER";
+
+/** A payment as GET /payments?memberId= sends it (PaymentView in server/src/payments.ts). */
+export interface Payment {
+  id: string;
+  memberId: string;
+  membershipId: string;
+  method: PaymentMethod;
+  total: string;
+  lines: { category: string; amount: string }[];
+  createdById: string;
+  createdAt: string;
+}
+
+/** A loan as GET /loans?memberId= sends it (LoanListView in server/src/loans.ts). */
+export interface Loan {
+  id: string;
+  memberId: string;
+  membershipId: string;
+  principal: string;
+  interestNote: string;
+  notes: string;
+  expenseId: string;
+  createdById: string;
+  createdAt: string;
+  repaid: string;
+  outstanding: string;
+  status: "ACTIVE" | "FULLY_REPAID";
 }
 
 export type MemberStatusFilter = "active" | "inactive" | "all";
@@ -113,6 +143,8 @@ export interface Api {
   getMember(id: string): Promise<CallResult<Member>>;
   createMember(input: NewMember): Promise<CallResult<Member>>;
   memberBalances(id: string): Promise<CallResult<MemberBalances>>;
+  listPayments(memberId: string): Promise<CallResult<Payment[]>>;
+  listLoans(memberId: string): Promise<CallResult<Loan[]>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -214,6 +246,96 @@ function balancesOf(value: unknown): MemberBalances | null {
     categories.push({ category, balance, refundable });
   }
   return { memberId, categories, refundableTotal, nonRefundableTotal };
+}
+
+const PAYMENT_TEXT_FIELDS = ["id", "memberId", "membershipId", "createdById", "createdAt"] as const;
+
+function paymentOf(value: unknown): Payment | null {
+  if (!isObject(value) || !Array.isArray(value["lines"])) return null;
+  for (const field of PAYMENT_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  const { method, total } = value;
+  if (method !== "CASH" && method !== "BANK_TRANSFER") return null;
+  if (typeof total !== "string" || !NAIRA.test(total)) return null;
+  const lines: Payment["lines"] = [];
+  for (const line of value["lines"]) {
+    if (!isObject(line)) return null;
+    const { category, amount } = line;
+    if (typeof category !== "string" || typeof amount !== "string" || !NAIRA.test(amount)) {
+      return null;
+    }
+    lines.push({ category, amount });
+  }
+  const v = value as Record<(typeof PAYMENT_TEXT_FIELDS)[number], string>;
+  return {
+    id: v.id,
+    memberId: v.memberId,
+    membershipId: v.membershipId,
+    method,
+    total,
+    lines,
+    createdById: v.createdById,
+    createdAt: v.createdAt,
+  };
+}
+
+const LOAN_TEXT_FIELDS = [
+  "id",
+  "memberId",
+  "membershipId",
+  "interestNote",
+  "notes",
+  "expenseId",
+  "createdById",
+  "createdAt",
+] as const;
+
+const LOAN_AMOUNT_FIELDS = ["principal", "repaid", "outstanding"] as const;
+
+function loanOf(value: unknown): Loan | null {
+  if (!isObject(value)) return null;
+  for (const field of LOAN_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  for (const field of LOAN_AMOUNT_FIELDS) {
+    const amount = value[field];
+    if (typeof amount !== "string" || !NAIRA.test(amount)) return null;
+  }
+  const status = value["status"];
+  if (status !== "ACTIVE" && status !== "FULLY_REPAID") return null;
+  const v = value as Record<
+    (typeof LOAN_TEXT_FIELDS)[number] | (typeof LOAN_AMOUNT_FIELDS)[number],
+    string
+  >;
+  return {
+    id: v.id,
+    memberId: v.memberId,
+    membershipId: v.membershipId,
+    principal: v.principal,
+    interestNote: v.interestNote,
+    notes: v.notes,
+    expenseId: v.expenseId,
+    createdById: v.createdById,
+    createdAt: v.createdAt,
+    repaid: v.repaid,
+    outstanding: v.outstanding,
+    status,
+  };
+}
+
+/** Every item read by `read`, or null if any one is of the wrong shape. */
+function listOf<T>(read: (value: unknown) => T | null): (value: unknown) => T[] | null {
+  return (value) => {
+    if (!Array.isArray(value)) return null;
+    const items: T[] = [];
+    for (const item of value) {
+      const parsed = read(item);
+      if (parsed === null) return null;
+      items.push(parsed);
+    }
+    return items;
+  };
 }
 
 function failureOf(status: number): CallFailure {
@@ -437,6 +559,16 @@ export function createApi(deps: ApiDeps): Api {
 
     memberBalances(id) {
       return call(`${memberPath(id)}/balances`, {}, 200, "balances", balancesOf);
+    },
+
+    listPayments(memberId) {
+      const query = `?memberId=${encodeURIComponent(memberId)}`;
+      return call(`/payments${query}`, {}, 200, "payments", listOf(paymentOf));
+    },
+
+    listLoans(memberId) {
+      const query = `?memberId=${encodeURIComponent(memberId)}`;
+      return call(`/loans${query}`, {}, 200, "loans", listOf(loanOf));
     },
   };
 }

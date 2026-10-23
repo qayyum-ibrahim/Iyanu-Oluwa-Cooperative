@@ -554,3 +554,97 @@ describe("member calls", () => {
     }
   });
 });
+
+const PAYMENT = {
+  id: "p1",
+  memberId: "m1",
+  membershipId: "IOC/0001",
+  method: "BANK_TRANSFER",
+  total: "7000.50",
+  lines: [
+    { category: "Savings", amount: "5000.50" },
+    { category: "Shares", amount: "2000.00" },
+  ],
+  createdById: "u1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+};
+
+const LOAN = {
+  id: "l1",
+  memberId: "m1",
+  membershipId: "IOC/0001",
+  principal: "50000.00",
+  interestNote: "",
+  notes: "",
+  expenseId: "e1",
+  createdById: "u1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+  repaid: "10000.00",
+  outstanding: "40000.00",
+  status: "ACTIVE",
+};
+
+describe("payment and loan lists", () => {
+  it("lists one member's payments and loans, with the id made safe for the query", async () => {
+    const { api, calls } = signedIn((call) =>
+      call.path.startsWith("/api/payments")
+        ? json(200, { payments: [PAYMENT] })
+        : json(200, { loans: [LOAN, { ...LOAN, id: "l0", outstanding: "0.00", status: "FULLY_REPAID" }] }),
+    );
+    expect(await api.listPayments("a&b=c")).toEqual({ ok: true, value: [PAYMENT] });
+    const loans = await api.listLoans("m1");
+    expect(loans.ok && loans.value.map((l) => l.status)).toEqual(["ACTIVE", "FULLY_REPAID"]);
+    expect(calls).toEqual([
+      { path: "/api/payments?memberId=a%26b%3Dc", method: "GET", auth: "Bearer acc1", body: null },
+      { path: "/api/loans?memberId=m1", method: "GET", auth: "Bearer acc1", body: null },
+    ]);
+  });
+
+  it("maps 403 and 404, and answers signed_out when the session is gone", async () => {
+    const refused = signedIn(() => json(403, { error: "forbidden" }));
+    expect(await refused.api.listPayments("m1")).toEqual({ ok: false, reason: "forbidden" });
+    const missing = signedIn(() => json(404, { error: "not_found" }));
+    expect(await missing.api.listLoans("m1")).toEqual({ ok: false, reason: "not_found" });
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.listLoans("m1")).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("refuses payments of the wrong shape or with amounts that are not naira strings", async () => {
+    const line = PAYMENT.lines[0];
+    const bad: unknown[] = [
+      { payments: "x" },
+      { payments: [PAYMENT, null] },
+      { payments: [{ ...PAYMENT, method: "CHEQUE" }] },
+      { payments: [{ ...PAYMENT, total: 7000.5 }] },
+      { payments: [{ ...PAYMENT, total: "7000.5" }] },
+      { payments: [{ ...PAYMENT, createdAt: 1 }] },
+      { payments: [{ ...PAYMENT, lines: "none" }] },
+      { payments: [{ ...PAYMENT, lines: [null] }] },
+      { payments: [{ ...PAYMENT, lines: [{ ...line, amount: "-1.00" }] }] },
+      { payments: [{ ...PAYMENT, lines: [{ ...line, category: 2 }] }] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listPayments("m1")).toEqual({ ok: false, reason: "server" });
+    }
+    const { api } = signedIn(() => json(200, { payments: [] }));
+    expect(await api.listPayments("m1")).toEqual({ ok: true, value: [] });
+  });
+
+  it("refuses loans of the wrong shape or with amounts that are not naira strings", async () => {
+    const bad: unknown[] = [
+      { loans: {} },
+      { loans: [{ ...LOAN, status: "REPAID" }] },
+      { loans: [{ ...LOAN, principal: "50,000.00" }] },
+      { loans: [{ ...LOAN, repaid: 10000 }] },
+      { loans: [{ ...LOAN, outstanding: "40000" }] },
+      { loans: [{ ...LOAN, notes: null }] },
+      { loans: [{ ...LOAN, expenseId: undefined }] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listLoans("m1")).toEqual({ ok: false, reason: "server" });
+    }
+  });
+});

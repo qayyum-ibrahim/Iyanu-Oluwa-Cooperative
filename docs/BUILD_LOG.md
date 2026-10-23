@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step D.90 (size S), 2026-10-23: leaner process, same tests (D-90)
+
+The owner said: "draft D-90 with all four after U.4g", then "go D.90".
+**Changed:** `docs/DECISIONS.md` (D-90), `CLAUDE.md` (rule 2: one screen or one feature per step, M at most; rule 10: break-on-purpose only for money, security and data-loss code, once at the end of each phase; "Docs for each step": STATUS "Where we stopped" holds the last step only), `docs/STATUS.md` ("Where we stopped" trimmed to the last step, 103620 to 34361 bytes; earlier steps are in this log and in git; "How we work" item 3 matches), `docs/PHASE_PLAN.md`, `docs/NEXT_FILES.txt`.
+**Works (verified in this session):** `npm run check` (server): 47 files, 1847 passed. `npm run check` (web): 4 files, 128 passed.
+**Not verified:** nothing run beyond the checks; no source change.
+
+---
+
 ## Step U.4g (size S), 2026-10-23: break-on-purpose for U.4d to U.4f (A-212)
 
 The owner said: "go".

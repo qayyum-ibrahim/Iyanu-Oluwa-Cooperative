@@ -1,5 +1,12 @@
 # Build log (newest first)
 
+## Step U.3h (size S), 2026-10-23: tests for the U.3g gaps (A-203)
+
+**Works (verified in this session):** 3 new tests, 3 new bad-reply cases and a stricter loan list check in `web/test/api.test.ts` and `web/test/app.test.tsx` (tests commit `c47f47b`). `npm run check` (web): 4 files, 90 passed. `npm run check` (server): 46 files, 1794 passed. `node ~/Desktop/mutate-U.3g.mjs` (output in `~/Desktop/mutate-U.3h.out`): baseline 76; 70 mutations, 70 caught, 0 escaped, 0 errors, 0 not applied; files restored: yes; `git status --short` empty. A3, A4, A7, A14, A19, A26, A27, A31, V9, V13, V23 and V24 were each caught by the new test meant for it.
+**Not verified:** the Vitest docs on running each test file in its own process (the V9 test relies on it, A-203); the screen in a real browser.
+
+---
+
 ## Step U.3g (size S), 2026-10-23: break-on-purpose for the U.3d to U.3f web code (A-202)
 
 **Works (verified in this session):** `node ~/Desktop/mutate-U.3g.mjs` (not in git): baseline 73 passed; 70 mutations (42 in `web/src/api.ts`, 28 in `web/src/Members.tsx`), 58 caught, 12 escaped, 0 errors, 0 not applied; files restored: yes; `git status --short` empty. `npm run check` (web): 4 files, 87 passed. `npm run check` (server): 46 files, 1794 passed. No source change kept.

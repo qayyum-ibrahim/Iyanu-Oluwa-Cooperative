@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4b (size M), 2026-10-23: payment date in `POST /payments` (D-88, A-205)
+
+The owner said: "fix Inconsistencies, yes to db:deploy, item 6 confirmed, go".
+**Changed:** `server/src/payments.ts` (`isCalendarDay`; `NewPaymentInput.paidOn`; checks `invalid_paid_on` and `future_paid_on` after the method; `paidOn` as sent in the request hash; the saved day is the one sent or today in Lagos; `PaymentView.paidOn`; audit detail ` paid_on=`); `server/src/payments-routes.ts` (passes `body.paidOn`). Tests: `test/payments.test.ts` (date saved and shown, today accepted, `isCalendarDay` cases, 6 invalid forms, future refused, check order; audit detail now names its date), `test/payments-idempotency.test.ts` (same date replays; another date or none conflicts; one more conflict case), `test/payments-routes.test.ts` (`paidOn` in the reply; three 400 cases), `test/payments-list.test.ts` (`paidOn` in the views and the reply keys). Docs fixes the owner asked for: STATUS Roadmap, migration count, pay-off route and screens lines; DATA_MODEL header.
+**Works (verified in this session):** `npm run db:deploy` (owner's yes): "15 migrations found in prisma/migrations", "No pending migrations to apply."; `npx prisma migrate status`: "Database schema is up to date!"; `_prisma_migrations` shows `20261023090000_payment_paid_on` finished at 1792729639187 ms (2026-10-23 about 04:27 UTC, before this session); `select count(*), sum(paidOn is null) from Payment` gave `23|0`. First targeted run after the source change: 4 failed, 158 passed (expected: the exact view keys and the audit detail); after the test updates the five payment files: 202 passed. `npm run check` (server): 47 files, 1842 passed, 95.86 s.
+**Not verified:** who applied the migration to the dev database before this session; break-on-purpose (owed at U.4c); the live check (not run, no new checks in the script); web not changed, web check not rerun; not run in a browser.
+
+---
+
 ## Step U.4a (size M), 2026-10-23: payment date in the server store (D-87, A-204)
 
 The owner chose the prototype's Date field: "The prototype date field wins. add payment date to the server and go". U.4 split at its start into U.4a to U.4g (PHASE_PLAN).

@@ -59,6 +59,30 @@ function must(r: PaymentResult): PaymentView {
   return r.value;
 }
 
+describe("createPayment: idempotency key and payment date (U.4b)", () => {
+  it("a repeat with the same payment date returns the first payment", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const first = must(await createPayment(store, actorOf(a), pay(m.id, key(901), { paidOn: "2026-10-01" })));
+    const second = await createPayment(store, actorOf(a), pay(m.id, key(901), { paidOn: "2026-10-01" }));
+    expect(second).toMatchObject({ ok: true, replayed: true });
+    expect(must(second)).toEqual(first);
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+  });
+
+  it("refuses the same key with another payment date, and saves nothing more", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await createPayment(store, actorOf(a), pay(m.id, key(902), { paidOn: "2026-10-01" }));
+    for (const paidOn of ["2026-10-02", undefined]) {
+      const r = await createPayment(store, actorOf(a), pay(m.id, key(902), { paidOn }));
+      expect(r).toEqual({ ok: false, reason: "idempotency_conflict" });
+    }
+    expect(await store.payments.listByMember(m.id)).toHaveLength(1);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+});
+
 describe("createPayment: idempotency key", () => {
   it("a first request is saved and not marked as a replay", async () => {
     const { store, a, addMember } = await build();
@@ -110,6 +134,7 @@ describe("createPayment: idempotency key", () => {
       over: { lines: [...LINES].reverse() },
     },
     { label: "another method", over: { method: "BANK_TRANSFER" } },
+    { label: "a payment date where the first had none", over: { paidOn: "2026-10-01" } },
   ])("refuses the same key with $label, and saves nothing more", async ({ over }) => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");

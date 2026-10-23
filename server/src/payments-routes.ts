@@ -1,5 +1,5 @@
-// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7, list in 4.8, loan codes in 5.5). Thin: all rules
-// live in payments.ts and payment-sms.ts.
+// Payment routes (step 4.4, idempotency key in 4.5, SMS in 4.7, list in 4.8, loan codes in 5.5,
+// payment date in U.4b). Thin: all rules live in payments.ts and payment-sms.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -74,6 +74,7 @@ export function createPaymentsRouter(deps: PaymentsRouterDeps): Router {
         idempotencyKey: req.header("idempotency-key"),
         memberId: body["memberId"],
         method: body["method"],
+        paidOn: body["paidOn"],
         total: body["total"],
         lines: body["lines"],
         sendSms: body["sendSms"],

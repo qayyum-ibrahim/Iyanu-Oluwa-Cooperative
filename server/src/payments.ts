@@ -1,10 +1,10 @@
-// Payment logic (step 4.4, idempotency key added in 4.5, list in 4.8, Loan Repaid in 5.5; D-43 to
-// D-47, DR-02, DR-08, DR-09, DR-13, DR-15).
+// Payment logic (step 4.4, idempotency key added in 4.5, list in 4.8, Loan Repaid in 5.5, payment
+// date in U.4b; D-43 to D-47, D-87, DR-02, DR-08, DR-09, DR-13, DR-15).
 // Rules over the Store: no HTTP here.
 // The breakdown is checked first. The key lookup, the member check, the payment and the audit
 // entry then run inside one store transaction, so all of them are saved or none (D-45).
-// Audit details hold the Membership ID, the total in kobo and the line count: no name, no phone,
-// no key.
+// Audit details hold the Membership ID, the total in kobo, the line count and the payment date: no
+// name, no phone, no key.
 
 import { createHash } from "node:crypto";
 import { BreakdownError, checkBreakdown } from "./breakdown.js";
@@ -46,6 +46,8 @@ export interface PaymentView {
   membershipId: string;
   method: PaymentMethod;
   total: string;
+  /** The day the member paid, "YYYY-MM-DD" in Lagos (D-87). */
+  paidOn: string;
   lines: PaymentLineView[];
   createdById: string;
   createdAt: string;
@@ -96,6 +98,22 @@ export function lagosDay(at: Date): string {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+const DAY_PATTERN = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+
+/** True for a real calendar day written "YYYY-MM-DD", for example "2028-02-29" (U.4b). */
+export function isCalendarDay(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = DAY_PATTERN.exec(value);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= (days[month - 1] ?? 0);
+}
+
 /** 2000050n gives "20000.50". Not for negative values. */
 export function koboToNairaString(kobo: Kobo): string {
   if (kobo < 0n) throw new RangeError("Amount must not be negative.");
@@ -109,6 +127,7 @@ function toView(p: PaymentRecord, membershipId: string): PaymentView {
     membershipId,
     method: p.method,
     total: koboToNairaString(p.total),
+    paidOn: p.paidOn,
     lines: p.lines.map((l) => ({ category: l.category, amount: koboToNairaString(l.amount) })),
     createdById: p.createdById,
     createdAt: p.createdAt.toISOString(),
@@ -119,15 +138,20 @@ function parseMethod(value: unknown): PaymentMethod | null {
   return value === "CASH" || value === "BANK_TRANSFER" ? value : null;
 }
 
-/** A fingerprint of the checked request: member, method, exact kobo, lines in order. */
+/**
+ * A fingerprint of the checked request: member, method, the payment date as sent (null when
+ * missing, so a retry after midnight still matches), exact kobo, lines in order.
+ */
 function hashRequest(
   memberId: string,
   method: PaymentMethod,
+  paidOn: string | null,
   checked: ReturnType<typeof checkBreakdown>,
 ): string {
   const canonical = JSON.stringify({
     memberId,
     method,
+    paidOn,
     total: checked.total.toString(),
     lines: checked.lines.map((l) => [l.category, l.amount.toString()]),
   });
@@ -139,13 +163,16 @@ export interface NewPaymentInput {
   idempotencyKey?: unknown;
   memberId?: unknown;
   method?: unknown;
+  /** "YYYY-MM-DD", the day in Lagos. Missing means today in Lagos (A-204 item 6). */
+  paidOn?: unknown;
   total?: unknown;
   lines?: unknown;
 }
 
 /**
  * Records a payment for a member and writes one audit entry "payment.created".
- * Order: permission, idempotency key shape, member id and method, line count, breakdown (DR-02),
+ * Order: permission, idempotency key shape, member id, method, payment date (a real day, not
+ * after today in Lagos; no earliest day), line count, breakdown (DR-02),
  * then one transaction: look the key up (a repeat returns the first payment, a different request
  * with the same key is refused), find the member, check who may see it, check it is Active,
  * link the Loan Repaid lines to the member's active loan (A-145), save the payment with its key,
@@ -174,6 +201,16 @@ export async function createPayment(
   }
   const method = parseMethod(input.method);
   if (method === null) return failure("invalid_input", "invalid_method");
+  const sentPaidOn = input.paidOn;
+  if (sentPaidOn !== undefined && !isCalendarDay(sentPaidOn)) {
+    return failure("invalid_input", "invalid_paid_on");
+  }
+  const today = lagosDay(new Date());
+  // Both are "YYYY-MM-DD", so text order is day order.
+  if (sentPaidOn !== undefined && sentPaidOn > today) {
+    return failure("invalid_input", "future_paid_on");
+  }
+  const paidOn = sentPaidOn ?? today;
   if (Array.isArray(input.lines) && input.lines.length > MAX_PAYMENT_LINES) {
     return failure("invalid_input", "too_many_lines");
   }
@@ -185,7 +222,7 @@ export async function createPayment(
     if (e instanceof BreakdownError) return failure("invalid_input", e.code, e.lineIndex);
     throw e;
   }
-  const requestHash = hashRequest(memberId, method, checked);
+  const requestHash = hashRequest(memberId, method, sentPaidOn ?? null, checked);
 
   const attempt = (): Promise<PaymentResult> =>
     store.transaction<PaymentResult>(async (tx) => {
@@ -220,8 +257,7 @@ export async function createPayment(
         memberId: member.id,
         method,
         total: checked.total,
-        // The day it is saved, until the request carries its own date (U.4b).
-        paidOn: lagosDay(new Date()),
+        paidOn,
         lines: checked.lines.map((l) =>
           l.category === LOAN_REPAID_CATEGORY && loanId !== undefined
             ? { category: l.category, amount: l.amount, loanId }
@@ -236,7 +272,7 @@ export async function createPayment(
         action: "payment.created",
         entityType: "Payment",
         entityId: payment.id,
-        detail: `membership_id=${member.membershipId} total_kobo=${checked.total.toString()} lines=${checked.lines.length}`,
+        detail: `membership_id=${member.membershipId} total_kobo=${checked.total.toString()} lines=${checked.lines.length} paid_on=${paidOn}`,
       });
       return { ok: true, value: toView(payment, member.membershipId), replayed: false };
     });

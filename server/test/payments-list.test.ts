@@ -57,6 +57,7 @@ describe("listPayments", () => {
           membershipId: m.membershipId,
           method: "CASH",
           total: "20000.50",
+          paidOn: "2026-10-20",
           lines: [{ category: "Savings", amount: "20000.50" }],
           createdById: a.id,
           createdAt: p1.createdAt.toISOString(),
@@ -67,6 +68,7 @@ describe("listPayments", () => {
           membershipId: m.membershipId,
           method: "CASH",
           total: "5000.00",
+          paidOn: "2026-10-20",
           lines: [{ category: "Savings", amount: "5000.00" }],
           createdById: a.id,
           createdAt: p2.createdAt.toISOString(),
@@ -220,9 +222,11 @@ describe("GET /payments", () => {
       "memberId",
       "membershipId",
       "method",
+      "paidOn",
       "total",
     ]);
     expect(res.body.payments[0].total).toBe("1.00");
+    expect(res.body.payments[0].paidOn).toBe("2026-10-20");
   });
 
   it("answers 401 without a token", async () => {

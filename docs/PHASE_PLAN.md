@@ -91,7 +91,7 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.3h (S, proposed at U.3g) Tests in `web/test/api.test.ts` and `web/test/app.test.tsx` for the U.3g gaps (A3, A4, A7, A14, A19, A26, A27, A31, V13, V23, V24) and a run in another time zone for V9, then a full rerun of `mutate-U.3g.mjs`. Done (A-203): 90 web tests; rerun 70 of 70 caught.
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03). The owner chose a payment date of its own (D-87), so U.4 split at its start (A-204):
   - U.4a (M) Server: `Payment.paidOn` column, migration that fills old rows, store field in both adapters; `createPayment` saves today's day in Lagos. Done (D-87, A-204): 1802 server tests.
-  - U.4b (M) Server: `paidOn` in `POST /payments` (checked, part of the request hash), in the payment view and the audit detail (A-204 item 6, owner to confirm).
+  - U.4b (M) Server: `paidOn` in `POST /payments` (checked, part of the request hash), in the payment view and the audit detail (A-204 item 6). Done (D-88, A-205): 1842 server tests.
   - U.4c (S) Break-on-purpose for U.4a and U.4b (migration fill, `lagosDay`, the date checks; CLAUDE.md rule 10).
   - U.4d (S) Web: `createPayment` in `web/src/api.ts` and `paidOn` in the payment reads.
   - U.4e (M) Web: the payment form (member, date, method, total, breakdown, SMS toggle, R-04).
@@ -112,7 +112,7 @@ Sizes stay a first look; an M step may split when it starts.
 | Members list | `GET /members?status=&createdById=` | `members.view` | no name search on the server (in the browser, A-191); the list shows no balance or loan column, unlike the prototype (would need one read per member or a list route; not planned) |
 | Add member | `POST /members` | `members.create` | none |
 | Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, `GET /members/:id/balances` (U.3a) | `members.view`, `payments.view`, `loans.view` | no member edit route (`members.edit` is used only by reactivation) |
-| Record payment | `POST /payments` | `payments.create` | payment date `paidOn` added at U.4a and taken from the request at U.4b (D-87; the prototype README orders the form member, date, method, total, breakdown) |
+| Record payment | `POST /payments` | `payments.create` | payment date `paidOn` added at U.4a and taken from the request since U.4b (D-87, D-88; the prototype README orders the form member, date, method, total, breakdown) |
 | Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); no loan date (time recorded) |
 | Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | no "date spent" (A-172); no paging |
 | Pay-off | `GET /members/:id/balances` (U.3a), `POST /payoffs` | `payoff.process` | no pay-off read (A-186) |

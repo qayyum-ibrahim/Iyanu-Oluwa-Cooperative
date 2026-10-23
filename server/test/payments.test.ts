@@ -4,6 +4,7 @@ import { isLoanActive, loanOutstanding } from "../src/loans.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import {
   createPayment,
+  isCalendarDay,
   koboToNairaString,
   lagosDay,
   LOAN_REPAID_CATEGORY,
@@ -87,7 +88,24 @@ describe("createPayment: success", () => {
     expect(saved[0]?.lines.map((l) => l.amount)).toEqual([500_000n, 1_000_000n, 500_000n]);
   });
 
-  it("saves the day in Lagos as the payment date (U.4a)", async () => {
+  it("saves and shows the payment date sent (U.4b)", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A Date");
+    const r = must(await createPayment(store, actorOf(a), pay(m.id, { paidOn: "2019-03-07" })));
+    expect(r.paidOn).toBe("2019-03-07");
+    const saved = await store.payments.findById(r.id);
+    expect(saved?.paidOn).toBe("2019-03-07");
+  });
+
+  it("accepts today in Lagos as the payment date", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A Today");
+    const today = lagosDay(new Date());
+    const r = must(await createPayment(store, actorOf(a), pay(m.id, { paidOn: today })));
+    expect(r.paidOn).toBe(today);
+  });
+
+  it("saves the day in Lagos as the payment date when none is sent (U.4a)", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A Day");
     const before = lagosDay(new Date());
@@ -95,6 +113,7 @@ describe("createPayment: success", () => {
     const after = lagosDay(new Date());
     const saved = await store.payments.findById(r.id);
     expect([before, after]).toContain(saved?.paidOn);
+    expect(r.paidOn).toBe(saved?.paidOn);
   });
 
   it("keeps the largest allowed amount exact", async () => {
@@ -159,6 +178,37 @@ describe("lagosDay (U.4a)", () => {
     expect(lagosDay(new Date("2026-10-31T23:00:00.000Z"))).toBe("2026-11-01");
     expect(lagosDay(new Date("2026-01-05T00:00:00.000Z"))).toBe("2026-01-05");
     expect(lagosDay(new Date("2026-06-30T23:30:00.000Z"))).toBe("2026-07-01");
+  });
+});
+
+describe("isCalendarDay (U.4b)", () => {
+  it.each(["2026-10-23", "2028-02-29", "2000-02-29", "1999-12-31", "2026-01-01", "2026-04-30"])(
+    "accepts %s",
+    (value) => {
+      expect(isCalendarDay(value)).toBe(true);
+    },
+  );
+
+  it.each([
+    "2026-02-29",
+    "1900-02-29",
+    "2026-04-31",
+    "2026-13-01",
+    "2026-00-10",
+    "2026-10-00",
+    "2026-10-32",
+    "2026-1-05",
+    "26-10-23",
+    "2026/10/23",
+    " 2026-10-23",
+    "2026-10-23T00:00:00Z",
+    "",
+  ])("refuses %j", (value) => {
+    expect(isCalendarDay(value)).toBe(false);
+  });
+
+  it.each([20261023, null, undefined, {}, ["2026-10-23"]])("refuses the non-text %j", (value) => {
+    expect(isCalendarDay(value)).toBe(false);
   });
 });
 
@@ -236,6 +286,50 @@ describe("createPayment: refusals", () => {
   });
 
   it.each([
+    { label: "not a real day", value: "2026-02-30" },
+    { label: "not YYYY-MM-DD", value: "23/10/2026" },
+    { label: "a date with a time", value: "2026-10-01T10:00:00Z" },
+    { label: "empty", value: "" },
+    { label: "null", value: null },
+    { label: "a number", value: 20261001 },
+  ])("refuses a payment date that is $label, and saves nothing", async ({ value }) => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(await createPayment(store, actorOf(a), pay(m.id, { paidOn: value }))).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_paid_on",
+    });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+  });
+
+  it("refuses a payment date after today in Lagos, and saves nothing", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const tomorrow = lagosDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    for (const paidOn of [tomorrow, "2999-01-01"]) {
+      expect(await createPayment(store, actorOf(a), pay(m.id, { paidOn }))).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "future_paid_on",
+      });
+    }
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("checks the payment date after the method and before the breakdown", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    expect(
+      await createPayment(store, actorOf(a), pay(m.id, { method: "x", paidOn: "bad" })),
+    ).toMatchObject({ code: "invalid_method" });
+    expect(
+      await createPayment(store, actorOf(a), pay(m.id, { paidOn: "bad", total: "x" })),
+    ).toMatchObject({ code: "invalid_paid_on" });
+  });
+
+  it.each([
     { label: "lines that do not add up", over: { total: "19999" }, expected: { code: "mismatch" } },
     {
       label: "Membership Withdrawal on a line",
@@ -285,14 +379,14 @@ describe("createPayment: audit and transaction", () => {
   it("writes one payment.created entry with the actor, ids and totals only", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");
-    const r = must(await createPayment(store, actorOf(a), pay(m.id)));
+    const r = must(await createPayment(store, actorOf(a), pay(m.id, { paidOn: "2026-10-01" })));
     const entries = await store.audit.listByActor(a.id);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       action: "payment.created",
       entityType: "Payment",
       entityId: r.id,
-      detail: "membership_id=IO-001 total_kobo=2000000 lines=3",
+      detail: "membership_id=IO-001 total_kobo=2000000 lines=3 paid_on=2026-10-01",
     });
     const text = JSON.stringify(entries);
     expect(text).not.toContain("A One");

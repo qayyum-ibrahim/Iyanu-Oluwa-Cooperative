@@ -81,7 +81,7 @@ describe("POST /payments", () => {
     const res = await request(app)
       .post("/payments").set("Idempotency-Key", key())
       .set("Authorization", bearer(a))
-      .send(payBody(m.id));
+      .send(payBody(m.id, { paidOn: "2026-10-01" }));
     expect(res.status).toBe(201);
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(Object.keys(res.body.payment as object).sort()).toEqual([
@@ -92,6 +92,7 @@ describe("POST /payments", () => {
       "memberId",
       "membershipId",
       "method",
+      "paidOn",
       "total",
     ]);
     expect(res.body.payment).toMatchObject({
@@ -99,6 +100,7 @@ describe("POST /payments", () => {
       membershipId: "IO-001",
       method: "CASH",
       total: "20000.00",
+      paidOn: "2026-10-01",
       createdById: a.id,
       lines: [
         { category: "Shares", amount: "5000.00" },
@@ -106,6 +108,22 @@ describe("POST /payments", () => {
         { category: "Special Savings", amount: "5000.00" },
       ],
     });
+  });
+
+  it.each([
+    { label: "not a real day", paidOn: "2026-02-30", code: "invalid_paid_on" },
+    { label: "a number", paidOn: 20261001, code: "invalid_paid_on" },
+    { label: "after today in Lagos", paidOn: "2999-01-01", code: "future_paid_on" },
+  ])("answers 400 to a payment date that is $label, and saves nothing", async ({ paidOn, code }) => {
+    const { app, a, bearer, addMember, store } = await build();
+    const m = await addMember(a.id, "A One");
+    const res = await request(app)
+      .post("/payments").set("Idempotency-Key", key())
+      .set("Authorization", bearer(a))
+      .send(payBody(m.id, { paidOn }));
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_input", code });
+    expect(await store.payments.listByMember(m.id)).toEqual([]);
   });
 
   it("answers 201 for the Super Admin on another user's member", async () => {

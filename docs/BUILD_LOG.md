@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4c2 (size S), 2026-10-23: tests for the U.4c gaps (A-207)
+
+The owner said: "go", then "yes, commit" for the tests commit.
+**Changed:** `server/test/payments.test.ts` (C4: "12026-10-01" and "02026-10-01" refused by `isCalendarDay`, a five-digit year refused by `createPayment`; L2: `payments.ts` loaded again under `TZ=UTC`, `lagosDay` at 2026-10-31T23:30Z gives "2026-11-01"), `server/test/payments-idempotency.test.ts` (H2: the same key without `paidOn` and then with today's date answers 409, and the other way round). Tests commit `e278e81` (the script refuses a tree with changes, as at U.3h).
+**Works (verified in this session):** `npm run check` (server): 47 files, 1847 passed, 93.52 s. `node ~/Desktop/mutate-U.4c.mjs` (output `~/Desktop/mutate-U.4c2.out`): baseline 9 test files, 615 passed; 39 mutations, 37 caught, 2 escaped (C5, C6), 0 errors, 0 not applied; "files restored: yes"; `git status --short` "(empty)". L2, C4 and H2 each failed their new test.
+**Not verified:** the suite on a machine outside Lagos time (L2 is now caught here because the test sets `TZ=UTC`); the web side (not touched); the live check (not run).
+
+---
+
 ## Step U.4c (size M), 2026-10-23: break-on-purpose for U.4a and U.4b (A-206)
 
 The owner said: "fix inconsistencies, include store adapters, go".

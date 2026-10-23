@@ -2,8 +2,8 @@
 // (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
 // (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b), the
 // expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
-// paying a member out (server/src/payoffs-routes.ts, U.7a) and reactivating a member (U.7b).
-// Tokens travel in the JSON body
+// paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
+// staff list and add staff (server/src/staff-routes.ts, U.8a). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -219,6 +219,25 @@ export type PayOffConflict =
   | "payout_changed"
   | "idempotency_conflict";
 
+/** A staff account as GET /staff and POST /staff send it (StaffView in server/src/staff.ts). */
+export interface StaffAccount {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string;
+  isActive: boolean;
+  permissions: string[];
+  createdAt: string;
+}
+
+/** The body of POST /staff. The password is sent as typed and never kept by this file. */
+export interface NewStaff {
+  displayName: string;
+  email: string;
+  password: string;
+  permissions: string[];
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -269,6 +288,11 @@ export type CreatePayOffResult =
 export type ReactivateMemberResult =
   | { ok: true; member: Member }
   | { ok: false; reason: CallFailure | "already_active" };
+
+/** email_taken: another account has this email, nothing saved (staff.ts). */
+export type CreateStaffResult =
+  | { ok: true; staff: StaffAccount }
+  | { ok: false; reason: CallFailure | "email_taken" };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -325,6 +349,8 @@ export interface Api {
   deleteExpense(id: string): Promise<DeleteExpenseResult>;
   createPayOff(input: NewPayOff): Promise<CreatePayOffResult>;
   reactivateMember(id: string): Promise<ReactivateMemberResult>;
+  listStaff(): Promise<CallResult<StaffAccount[]>>;
+  createStaff(input: NewStaff): Promise<CreateStaffResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -571,6 +597,32 @@ function payOffOf(value: unknown): PayOff | null {
     lines,
     expenseId: v.expenseId,
     createdById: v.createdById,
+    createdAt: v.createdAt,
+  };
+}
+
+const STAFF_TEXT_FIELDS = ["id", "email", "displayName", "role", "createdAt"] as const;
+
+function staffOf(value: unknown): StaffAccount | null {
+  if (!isObject(value) || !Array.isArray(value["permissions"])) return null;
+  for (const field of STAFF_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  const { isActive } = value;
+  if (typeof isActive !== "boolean") return null;
+  const permissions: string[] = [];
+  for (const permission of value["permissions"]) {
+    if (typeof permission !== "string") return null;
+    permissions.push(permission);
+  }
+  const v = value as Record<(typeof STAFF_TEXT_FIELDS)[number], string>;
+  return {
+    id: v.id,
+    email: v.email,
+    displayName: v.displayName,
+    role: v.role,
+    isActive,
+    permissions,
     createdAt: v.createdAt,
   };
 }
@@ -1083,6 +1135,30 @@ export function createApi(deps: ApiDeps): Api {
       const member = isObject(reply) ? memberOf(reply["member"]) : null;
       if (member === null) return { ok: false, reason: "server" };
       return { ok: true, member };
+    },
+
+    listStaff() {
+      return call("/staff", {}, 200, "staff", listOf(staffOf));
+    },
+
+    // No key: a second POST with the same email answers email_taken, so no account is made twice.
+    async createStaff(input) {
+      let response: Response | null;
+      try {
+        response = await authed("/staff", { method: "POST", body: JSON.stringify(input) });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status === 409) {
+        const known = isObject(reply) && reply["error"] === "email_taken";
+        return { ok: false, reason: known ? "email_taken" : "server" };
+      }
+      if (response.status !== 201) return { ok: false, reason: failureOf(response.status) };
+      const staff = isObject(reply) ? staffOf(reply["staff"]) : null;
+      if (staff === null) return { ok: false, reason: "server" };
+      return { ok: true, staff };
     },
   };
 }

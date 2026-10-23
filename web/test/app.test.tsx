@@ -19,6 +19,7 @@ import type {
   CreateLoanResult,
   CreatePaymentResult,
   CreatePayOffResult,
+  CreateStaffResult,
   DeleteExpenseResult,
   Expense,
   ExpenseEdit,
@@ -34,9 +35,11 @@ import type {
   NewLoan,
   NewPayment,
   NewPayOff,
+  NewStaff,
   Payment,
   ReactivateMemberResult,
   SmsOutcome,
+  StaffAccount,
   UpdateExpenseResult,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
@@ -91,6 +94,17 @@ import {
   type PaymentFormInput,
 } from "../src/Members.tsx";
 import SignIn from "../src/SignIn.tsx";
+import {
+  BLANK_STAFF,
+  STAFF_NAME_MAX,
+  STAFF_PERMISSIONS,
+  checkNewStaff,
+  createdStaffMessage,
+  permissionCount,
+  staffListMessage,
+  staffMessage,
+  type StaffFormInput,
+} from "../src/Staff.tsx";
 
 const idleApi: Api = {
   login: async () => ({ ok: false, reason: "server" }),
@@ -112,6 +126,8 @@ const idleApi: Api = {
   deleteExpense: async () => ({ ok: false, reason: "server" }),
   createPayOff: async () => ({ ok: false, reason: "server" }),
   reactivateMember: async () => ({ ok: false, reason: "server" }),
+  listStaff: async () => ({ ok: false, reason: "server" }),
+  createStaff: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -204,6 +220,8 @@ interface FakeApi extends Api {
   paidOff: NewPayOff[];
   /** Every member id the screen reactivated, in order. */
   reactivated: string[];
+  /** Every staff account the screen sent, in order. */
+  hired: NewStaff[];
   signOutFromServer(): void;
 }
 
@@ -257,6 +275,11 @@ function fakeApi(
     payOff?: CreatePayOffResult[];
     /** Answers to reactivateMember in turn; the last one repeats. A success is saved as the server would. */
     reactivate?: ReactivateMemberResult[];
+    /** The staff the fake server holds; a created account is added as the server would. */
+    staff?: StaffAccount[];
+    staffList?: CallResult<StaffAccount[]>;
+    /** Answers to createStaff in turn; the last one repeats. */
+    hire?: CreateStaffResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -269,6 +292,7 @@ function fakeApi(
     const deleted: string[] = [];
     const paidOff: NewPayOff[] = [];
     const reactivated: string[] = [];
+    const hired: NewStaff[] = [];
     return {
       calls,
       paid,
@@ -279,6 +303,7 @@ function fakeApi(
       deleted,
       paidOff,
       reactivated,
+      hired,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -367,6 +392,18 @@ function fakeApi(
         const answers = opts.reactivate ?? [];
         const result = answers[Math.min(reactivated.length, answers.length) - 1] ?? { ok: false, reason: "server" };
         if (result.ok) opts.members = (opts.members ?? []).map((m) => (m.id === id ? result.member : m));
+        return result;
+      },
+      listStaff: async () => {
+        calls.push("staff");
+        return opts.staffList ?? { ok: true, value: opts.staff ?? [] };
+      },
+      createStaff: async (input) => {
+        calls.push("hire");
+        hired.push(input);
+        const answers = opts.hire ?? [];
+        const result = answers[Math.min(hired.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+        if (result.ok) opts.staff = [...(opts.staff ?? []), result.staff];
         return result;
       },
     };
@@ -3024,5 +3061,229 @@ describe("reactivate (jsdom)", () => {
     await click(button(CONFIRM_BUTTON));
     expect(el(".status-inactive").textContent).toBe("Inactive");
     expect(button(REACTIVATE_BUTTON)).toBeTruthy();
+  });
+});
+
+const STAFF_FORM: StaffFormInput = {
+  displayName: "  Staff One ",
+  email: " Staff.One@Example.test ",
+  password: " a long password ",
+  confirm: " a long password ",
+  permissions: ["payments.view", "members.view"],
+};
+
+function staffAccount(id: string, displayName: string, extra: Partial<StaffAccount> = {}): StaffAccount {
+  return {
+    id,
+    email: `${id}@example.test`,
+    displayName,
+    role: "STAFF",
+    isActive: true,
+    permissions: [],
+    createdAt: "2026-10-23T09:00:00.000Z",
+    ...extra,
+  };
+}
+
+describe("staff helpers", () => {
+  it("lists every permission of the server table but users.manage, in its order", () => {
+    expect(STAFF_PERMISSIONS.map((p) => p.key)).toEqual([
+      "dashboard",
+      "members.view",
+      "members.create",
+      "members.edit",
+      "members.delete",
+      "payments.view",
+      "payments.create",
+      "payments.edit",
+      "payments.delete",
+      "expenses.view",
+      "expenses.create",
+      "expenses.edit",
+      "expenses.delete",
+      "loans.view",
+      "loans.create",
+      "loans.edit",
+      "loans.delete",
+      "reports.view",
+      "reports.export",
+      "loans.disburse",
+      "payoff.process",
+    ]);
+    expect(STAFF_PERMISSIONS.find((p) => p.key === "payoff.process")?.label).toBe("Process member pay-off");
+    expect(BLANK_STAFF.permissions).toEqual([]);
+  });
+
+  it("trims the name and email, keeps the password as typed, and puts permissions in table order", () => {
+    expect(checkNewStaff(STAFF_FORM)).toEqual({
+      ok: true,
+      value: {
+        displayName: "Staff One",
+        email: "Staff.One@Example.test",
+        password: " a long password ",
+        permissions: ["members.view", "payments.view"],
+      },
+    });
+    const twice = checkNewStaff({ ...STAFF_FORM, permissions: ["members.view", "members.view"] });
+    expect(twice.ok && twice.value.permissions).toEqual(["members.view"]);
+  });
+
+  it("checks in the server's order: email, password, name, permissions", () => {
+    const refused = (input: Partial<StaffFormInput>) => {
+      const result = checkNewStaff({ ...STAFF_FORM, ...input });
+      return result.ok ? null : result.message;
+    };
+    for (const email of ["", "staff", "a@b", "a b@c.test", "a@@c.test", `${"a".repeat(245)}@example.test`]) {
+      expect(refused({ email, password: "" })).toBe("Enter a valid email address.");
+    }
+    expect(refused({ email: `${"a".repeat(241)}@example.test` })).toBeNull();
+    expect(refused({ password: "a".repeat(11), confirm: "a".repeat(11), displayName: "" })).toBe(
+      "The password must be 12 to 128 characters.",
+    );
+    expect(refused({ password: "a".repeat(129), confirm: "a".repeat(129) })).toMatch(/12 to 128/);
+    expect(refused({ password: "a".repeat(12), confirm: "a".repeat(12) })).toBeNull();
+    expect(refused({ password: "a".repeat(128), confirm: "a".repeat(128) })).toBeNull();
+    expect(refused({ confirm: "a long password", displayName: "" })).toBe("The two passwords do not match.");
+    expect(refused({ displayName: "   ", permissions: ["users.manage"] })).toBe("Enter the full name.");
+    expect(refused({ displayName: "a".repeat(STAFF_NAME_MAX + 1) })).toBe("The full name may have at most 100 characters.");
+    expect(refused({ displayName: ` ${"a".repeat(STAFF_NAME_MAX)} ` })).toBeNull();
+    expect(refused({ permissions: ["users.manage"] })).toMatch(/unknown entry/);
+    expect(refused({ permissions: ["toString"] })).toMatch(/unknown entry/);
+    expect(refused({ permissions: [] })).toBeNull();
+  });
+
+  it("gives a message for each refusal", () => {
+    expect(staffMessage({ ok: false, reason: "email_taken" })).toBe("Another account already uses this email.");
+    expect(staffMessage({ ok: false, reason: "invalid_input" })).toMatch(/was refused/);
+    expect(staffMessage({ ok: false, reason: "forbidden" })).toMatch(/permission/);
+    expect(staffMessage({ ok: false, reason: "signed_out" })).toBeNull();
+    expect(staffMessage({ ok: false, reason: "network" })).toMatch(/Cannot reach.*may have been created/);
+    expect(staffMessage({ ok: false, reason: "server" })).toMatch(/went wrong.*may have been created/);
+    expect(staffListMessage("forbidden")).toMatch(/permission/);
+    expect(staffListMessage("signed_out")).toBeNull();
+    expect(staffListMessage("network")).toMatch(/Cannot reach/);
+    expect(staffListMessage("server")).toMatch(/went wrong/);
+    expect(createdStaffMessage(staffAccount("s1", "Staff One"))).toBe(
+      "Staff account created for Staff One (s1@example.test).",
+    );
+    expect(permissionCount(0)).toBe("None");
+    expect(permissionCount(1)).toBe("1 permission");
+    expect(permissionCount(5)).toBe("5 permissions");
+  });
+});
+
+const STAFF_MANAGER: Me = { ...ME, permissions: ["users.manage"] };
+
+async function openStaff() {
+  await click(button("Staff & access"));
+}
+
+function checkbox(key: string): HTMLInputElement {
+  return el(`input[type=checkbox][value="${key}"]`);
+}
+
+async function fillStaffForm() {
+  await type(el("input[name=displayName]"), " Staff Two ");
+  await type(el("input[name=email]"), "staff.two@example.test");
+  await type(el("input[name=password]"), "a long password 2");
+  await type(el("input[name=confirm]"), "a long password 2");
+}
+
+describe("staff & access (jsdom)", () => {
+  it("has no Staff & access button without users.manage", async () => {
+    await mount(fakeApi({ restore: { ...ME, permissions: ["members.view", "payments.view"] } }));
+    expect(() => button("Staff & access")).toThrow();
+  });
+
+  it("lists the staff as the server sends them", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        staff: [
+          staffAccount("s1", "Staff One", { permissions: ["members.view", "payments.view"] }),
+          staffAccount("s2", "Staff Two", { isActive: false }),
+        ],
+      }),
+    );
+    await openStaff();
+    expect(api.calls).toEqual(["staff"]);
+    expect(el("h1").textContent).toBe("Staff & access");
+    expect(rowTexts()).toEqual([
+      "Staff Ones1@example.testActive2 permissions23 Oct 2026",
+      "Staff Twos2@example.testInactiveNone23 Oct 2026",
+    ]);
+  });
+
+  it("says so when there are no staff", async () => {
+    await mount(fakeApi({ restore: STAFF_MANAGER }));
+    await openStaff();
+    expect(text()).toContain("No staff accounts yet.");
+  });
+
+  it("shows the message when the list cannot be read", async () => {
+    await mount(fakeApi({ restore: STAFF_MANAGER, staffList: { ok: false, reason: "network" } }));
+    await openStaff();
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(rowTexts()).toHaveLength(0);
+  });
+
+  it("opens the form with no permission ticked and stops a bad form with no call", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER }));
+    await openStaff();
+    await click(button("+ Add staff"));
+    expect(() => button("+ Add staff")).toThrow();
+    const boxes = inputs("checkbox");
+    expect(boxes).toHaveLength(21);
+    expect(boxes.every((b) => !b.checked)).toBe(true);
+    expect(text()).not.toContain("Manage staff");
+    await fillStaffForm();
+    await type(el("input[name=confirm]"), "a long password 3");
+    await click(button("Create staff account"));
+    expect(el("[role=alert]").textContent).toBe("The two passwords do not match.");
+    expect(api.hired).toEqual([]);
+  });
+
+  it("creates the account with the ticked permissions, then reads the list again", async () => {
+    const created = staffAccount("s2", "Staff Two", {
+      email: "staff.two@example.test",
+      permissions: ["members.view", "loans.disburse"],
+    });
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, hire: [{ ok: true, staff: created }] }));
+    await openStaff();
+    await click(button("+ Add staff"));
+    await fillStaffForm();
+    await click(checkbox("loans.disburse"));
+    await click(checkbox("members.view"));
+    await click(checkbox("dashboard"));
+    await click(checkbox("dashboard"));
+    expect(checkbox("dashboard").checked).toBe(false);
+    await click(button("Create staff account"));
+    expect(api.hired).toEqual([
+      {
+        displayName: "Staff Two",
+        email: "staff.two@example.test",
+        password: "a long password 2",
+        permissions: ["members.view", "loans.disburse"],
+      },
+    ]);
+    expect(api.calls).toEqual(["staff", "hire", "staff"]);
+    expect(el("[role=status]").textContent).toBe("Staff account created for Staff Two (staff.two@example.test).");
+    expect(container?.querySelector("form.staff-form")).toBeNull();
+    expect(rowTexts()).toEqual(["Staff Twostaff.two@example.testActive2 permissions23 Oct 2026"]);
+  });
+
+  it("keeps the form open with the message when the email is taken, and Cancel closes it", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, hire: [{ ok: false, reason: "email_taken" }] }));
+    await openStaff();
+    await click(button("+ Add staff"));
+    await fillStaffForm();
+    await click(button("Create staff account"));
+    expect(el("[role=alert]").textContent).toBe("Another account already uses this email.");
+    expect(el<HTMLInputElement>("input[name=email]").value).toBe("staff.two@example.test");
+    expect(button("Create staff account").disabled).toBe(false);
+    expect(api.calls).toEqual(["staff", "hire"]);
+    await click(button("Cancel"));
+    expect(container?.querySelector("form.staff-form")).toBeNull();
+    expect(button("+ Add staff")).toBeTruthy();
   });
 });

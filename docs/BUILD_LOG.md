@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.8a (size M), 2026-10-23: Staff & access page with the staff list and add staff (D-97, A-224)
+
+The owner said "fix inconsistencies and go. let me know if you need me to decide anything". U.8 was L, so it split (D-97: U.8a to U.8d).
+**Changed:** `web/src/api.ts` (`StaffAccount`, `NewStaff`, `CreateStaffResult`, `staffOf`, `listStaff` with `GET /staff`, `createStaff` with `POST /staff`, no key, 409 `email_taken` passed on, reply shape checked; header comment), `web/src/Staff.tsx` (new: `STAFF_PERMISSIONS`, `checkNewStaff`, messages, `permissionCount`, the add staff form and the staff list), `web/src/App.tsx` ("Staff & access" in the menu with `users.manage`; header comment), `web/src/styles.css` (`.staff-form`, `.permission-grid` from the prototype). Tests: `web/test/api.test.ts` (`listStaff` 3, `createStaff` 5), `web/test/app.test.tsx` (helpers 4, screen 7; fakes have `listStaff`, `createStaff`). Docs: DECISIONS (D-97), ASSUMPTIONS (A-224), PHASE_PLAN (U.8 split, U.8a done), TRACEABILITY (R-19 screen and the old "No data route uses a guard yet" fixed, inconsistency 1; R-21), STATUS.
+**Works (verified in this session):** `npm run check` (web): 4 files, 260 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.7b (size S), 2026-10-23: Reactivate button on an Inactive member (D-80, D-96, A-223)
 
 The owner said "go".

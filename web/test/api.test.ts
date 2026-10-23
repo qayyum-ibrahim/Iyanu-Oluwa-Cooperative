@@ -1475,3 +1475,138 @@ describe("reactivateMember", () => {
     expect(await wrong.api.reactivateMember("m1")).toEqual({ ok: false, reason: "server" });
   });
 });
+
+/** A staff account as GET /staff and POST /staff send it (fictional, D-08). */
+const STAFF = {
+  id: "s1",
+  email: "staff.one@example.test",
+  displayName: "Staff One",
+  role: "STAFF",
+  isActive: true,
+  permissions: ["members.view", "payments.view"],
+  createdAt: "2026-10-23T09:00:00.000Z",
+};
+
+const NEW_STAFF = {
+  displayName: "Staff One",
+  email: "staff.one@example.test",
+  password: "a long password 1",
+  permissions: ["members.view", "payments.view"],
+};
+
+describe("listStaff", () => {
+  it("reads GET /staff with the access token", async () => {
+    const off = { ...STAFF, id: "s2", isActive: false, permissions: [] };
+    const { api, calls } = signedIn(() => json(200, { staff: [STAFF, off] }));
+    expect(await api.listStaff()).toEqual({ ok: true, value: [STAFF, off] });
+    expect(calls).toEqual([{ path: "/api/staff", method: "GET", auth: "Bearer acc1", body: null }]);
+  });
+
+  it("maps 403, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.listStaff()).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.listStaff()).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a list of the wrong shape", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { staff: null },
+      { staff: [null] },
+      { staff: [{ ...STAFF, isActive: "true" }] },
+      { staff: [{ ...STAFF, permissions: "members.view" }] },
+      { staff: [{ ...STAFF, permissions: [1] }] },
+      { staff: [{ ...STAFF, email: undefined }] },
+      { staff: [{ ...STAFF, displayName: 1 }] },
+      { staff: [{ ...STAFF, role: null }] },
+      { staff: [{ ...STAFF, createdAt: 0 }] },
+      { staff: [STAFF, { ...STAFF, id: 2 }] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listStaff()).toEqual({ ok: false, reason: "server" });
+    }
+  });
+});
+
+describe("createStaff", () => {
+  it("posts the body as given, with no key, and reads the account back", async () => {
+    const { api, calls, keys } = signedIn(() => json(201, { staff: STAFF }));
+    expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: true, staff: STAFF });
+    expect(calls).toEqual([{ path: "/api/staff", method: "POST", auth: "Bearer acc1", body: NEW_STAFF }]);
+    expect(keys).toEqual([null]);
+  });
+
+  it("on a 401 refreshes once and posts again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(201, { staff: STAFF }) : json(401, {});
+    });
+    expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: true, staff: STAFF });
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff", "/api/refresh", "/api/staff"]);
+  });
+
+  it("passes email_taken on, and answers server for a 409 it does not know", async () => {
+    const taken = signedIn(() => json(409, { error: "email_taken" }));
+    expect(await taken.api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason: "email_taken" });
+    for (const body of [{ error: "already_active" }, { error: "toString" }, null, "x"]) {
+      const { api } = signedIn(() => json(409, body));
+      expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("maps 400, 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 201 of the wrong shape and for a 200", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { staff: null },
+      { staff: { ...STAFF, isActive: 1 } },
+      { staff: { ...STAFF, permissions: null } },
+      { staff: { ...STAFF, id: undefined } },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(201, body));
+      expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, { staff: STAFF }));
+    expect(await wrong.api.createStaff(NEW_STAFF)).toEqual({ ok: false, reason: "server" });
+  });
+});

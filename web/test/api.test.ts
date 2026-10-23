@@ -433,3 +433,124 @@ describe("changePassword", () => {
     expect(signedOutCount()).toBe(1);
   });
 });
+
+const MEMBER = {
+  id: "m1",
+  membershipId: "IOC/0001",
+  fullName: "Test Member",
+  phone: "",
+  address: "",
+  occupation: "",
+  status: "ACTIVE",
+  createdById: "u1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+};
+
+const BALANCES = {
+  memberId: "m1",
+  categories: [
+    { category: "Shares", balance: "25000.05", refundable: true },
+    { category: "Entrance Fee", balance: "1000.00", refundable: false },
+  ],
+  refundableTotal: "25000.05",
+  nonRefundableTotal: "1000.00",
+};
+
+function signedIn(handler: Handler) {
+  const s = setup(handler);
+  s.keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
+  return s;
+}
+
+describe("member calls", () => {
+  it("lists members with the status filter and the access token", async () => {
+    const { api, calls } = signedIn(() => json(200, { members: [MEMBER] }));
+    expect(await api.listMembers("inactive")).toEqual({ ok: true, value: [MEMBER] });
+    expect(calls).toEqual([
+      { path: "/api/members?status=inactive", method: "GET", auth: "Bearer acc1", body: null },
+    ]);
+  });
+
+  it("reads one member and its balances, with the id made safe for the path", async () => {
+    const { api, calls } = signedIn((call) =>
+      call.path.endsWith("/balances")
+        ? json(200, { balances: BALANCES })
+        : json(200, { member: MEMBER }),
+    );
+    expect(await api.getMember("a/b?c")).toEqual({ ok: true, value: MEMBER });
+    expect(await api.memberBalances("m1")).toEqual({ ok: true, value: BALANCES });
+    expect(calls.map((c) => c.path)).toEqual(["/api/members/a%2Fb%3Fc", "/api/members/m1/balances"]);
+  });
+
+  it("adds a member with a POST and expects 201", async () => {
+    const input = { fullName: "Test Member", phone: "", address: "", occupation: "" };
+    const { api, calls } = signedIn(() => json(201, { member: MEMBER }));
+    expect(await api.createMember(input)).toEqual({ ok: true, value: MEMBER });
+    expect(calls[0]).toEqual({ path: "/api/members", method: "POST", auth: "Bearer acc1", body: input });
+    const wrong = signedIn(() => json(200, { member: MEMBER }));
+    expect(await wrong.api.createMember(input)).toEqual({ ok: false, reason: "server" });
+  });
+
+  it("maps 403, 400, 404, 500 and a network failure", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.getMember("m1")).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+  });
+
+  it("answers signed_out when the session is gone", async () => {
+    const { api, signedOutCount } = setup(() => json(401, { error: "invalid_token" }));
+    expect(await api.listMembers("all")).toEqual({ ok: false, reason: "signed_out" });
+    expect(signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a reply of the wrong shape", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { members: "x" },
+      { members: [{ ...MEMBER, status: "GONE" }] },
+      { members: [{ ...MEMBER, fullName: 1 }] },
+      { members: [MEMBER, null] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listMembers("active")).toEqual({ ok: false, reason: "server" });
+    }
+    const { api } = signedIn(() => json(200, { members: [] }));
+    expect(await api.listMembers("active")).toEqual({ ok: true, value: [] });
+  });
+
+  it("refuses balances whose amounts are not naira strings with two decimals", async () => {
+    const row = BALANCES.categories[0];
+    const bad: unknown[] = [
+      { ...BALANCES, refundableTotal: 25000.05 },
+      { ...BALANCES, refundableTotal: "25000.5" },
+      { ...BALANCES, nonRefundableTotal: "-1.00" },
+      { ...BALANCES, categories: [{ ...row, balance: "1,000.00" }] },
+      { ...BALANCES, categories: [{ ...row, balance: "" }] },
+      { ...BALANCES, categories: [{ ...row, refundable: "yes" }] },
+      { ...BALANCES, categories: [{ ...row, category: 3 }] },
+      { ...BALANCES, categories: [null] },
+      { ...BALANCES, categories: "none" },
+      { ...BALANCES, memberId: undefined },
+    ];
+    for (const balances of bad) {
+      const { api } = signedIn(() => json(200, { balances }));
+      expect(await api.memberBalances("m1")).toEqual({ ok: false, reason: "server" });
+    }
+  });
+});

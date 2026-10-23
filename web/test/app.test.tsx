@@ -21,6 +21,10 @@ const idleApi: Api = {
   me: async () => null,
   logout: async () => undefined,
   changePassword: async () => ({ ok: false, reason: "server" }),
+  listMembers: async () => ({ ok: false, reason: "server" }),
+  getMember: async () => ({ ok: false, reason: "server" }),
+  createMember: async () => ({ ok: false, reason: "server" }),
+  memberBalances: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -121,6 +125,10 @@ function fakeApi(
         calls.push(`change ${current} ${next}`);
         return opts.change ?? { ok: true };
       },
+      listMembers: idleApi.listMembers,
+      getMember: idleApi.getMember,
+      createMember: idleApi.createMember,
+      memberBalances: idleApi.memberBalances,
     };
   };
 }

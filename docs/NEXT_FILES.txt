@@ -6,9 +6,9 @@ docs/TRACEABILITY.md
 docs/DECISIONS.md
 web/src/App.tsx
 web/src/api.ts
+web/src/ChangePassword.tsx
 web/src/styles.css
 web/test/app.test.tsx
-web/test/api.test.ts
-server/src/members-routes.ts
-server/src/payments-routes.ts
-server/src/loans-routes.ts
+server/src/members.ts
+legacy-prototype/src/App.jsx
+legacy-prototype/src/index.css

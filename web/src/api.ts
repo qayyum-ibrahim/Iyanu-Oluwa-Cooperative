@@ -1,6 +1,8 @@
-// API client for the auth routes (server/src/auth-routes.ts). Tokens travel in the JSON body
+// API client for the auth routes (server/src/auth-routes.ts) and the member routes
+// (server/src/members-routes.ts, U.3d). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
+// Amounts arrive as naira strings (A-18) and are kept as strings; the browser does no money sums.
 
 import { API_PREFIX } from "./api-proxy.ts";
 import type { SessionKeeper } from "./session.ts";
@@ -24,6 +26,47 @@ export type LoginResult =
 export type ChangePasswordResult =
   | { ok: true }
   | { ok: false; reason: "wrong_password" | "invalid_input" | "signed_out" | "network" | "server" };
+
+/** A member as GET /members and GET /members/:id send it (MemberView in server/src/members.ts). */
+export interface Member {
+  id: string;
+  membershipId: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  occupation: string;
+  status: "ACTIVE" | "INACTIVE";
+  createdById: string;
+  createdAt: string;
+}
+
+export interface NewMember {
+  fullName: string;
+  phone: string;
+  address: string;
+  occupation: string;
+}
+
+/** GET /members/:id/balances (D-86). Amounts are naira strings such as "25000.05". */
+export interface MemberBalances {
+  memberId: string;
+  categories: { category: string; balance: string; refundable: boolean }[];
+  refundableTotal: string;
+  nonRefundableTotal: string;
+}
+
+export type MemberStatusFilter = "active" | "inactive" | "all";
+
+/** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
+export type CallFailure =
+  | "forbidden"
+  | "invalid_input"
+  | "not_found"
+  | "signed_out"
+  | "network"
+  | "server";
+
+export type CallResult<T> = { ok: true; value: T } | { ok: false; reason: CallFailure };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -66,6 +109,10 @@ export interface Api {
   me(): Promise<Me | null>;
   logout(): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<ChangePasswordResult>;
+  listMembers(status: MemberStatusFilter): Promise<CallResult<Member[]>>;
+  getMember(id: string): Promise<CallResult<Member>>;
+  createMember(input: NewMember): Promise<CallResult<Member>>;
+  memberBalances(id: string): Promise<CallResult<MemberBalances>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -103,6 +150,77 @@ function meOf(body: unknown): Me | null {
   }
   const permissions = body["permissions"].filter((p): p is string => typeof p === "string");
   return { user: { id, email, displayName, role }, permissions };
+}
+
+const MEMBER_TEXT_FIELDS = [
+  "id",
+  "membershipId",
+  "fullName",
+  "phone",
+  "address",
+  "occupation",
+  "createdById",
+  "createdAt",
+] as const;
+
+function memberOf(value: unknown): Member | null {
+  if (!isObject(value)) return null;
+  for (const field of MEMBER_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  const status = value["status"];
+  if (status !== "ACTIVE" && status !== "INACTIVE") return null;
+  const v = value as Record<(typeof MEMBER_TEXT_FIELDS)[number], string>;
+  return {
+    id: v.id,
+    membershipId: v.membershipId,
+    fullName: v.fullName,
+    phone: v.phone,
+    address: v.address,
+    occupation: v.occupation,
+    status,
+    createdById: v.createdById,
+    createdAt: v.createdAt,
+  };
+}
+
+/** Naira as koboToNairaString (server/src/payments.ts) writes it: never negative, two decimals. */
+const NAIRA = /^\d+\.\d{2}$/;
+
+function balancesOf(value: unknown): MemberBalances | null {
+  if (!isObject(value) || !Array.isArray(value["categories"])) return null;
+  const { memberId, refundableTotal, nonRefundableTotal } = value;
+  if (
+    typeof memberId !== "string" ||
+    typeof refundableTotal !== "string" ||
+    typeof nonRefundableTotal !== "string" ||
+    !NAIRA.test(refundableTotal) ||
+    !NAIRA.test(nonRefundableTotal)
+  ) {
+    return null;
+  }
+  const categories: MemberBalances["categories"] = [];
+  for (const row of value["categories"]) {
+    if (!isObject(row)) return null;
+    const { category, balance, refundable } = row;
+    if (
+      typeof category !== "string" ||
+      typeof balance !== "string" ||
+      !NAIRA.test(balance) ||
+      typeof refundable !== "boolean"
+    ) {
+      return null;
+    }
+    categories.push({ category, balance, refundable });
+  }
+  return { memberId, categories, refundableTotal, nonRefundableTotal };
+}
+
+function failureOf(status: number): CallFailure {
+  if (status === 403) return "forbidden";
+  if (status === 400) return "invalid_input";
+  if (status === 404) return "not_found";
+  return "server";
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -200,6 +318,33 @@ export function createApi(deps: ApiDeps): Api {
     return meOf(await readJson(response));
   }
 
+  /**
+   * A signed-in call whose reply is read by `read` from the body's `key` field.
+   * `expected` is the success status; any other status maps through failureOf.
+   */
+  async function call<T>(
+    path: string,
+    init: RequestInit,
+    expected: number,
+    key: string,
+    read: (value: unknown) => T | null,
+  ): Promise<CallResult<T>> {
+    let response: Response | null;
+    try {
+      response = await authed(path, init);
+    } catch {
+      return { ok: false, reason: "network" };
+    }
+    if (response === null) return { ok: false, reason: "signed_out" };
+    if (response.status !== expected) return { ok: false, reason: failureOf(response.status) };
+    const body = await readJson(response);
+    const value = isObject(body) ? read(body[key]) : null;
+    if (value === null) return { ok: false, reason: "server" };
+    return { ok: true, value };
+  }
+
+  const memberPath = (id: string) => `/members/${encodeURIComponent(id)}`;
+
   return {
     async login(email, password) {
       let response: Response;
@@ -266,6 +411,32 @@ export function createApi(deps: ApiDeps): Api {
       if (response.status === 403) return { ok: false, reason: "wrong_password" };
       if (response.status === 400) return { ok: false, reason: "invalid_input" };
       return { ok: false, reason: "server" };
+    },
+
+    listMembers(status) {
+      return call(`/members?status=${status}`, {}, 200, "members", (value) => {
+        if (!Array.isArray(value)) return null;
+        const members = value.map(memberOf);
+        return members.every((m) => m !== null) ? (members as Member[]) : null;
+      });
+    },
+
+    getMember(id) {
+      return call(memberPath(id), {}, 200, "member", memberOf);
+    },
+
+    createMember(input) {
+      return call(
+        "/members",
+        { method: "POST", body: JSON.stringify(input) },
+        201,
+        "member",
+        memberOf,
+      );
+    },
+
+    memberBalances(id) {
+      return call(`${memberPath(id)}/balances`, {}, 200, "balances", balancesOf);
     },
   };
 }

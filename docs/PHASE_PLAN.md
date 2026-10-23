@@ -83,7 +83,11 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
 - U.2e (S, proposed at U.2c; runs before U.2d) Tests in `web/test/api.test.ts` for A7 (a failed lock during a signed-in call keeps the session), A8 (two refreshes in a row on one client both reach the server), A11 (a network failure on refresh during a signed-in call keeps the session) and A26 (a refused `restore` sends one refresh and does not call `onSignedOut`), then a full rerun of `mutate-U.2c.mjs`. Done: 45 web tests; rerun 42 of 45 caught, only A14, A16, A25 escape (A-195).
 - U.2d (S) Install jsdom (owner said yes at U.2b; version looked up and pinned, asked again before the install) and click tests for the sign-in, change-password and signed-in screens. Done (D-85, A-196): jsdom 29.1.1, 55 web tests.
 - U.3a (S) Server: `GET /members/:id/balances` (`members.view`, DR-13 scope as `GET /members/:id`): per-category balances, refundable total (the payout) and the "Retained by cooperative" amounts (OQ-14), from `memberBalances` (D-72), amounts as strings (A-18). Followed by U.3b (S) break-on-purpose. Done (D-86, A-197): 1792 server tests.
-- U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments).
+- U.3 (M) Members list (status filter, search by name or Membership ID done in the browser, A-191), add member, member detail (profile, balances, loans, payments). Split at its start (A-199):
+  - U.3d (S) Member calls in `web/src/api.ts` (list, read one, add, balances). Done: 62 web tests.
+  - U.3e (M) Members list screen and add member form.
+  - U.3f (M) Member detail: profile, balances, payments, loans; the payments and loans list calls in `api.ts`.
+  - U.3g (S) Break-on-purpose for the new `api.ts` code and the money display (CLAUDE.md rule 10).
 - U.4 (M) Record a payment (form order R-04, breakdown, SMS toggle, idempotency key), a member's payments, the first-payment flow after adding a member (R-03).
 - U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.
 - U.6 (M) Expenses: record, list with filters and total, edit, delete.

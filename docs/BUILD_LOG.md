@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.3d (size S), 2026-10-23: member calls in the web API client (A-199)
+
+**Works (verified in this session):** `web/src/api.ts` has `listMembers`, `getMember`, `createMember` and `memberBalances`, each answering `{ ok, value }` or `{ ok: false, reason }` (`forbidden`, `invalid_input`, `not_found`, `signed_out`, `network`, `server`). Replies are checked field by field; balance amounts must be two-decimal naira strings and stay strings (A-18). 7 tests in `web/test/api.test.ts` (paths and token, `encodeURIComponent` on the id, POST expects 201, status mapping, signed out, wrong reply shapes, bad amounts); fake `Api` in `web/test/app.test.tsx` extended. `npm run check` (web): 4 files, 62 passed. `npm run check` (server): 46 files, 1794 passed. U.3 split into U.3d to U.3g in PHASE_PLAN.
+**Tests:** web 55 to 62; server 1794 unchanged.
+**Not verified:** the calls against the real server (no screen yet; walked through at U.9); no live check; dev database not touched. Break-on-purpose owed at U.3g.
+
+---
+
 ## Step U.3c (size S), 2026-10-23: tests for the U.3b test gaps G2, R2, G12 (A-198)
 
 **Works (verified in this session):** 2 tests in `server/test/members-routes.test.ts`: a Staff user with `members.view` but not `members.create` gets 200 from `GET /members/:id/balances` (G2, R2); the balances reads go through one counted `store.transaction` call, and reads outside a transaction throw (G12). `npm run check` (server): 46 files, 1794 passed. Tests committed as `bea1df7` (owner said yes) so the script could run. Full rerun of `~/Desktop/mutate-U.3b.mjs` (output in `~/Desktop/mutate-U.3c.out`): baseline 111; 32 mutations, 27 caught, 5 escaped (G1, G3, G9, R1, R9, equivalent), 0 errors, 0 timeouts, 0 not applied; G2, R2, G12 caught (1 failed each); "files restored: yes"; `git status --short` empty.

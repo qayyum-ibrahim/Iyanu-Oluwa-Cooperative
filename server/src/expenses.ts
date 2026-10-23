@@ -266,28 +266,15 @@ export async function createExpense(
 /** Longest createdById filter accepted (as USER_FILTER_MAX in members.ts). */
 const USER_FILTER_MAX = 100;
 
-/** A UTC time such as "2026-10-01T00:00:00Z" or "2026-10-01T00:00:00.000Z" (A-173). */
-const UTC_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
-
-type TimeFilter = { ok: true; value: Date | undefined } | { ok: false };
-
-/** Missing gives no filter. Otherwise a real UTC time: "2026-02-30T00:00:00Z" is refused. */
-function parseTime(raw: unknown): TimeFilter {
-  if (raw === undefined) return { ok: true, value: undefined };
-  if (typeof raw !== "string" || !UTC_TIME_PATTERN.test(raw)) return { ok: false };
-  const date = new Date(raw);
-  const canonical = raw.length === 20 ? `${raw.slice(0, 19)}.000Z` : raw;
-  if (Number.isNaN(date.getTime()) || date.toISOString() !== canonical) return { ok: false };
-  return { ok: true, value: date };
-}
-
 /** Raw values as they arrive from a query string. Anything may be wrong; this code checks it. */
 export interface ExpenseListInput {
   createdById?: unknown;
   category?: unknown;
   method?: unknown;
-  from?: unknown;
-  before?: unknown;
+  /** First day spent to list, "YYYY-MM-DD", included (U.6b2). */
+  fromDay?: unknown;
+  /** Last day spent to list, "YYYY-MM-DD", included (U.6b2). */
+  toDay?: unknown;
 }
 
 export interface ExpenseList {
@@ -299,9 +286,10 @@ export interface ExpenseList {
 export type ExpenseListResult = { ok: true; value: ExpenseList } | ExpenseFailureResult;
 
 /**
- * Expenses oldest first, with their total (step 5.8b). Read only: no audit entry (as A-134).
- * Order: permission, createdById, category (any of DR-11, Loan too), method, from, before, range.
- * The time range is half-open on createdAt: from is included, before is not (D-66, A-172).
+ * Expenses by day spent, then time recorded, oldest first, with their total (step 5.8b, days since
+ * U.6b2). Read only: no audit entry (as A-134).
+ * Order: permission, createdById, category (any of DR-11, Loan too), method, fromDay, toDay, range.
+ * The day range is on spentOn and includes both days (D-94); fromDay after toDay is refused.
  * Staff: always only the expenses they recorded; a createdById filter is checked but ignored
  * (DR-13, as listMembers). Super Admin: all expenses, or the ones recorded by createdById.
  * Soft-deleted expenses are never listed, so the total leaves them out (DR-12, step 5.9).
@@ -326,11 +314,12 @@ export async function listExpenses(
   }
   const method = input.method === undefined ? undefined : parseMethod(input.method);
   if (method === null) return failure("invalid_input", "invalid_method");
-  const from = parseTime(input.from);
-  if (!from.ok) return failure("invalid_input", "invalid_from");
-  const before = parseTime(input.before);
-  if (!before.ok) return failure("invalid_input", "invalid_before");
-  if (from.value !== undefined && before.value !== undefined && from.value.getTime() > before.value.getTime()) {
+  const fromDay = input.fromDay;
+  if (fromDay !== undefined && !isCalendarDay(fromDay)) return failure("invalid_input", "invalid_from_day");
+  const toDay = input.toDay;
+  if (toDay !== undefined && !isCalendarDay(toDay)) return failure("invalid_input", "invalid_to_day");
+  // Both are "YYYY-MM-DD", so text order is day order.
+  if (fromDay !== undefined && toDay !== undefined && fromDay > toDay) {
     return failure("invalid_input", "invalid_range");
   }
 
@@ -339,8 +328,8 @@ export async function listExpenses(
     ...(createdById !== undefined ? { createdById } : {}),
     ...(category !== undefined ? { category } : {}),
     ...(method !== undefined ? { method } : {}),
-    ...(from.value !== undefined ? { createdFrom: from.value } : {}),
-    ...(before.value !== undefined ? { createdBefore: before.value } : {}),
+    ...(fromDay !== undefined ? { spentFrom: fromDay } : {}),
+    ...(toDay !== undefined ? { spentTo: toDay } : {}),
   });
   return {
     ok: true,

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.6b2 (size M), 2026-10-23: `GET /expenses` filters by days spent (D-94, A-218)
+
+The owner said "commit and go", accepting the A-217 item 6 defaults.
+**Changed:** `server/src/store.ts` (`ExpenseListQuery.spentFrom` and `spentTo` replace `createdFrom` and `createdBefore`; list order by day spent, then time recorded), `server/src/memory-store.ts` and `server/src/prisma-store.ts` (day filter, both days included; order `spentOn`, `createdAt`, `id`), `server/src/expenses.ts` (`fromDay`, `toDay` with `invalid_from_day`, `invalid_to_day`, `invalid_range`; `parseTime` and the UTC pattern removed), `server/src/expenses-routes.ts` (query `fromDay`, `toDay`). Tests: `test/helpers/expenses-contract.ts` (two range cases rewritten for days, one order case; two cases moved to days), `test/expenses.test.ts` (list fixture on fixed past days; day filter, order, query refusals and order of checks), `test/expenses-routes.test.ts` (fixture days, day query, `from` and `before` now ignored, three 400 codes). Docs: DECISIONS (D-94; D-66 and D-67 time ranges replaced), ASSUMPTIONS (A-218; A-172, A-173 marked superseded; A-217 item 6 accepted), PHASE_PLAN, TRACEABILITY, DATA_MODEL, STATUS.
+**Works (verified in this session):** first run of the four touched test files: the list fixtures failed with 400 because I had put them on 31 October, after today (2026-10-23), which `future_spent_on` refuses; moved to September (test data only). Rerun: 4 files, 647 passed. `npm run check` (server): 49 files, 1912 passed.
+**Not verified:** no live check (the script has no expense checks); web not changed; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.6b (size M), 2026-10-23: `spentOn` in `POST /expenses` and `PUT /expenses/:id` (D-93, A-217)
 
 The owner said "fix inconsistencies and go". U.6b would have been L with the day filter, so the `GET /expenses` day filter moved to U.6b2 (D-93).

@@ -671,16 +671,23 @@ const makeRecorder = (store: Store, name: string) =>
     permissions: ["expenses.create", "expenses.view"],
   });
 
-/** Three expenses: two by Staff b (Others by bank, Allowances in cash), one by the Super Admin. */
+/**
+ * Three expenses: two by Staff b (Others by bank on 1 September, Allowances in cash on 15 September),
+ * one by the Super Admin on 31 September.
+ */
 async function buildList(store: Store = createMemoryStore()) {
   const base = await build(store);
   const b = await makeRecorder(store, "staff-b");
   const c = await makeRecorder(store, "staff-c");
   const b1 = must(
-    await createExpense(store, actorOf(b), body({ category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER" })),
+    await createExpense(
+      store,
+      actorOf(b),
+      body({ category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER", spentOn: "2026-09-01" }),
+    ),
   );
-  const b2 = must(await createExpense(store, actorOf(b), body({ category: "Allowances", amount: "0.20" })));
-  const ad = must(await createExpense(store, actorOf(base.admin), body({ amount: "1000000.05" })));
+  const b2 = must(await createExpense(store, actorOf(b), body({ category: "Allowances", amount: "0.20", spentOn: "2026-09-15" })));
+  const ad = must(await createExpense(store, actorOf(base.admin), body({ amount: "1000000.05", spentOn: "2026-09-30" })));
   return { ...base, b, c, b1, b2, ad };
 }
 
@@ -720,7 +727,7 @@ describe("listExpenses: who sees what (DR-13)", () => {
   it("refuses Staff without expenses.view, before checking the query", async () => {
     const { store, a } = await buildList();
     expect(await listExpenses(store, actorOf(a), {})).toEqual({ ok: false, reason: "forbidden" });
-    expect(await listExpenses(store, actorOf(a), { category: "Fuel", from: "x" })).toEqual({
+    expect(await listExpenses(store, actorOf(a), { category: "Fuel", fromDay: "x" })).toEqual({
       ok: false,
       reason: "forbidden",
     });
@@ -799,7 +806,7 @@ describe("listExpenses: who sees what (DR-13)", () => {
   });
 });
 
-describe("listExpenses: filters (D-66)", () => {
+describe("listExpenses: filters (D-66, days since U.6b2)", () => {
   it("filters by category and by method, and both must hold", async () => {
     const { store, admin, b1, b2, ad } = await buildList();
     const as = (input: Parameters<typeof listExpenses>[2]) => listExpenses(store, actorOf(admin), input);
@@ -815,15 +822,25 @@ describe("listExpenses: filters (D-66)", () => {
     expect(mustList(await listExpenses(store, actorOf(admin), { category: "Membership Withdrawal" })).total).toBe("0.00");
   });
 
-  it("keeps the time range half-open: from is included, before is not", async () => {
-    const { store, admin, b1 } = await buildList();
-    const at = b1.createdAt;
+  it("filters by days spent, both days included (U.6b2)", async () => {
+    const { store, admin, b1, b2, ad } = await buildList();
     const as = (input: Parameters<typeof listExpenses>[2]) => listExpenses(store, actorOf(admin), input);
-    expect(ids(mustList(await as({ from: at, before: at })))).toEqual([]);
-    expect(ids(mustList(await as({ from: at, category: "Others" })))).toEqual([b1.id]);
-    expect(ids(mustList(await as({ before: at, category: "Others" })))).toEqual([]);
-    expect(mustList(await as({ from: "2000-01-01T00:00:00Z", before: "2100-01-01T00:00:00.000Z" })).total).toBe("1000000.35");
-    expect(mustList(await as({ before: "2000-01-01T00:00:00Z" }))).toEqual({ expenses: [], total: "0.00" });
+    expect(mustList(await as({ fromDay: "2026-09-01", toDay: "2026-09-15" }))).toEqual({ expenses: [b1, b2], total: "0.30" });
+    expect(mustList(await as({ fromDay: "2026-09-15", toDay: "2026-09-15" }))).toEqual({ expenses: [b2], total: "0.20" });
+    expect(mustList(await as({ fromDay: "2026-09-16" }))).toEqual({ expenses: [ad], total: "1000000.05" });
+    expect(mustList(await as({ toDay: "2026-08-31" }))).toEqual({ expenses: [], total: "0.00" });
+    expect(mustList(await as({ fromDay: "2026-09-01", toDay: "2026-09-30" })).total).toBe("1000000.35");
+  });
+
+  it("lists by day spent, not by time recorded", async () => {
+    const { store, admin, b, b1, b2, ad } = await buildList();
+    const earlier = must(await createExpense(store, actorOf(b), body({ amount: "0.01", spentOn: "2026-08-01" })));
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).expenses.map((e) => e.id)).toEqual([
+      earlier.id,
+      b1.id,
+      b2.id,
+      ad.id,
+    ]);
   });
 
   it("passes the checked filters to the store exactly", async () => {
@@ -834,8 +851,8 @@ describe("listExpenses: filters (D-66)", () => {
         createdById: b.id,
         category: "Others",
         method: "BANK_TRANSFER",
-        from: "2026-10-01T00:00:00Z",
-        before: "2026-11-01T00:00:00.000Z",
+        fromDay: "2026-09-01",
+        toDay: "2026-09-30",
       }),
     );
     mustList(await listExpenses(store, actorOf(b), { createdById: admin.id, method: "CASH" }));
@@ -845,8 +862,8 @@ describe("listExpenses: filters (D-66)", () => {
         createdById: b.id,
         category: "Others",
         method: "BANK_TRANSFER",
-        createdFrom: new Date("2026-10-01T00:00:00.000Z"),
-        createdBefore: new Date("2026-11-01T00:00:00.000Z"),
+        spentFrom: "2026-09-01",
+        spentTo: "2026-09-30",
       },
       { createdById: b.id, method: "CASH" },
       {},
@@ -873,20 +890,14 @@ describe("listExpenses: filters (D-66)", () => {
     { label: "a repeated category", input: { category: ["Others", "Loan"] }, code: "invalid_category" },
     { label: "a method in the wrong case", input: { method: "cash" }, code: "invalid_method" },
     { label: "an empty method", input: { method: "" }, code: "invalid_method" },
-    { label: "a date without a time", input: { from: "2026-10-01" }, code: "invalid_from" },
-    { label: "a time with an offset", input: { from: "2026-10-01T00:00:00+01:00" }, code: "invalid_from" },
-    { label: "a day that does not exist", input: { from: "2026-02-30T00:00:00Z" }, code: "invalid_from" },
-    { label: "a month that does not exist", input: { from: "2026-13-01T00:00:00Z" }, code: "invalid_from" },
-    { label: "an hour that does not exist", input: { from: "2026-10-01T24:00:00Z" }, code: "invalid_from" },
-    { label: "a time with 2 decimals", input: { from: "2026-10-01T00:00:00.00Z" }, code: "invalid_from" },
-    { label: "a from that is a number", input: { from: 1_790_000_000_000 }, code: "invalid_from" },
-    { label: "a bad before", input: { before: "yesterday" }, code: "invalid_before" },
-    { label: "a before with a space", input: { before: " 2026-10-01T00:00:00Z" }, code: "invalid_before" },
-    {
-      label: "from after before",
-      input: { from: "2026-10-02T00:00:00Z", before: "2026-10-01T23:59:59.999Z" },
-      code: "invalid_range",
-    },
+    { label: "a fromDay with a time", input: { fromDay: "2026-09-01T00:00:00Z" }, code: "invalid_from_day" },
+    { label: "a fromDay that does not exist", input: { fromDay: "2026-02-30" }, code: "invalid_from_day" },
+    { label: "a fromDay in another order", input: { fromDay: "01-10-2026" }, code: "invalid_from_day" },
+    { label: "a fromDay that is a number", input: { fromDay: 20261001 }, code: "invalid_from_day" },
+    { label: "a repeated fromDay", input: { fromDay: ["2026-09-01", "2026-09-02"] }, code: "invalid_from_day" },
+    { label: "a bad toDay", input: { toDay: "yesterday" }, code: "invalid_to_day" },
+    { label: "a toDay with a space", input: { toDay: " 2026-09-01" }, code: "invalid_to_day" },
+    { label: "fromDay after toDay", input: { fromDay: "2026-09-02", toDay: "2026-09-01" }, code: "invalid_range" },
   ])("refuses $label with its code, without reading the store", async ({ input, code }) => {
     const { store: inner, b } = await buildList();
     const { store, seen } = spying(inner);
@@ -894,9 +905,9 @@ describe("listExpenses: filters (D-66)", () => {
     expect(seen).toEqual([]);
   });
 
-  it("checks the query in order: createdById, category, method, from, before", async () => {
+  it("checks the query in order: createdById, category, method, fromDay, toDay", async () => {
     const { store, admin } = await buildList();
-    const bad = { createdById: "", category: "x", method: "x", from: "x", before: "x" };
+    const bad = { createdById: "", category: "x", method: "x", fromDay: "x", toDay: "x" };
     const codes: string[] = [];
     let input: Record<string, unknown> = { ...bad };
     for (const field of Object.keys(bad)) {
@@ -905,7 +916,7 @@ describe("listExpenses: filters (D-66)", () => {
       codes.push(r.code ?? "");
       input = Object.fromEntries(Object.entries(input).filter(([k]) => k !== field));
     }
-    expect(codes).toEqual(["invalid_created_by_id", "invalid_category", "invalid_method", "invalid_from", "invalid_before"]);
+    expect(codes).toEqual(["invalid_created_by_id", "invalid_category", "invalid_method", "invalid_from_day", "invalid_to_day"]);
   });
 });
 
@@ -929,13 +940,20 @@ describe("listExpenses on the Prisma store (real SQLite)", () => {
       expenses: [b1],
       total: "0.10",
     });
-    const range = { from: b1.createdAt, before: "2100-01-01T00:00:00Z" };
+    const range = { fromDay: "2026-09-01", toDay: "2026-09-30" };
     const listed = mustList(await listExpenses(store, actorOf(admin), { ...range, createdById: admin.id }));
     expect(listed).toEqual({ expenses: [ad], total: "1000000.05" });
-    expect(mustList(await listExpenses(store, actorOf(admin), { from: b1.createdAt, before: b1.createdAt }))).toEqual({
+    expect(mustList(await listExpenses(store, actorOf(admin), { fromDay: "2026-09-02", toDay: "2026-09-14" }))).toEqual({
       expenses: [],
       total: "0.00",
     });
+    const earlier = must(await createExpense(store, actorOf(b), body({ amount: "0.01", spentOn: "2026-08-01" })));
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).expenses.map((e) => e.id)).toEqual([
+      earlier.id,
+      b1.id,
+      b2.id,
+      ad.id,
+    ]);
   });
 });
 

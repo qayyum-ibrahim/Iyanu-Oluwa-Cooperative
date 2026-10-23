@@ -376,16 +376,17 @@ export interface NewExpense {
 }
 
 /**
- * What to list (step 5.8). Every filter given must hold. Text filters match exactly. The time range
- * is half-open: createdFrom is included, createdBefore is not. No filter means all expenses that
- * are not soft-deleted: deleted ones are never listed (DR-12, step 5.9).
+ * What to list (step 5.8; days spent since U.6b2). Every filter given must hold. Text filters match
+ * exactly. The day range is on spentOn and includes both spentFrom and spentTo ("YYYY-MM-DD", so
+ * text order is day order). No filter means all expenses that are not soft-deleted: deleted ones
+ * are never listed (DR-12, step 5.9).
  */
 export interface ExpenseListQuery {
   createdById?: string;
   category?: string;
   method?: PaymentMethod;
-  createdFrom?: Date;
-  createdBefore?: Date;
+  spentFrom?: string;
+  spentTo?: string;
 }
 
 /**
@@ -443,8 +444,8 @@ export interface ExpenseStore {
   /** Returns a deleted expense too, with deletedAt and deletedById set. */
   findById(id: string): Promise<ExpenseRecord | null>;
   /**
-   * Expenses that are not soft-deleted, oldest first, narrowed by the exact filters. Equal times
-   * are in no fixed order. Returns copies.
+   * Expenses that are not soft-deleted, narrowed by the exact filters, by day spent and then by
+   * time recorded, oldest first (U.6b2). Equal days and times are in no fixed order. Returns copies.
    */
   list(query: ExpenseListQuery): Promise<ExpenseRecord[]>;
   /** The expense this user saved with this key, or null, deleted or not. Returns a copy. */

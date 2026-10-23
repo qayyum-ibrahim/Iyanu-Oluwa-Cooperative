@@ -1,5 +1,5 @@
 // Expense routes (step 5.7, idempotency key in 5.7c, list in 5.8b, delete in 5.9b, edit in 5.9c,
-// day spent in U.6b). Thin: all rules live in expenses.ts.
+// day spent in U.6b, day filter in U.6b2). Thin: all rules live in expenses.ts.
 // Guards run first (401, then 403), then the body is read, so a caller without the right
 // never reaches the parser. Never log a body or a key.
 
@@ -94,8 +94,8 @@ export function createExpensesRouter(deps: GuardDeps): Router {
       createdById: q["createdById"],
       category: q["category"],
       method: q["method"],
-      from: q["from"],
-      before: q["before"],
+      fromDay: q["fromDay"],
+      toDay: q["toDay"],
     });
     if (!result.ok) {
       sendFailure(res, result);

@@ -534,16 +534,16 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
             ...(query.createdById !== undefined ? { createdById: query.createdById } : {}),
             ...(query.category !== undefined ? { category: query.category } : {}),
             ...(query.method !== undefined ? { method: query.method } : {}),
-            ...(query.createdFrom !== undefined || query.createdBefore !== undefined
+            ...(query.spentFrom !== undefined || query.spentTo !== undefined
               ? {
-                  createdAt: {
-                    ...(query.createdFrom !== undefined ? { gte: query.createdFrom } : {}),
-                    ...(query.createdBefore !== undefined ? { lt: query.createdBefore } : {}),
+                  spentOn: {
+                    ...(query.spentFrom !== undefined ? { gte: query.spentFrom } : {}),
+                    ...(query.spentTo !== undefined ? { lte: query.spentTo } : {}),
                   },
                 }
               : {}),
           },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          orderBy: [{ spentOn: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         });
         return rows.map(toExpense);
       },

@@ -397,15 +397,16 @@ export function createMemoryStore(): Store {
           return found ? copyExpense(found) : null;
         },
         async list(query) {
-          const from = query.createdFrom?.getTime();
-          const before = query.createdBefore?.getTime();
+          const { spentFrom, spentTo } = query;
           return rows
             .filter((e) => e.deletedAt === null)
             .filter((e) => query.createdById === undefined || e.createdById === query.createdById)
             .filter((e) => query.category === undefined || e.category === query.category)
             .filter((e) => query.method === undefined || e.method === query.method)
-            .filter((e) => from === undefined || e.createdAt.getTime() >= from)
-            .filter((e) => before === undefined || e.createdAt.getTime() < before)
+            .filter((e) => spentFrom === undefined || e.spentOn >= spentFrom)
+            .filter((e) => spentTo === undefined || e.spentOn <= spentTo)
+            // Rows are kept in the order saved, and sort is stable, so equal days stay oldest first.
+            .sort((x, y) => (x.spentOn < y.spentOn ? -1 : x.spentOn > y.spentOn ? 1 : 0))
             .map(copyExpense);
         },
         async findByKey(createdById, idempotencyKey) {

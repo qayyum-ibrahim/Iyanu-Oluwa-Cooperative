@@ -278,9 +278,9 @@ describe("GET /expenses (5.8b)", () => {
       expect(res.status).toBe(201);
       return res.body.expense as { id: string; createdAt: string };
     };
-    const b1 = await post(b, { category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER" });
-    const b2 = await post(b, { amount: "0.20" });
-    const ad = await post(base.admin, { category: "Asset Purchase", amount: "250000" });
+    const b1 = await post(b, { category: "Others", narration: "fuel", amount: "0.10", method: "BANK_TRANSFER", spentOn: "2026-09-01" });
+    const b2 = await post(b, { amount: "0.20", spentOn: "2026-09-15" });
+    const ad = await post(base.admin, { category: "Asset Purchase", amount: "250000", spentOn: "2026-09-30" });
     return { ...base, b, b1, b2, ad };
   }
 
@@ -340,8 +340,8 @@ describe("GET /expenses (5.8b)", () => {
     expect(one.body.total).toBe("0.30");
   });
 
-  it("passes category, method and the half-open time range from the query", async () => {
-    const { app, admin, b1, b2, bearer } = await buildList();
+  it("passes category, method and the days spent from the query", async () => {
+    const { app, admin, b1, b2, ad, bearer } = await buildList();
     const get = (query: string) => request(app).get(`/expenses?${query}`).set("Authorization", bearer(admin));
     const others = await get("category=Others");
     expect(others.body).toEqual({ expenses: [b1], total: "0.10" });
@@ -349,10 +349,13 @@ describe("GET /expenses (5.8b)", () => {
     expect(cashAllowances.body).toEqual({ expenses: [b2], total: "0.20" });
     const spaced = await get("category=Asset%20Purchase");
     expect(spaced.body.total).toBe("250000.00");
-    const from = await get(`category=Others&from=${b1.createdAt}`);
-    expect(ids(from.body)).toEqual([b1.id]);
-    const before = await get(`category=Others&before=${b1.createdAt}`);
-    expect(before.body).toEqual({ expenses: [], total: "0.00" });
+    const days = await get("fromDay=2026-09-15&toDay=2026-09-30");
+    expect(days.body.expenses.map((e: { id: string }) => e.id)).toEqual([b2.id, ad.id]);
+    expect(days.body.total).toBe("250000.20");
+    const oneDay = await get("fromDay=2026-09-01&toDay=2026-09-01");
+    expect(oneDay.body).toEqual({ expenses: [b1], total: "0.10" });
+    const old = await get(`from=${b1.createdAt}&before=${b1.createdAt}`);
+    expect(old.body.total).toBe("250000.30");
   });
 
   it.each([
@@ -360,9 +363,9 @@ describe("GET /expenses (5.8b)", () => {
     { label: "a repeated category", query: "category=Others&category=Loan", code: "invalid_category" },
     { label: "a method in the wrong case", query: "method=cash", code: "invalid_method" },
     { label: "an empty createdById", query: "createdById=", code: "invalid_created_by_id" },
-    { label: "a date without a time", query: "from=2026-10-01", code: "invalid_from" },
-    { label: "a time with an offset", query: "before=2026-10-01T00:00:00%2B01:00", code: "invalid_before" },
-    { label: "from after before", query: "from=2026-10-02T00:00:00Z&before=2026-10-01T00:00:00Z", code: "invalid_range" },
+    { label: "a fromDay with a time", query: "fromDay=2026-09-01T00:00:00Z", code: "invalid_from_day" },
+    { label: "a repeated toDay", query: "toDay=2026-09-01&toDay=2026-09-02", code: "invalid_to_day" },
+    { label: "fromDay after toDay", query: "fromDay=2026-09-02&toDay=2026-09-01", code: "invalid_range" },
   ])("answers 400 with the code for $label", async ({ query, code }) => {
     const { app, b, bearer } = await buildList();
     const res = await request(app).get(`/expenses?${query}`).set("Authorization", bearer(b));

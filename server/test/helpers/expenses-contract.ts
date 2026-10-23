@@ -291,38 +291,49 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       expect(await ids("BANK_TRANSFER")).toEqual([bank.id]);
     });
 
-    it("includes createdFrom and leaves out createdBefore, at the exact time", async () => {
+    it("includes both spentFrom and spentTo, by day spent", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-f-range");
-      const e1 = await store.expenses.create(expense(u.id));
-      await pause();
-      const e2 = await store.expenses.create(expense(u.id));
-      await pause();
-      const e3 = await store.expenses.create(expense(u.id));
-      const ids = async (range: { createdFrom?: Date; createdBefore?: Date }) =>
+      const e1 = await store.expenses.create(expense(u.id, { spentOn: "2026-09-30" }));
+      const e2 = await store.expenses.create(expense(u.id, { spentOn: "2026-10-01" }));
+      const e3 = await store.expenses.create(expense(u.id, { spentOn: "2026-10-31" }));
+      const e4 = await store.expenses.create(expense(u.id, { spentOn: "2026-11-01" }));
+      const ids = async (range: { spentFrom?: string; spentTo?: string }) =>
         (await store.expenses.list({ createdById: u.id, ...range })).map((e) => e.id);
-      expect(await ids({ createdFrom: e2.createdAt })).toEqual([e2.id, e3.id]);
-      expect(await ids({ createdBefore: e2.createdAt })).toEqual([e1.id]);
-      expect(await ids({ createdFrom: e2.createdAt, createdBefore: e3.createdAt })).toEqual([e2.id]);
-      expect(await ids({ createdFrom: new Date(e3.createdAt.getTime() + 1) })).toEqual([]);
-      expect(await ids({ createdBefore: new Date(e3.createdAt.getTime() + 1) })).toEqual([e1.id, e2.id, e3.id]);
+      expect(await ids({ spentFrom: "2026-10-01", spentTo: "2026-10-31" })).toEqual([e2.id, e3.id]);
+      expect(await ids({ spentFrom: "2026-10-01" })).toEqual([e2.id, e3.id, e4.id]);
+      expect(await ids({ spentTo: "2026-10-01" })).toEqual([e1.id, e2.id]);
+      expect(await ids({ spentFrom: "2026-10-31", spentTo: "2026-10-31" })).toEqual([e3.id]);
+      expect(await ids({ spentFrom: "2026-11-02" })).toEqual([]);
     });
 
-    it("gives nothing for an empty or reversed time range", async () => {
+    it("gives nothing for a reversed day range", async () => {
       const store = await makeStore();
       const u = await newUser(store, "e-f-empty");
-      const e = await store.expenses.create(expense(u.id));
-      const list = (createdFrom: Date, createdBefore: Date) =>
-        store.expenses.list({ createdById: u.id, createdFrom, createdBefore });
-      expect(await list(e.createdAt, e.createdAt)).toEqual([]);
-      expect(await list(new Date(e.createdAt.getTime() + 1), e.createdAt)).toEqual([]);
+      await store.expenses.create(expense(u.id, { spentOn: "2026-10-15" }));
+      expect(await store.expenses.list({ createdById: u.id, spentFrom: "2026-10-16", spentTo: "2026-10-14" })).toEqual([]);
+    });
+
+    it("lists by day spent first, then by time recorded", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-f-order");
+      const late = await store.expenses.create(expense(u.id, { spentOn: "2026-10-20" }));
+      await pause();
+      const early = await store.expenses.create(expense(u.id, { spentOn: "2026-10-01" }));
+      await pause();
+      const lateAgain = await store.expenses.create(expense(u.id, { spentOn: "2026-10-20" }));
+      expect((await store.expenses.list({ createdById: u.id })).map((e) => e.id)).toEqual([
+        early.id,
+        late.id,
+        lateAgain.id,
+      ]);
     });
 
     it("needs every given filter to hold", async () => {
       const store = await makeStore();
       const a = await newUser(store, "e-f-all-a");
       const b = await newUser(store, "e-f-all-b");
-      const start = await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER" }));
+      const start = await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER", spentOn: "2026-10-19" }));
       await pause();
       const match = await store.expenses.create(expense(a.id, { method: "BANK_TRANSFER" }));
       await store.expenses.create(expense(a.id, { method: "CASH" }));
@@ -332,7 +343,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         createdById: a.id,
         category: "Office Maintenance",
         method: "BANK_TRANSFER",
-        createdFrom: match.createdAt,
+        spentFrom: "2026-10-20",
       });
       expect(found).toEqual([match]);
       expect(found).not.toContainEqual(start);
@@ -651,8 +662,8 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
           createdById: u.id,
           category: "Office Maintenance",
           method: "CASH",
-          createdFrom: kept.createdAt,
-          createdBefore: new Date(Date.now() + 60_000),
+          spentFrom: kept.spentOn,
+          spentTo: kept.spentOn,
         }),
       ).toEqual([kept]);
       expect((await store.expenses.list({})).map((e) => e.id)).not.toContain(gone.id);

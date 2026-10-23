@@ -1,4 +1,5 @@
-// Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36). Search by name or
+// Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36), record a payment
+// from member detail (U.4e2, R-04, R-06, D-89). Search by name or
 // Membership ID runs in the browser over the list the server sent (A-191 item 2). The server
 // checks every field again. Amounts stay the naira strings the server sent (A-18); the browser
 // only adds the naira sign and thousands commas. The one sum is the payment form's breakdown
@@ -98,7 +99,7 @@ export const METHOD_LABELS: Record<PaymentMethod, string> = {
   BANK_TRANSFER: "Bank transfer",
 };
 
-// Payment form helpers (U.4e, R-04, A-209). The form itself comes at U.4e2.
+// Payment form helpers (U.4e, R-04, A-209). The form is PaymentForm below (U.4e2).
 
 /**
  * The payment categories in the order of DR-04, copied from server/src/categories.ts (D-81).
@@ -182,6 +183,15 @@ export function isCalendarDay(value: string): boolean {
   const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return day <= (days[month - 1] ?? 0);
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-10-22" gives "22 Oct 2026", as formatDate writes a day. Other text is shown as it came. */
+export function formatDay(day: string): string {
+  if (!isCalendarDay(day)) return day;
+  const [year, month, date] = day.split("-");
+  return `${Number(date)} ${MONTHS[Number(month) - 1]} ${year}`;
 }
 
 /** What the payment form holds, as typed. */
@@ -334,16 +344,26 @@ type ListState =
   | { kind: "loaded"; members: Member[] }
   | { kind: "failed"; message: string | null };
 
-type DetailApi = Pick<Api, "getMember" | "memberBalances" | "listPayments" | "listLoans">;
+type DetailApi = Pick<
+  Api,
+  "getMember" | "memberBalances" | "listPayments" | "listLoans" | "createPayment"
+>;
 
 export interface MembersProps {
   api: Pick<Api, "listMembers" | "createMember"> & DetailApi;
   canCreate: boolean;
   canViewPayments: boolean;
   canViewLoans: boolean;
+  canRecordPayment: boolean;
 }
 
-export default function Members({ api, canCreate, canViewPayments, canViewLoans }: MembersProps) {
+export default function Members({
+  api,
+  canCreate,
+  canViewPayments,
+  canViewLoans,
+  canRecordPayment,
+}: MembersProps) {
   const [filter, setFilter] = useState<MemberStatusFilter>("active");
   const [search, setSearch] = useState("");
   const [list, setList] = useState<ListState>({ kind: "loading" });
@@ -391,6 +411,7 @@ export default function Members({ api, canCreate, canViewPayments, canViewLoans 
         id={openId}
         canViewPayments={canViewPayments}
         canViewLoans={canViewLoans}
+        canRecordPayment={canRecordPayment}
         onBack={() => setOpenId(null)}
       />
     );
@@ -611,20 +632,221 @@ function SectionNote({ section }: { section: Section<unknown> }) {
   return null;
 }
 
+type SavedPayment = Extract<CreatePaymentResult, { ok: true }>;
+
+/** The notice after a save: the amount, the day and what happened to the SMS (D-50). */
+export function savedPaymentMessage(saved: SavedPayment): string {
+  const { payment, sms } = saved;
+  return `Payment of ${formatNaira(payment.total)} on ${formatDay(payment.paidOn)} recorded. ${smsMessage(sms)}`;
+}
+
+/** The button text for the SMS toggle (R-06, labels from legacy-prototype/src/App.jsx). */
+export function recordButtonLabel(sendSms: boolean): string {
+  return sendSms ? "Record payment + SMS requested" : "Record payment without SMS";
+}
+
+interface PaymentFormProps {
+  api: Pick<Api, "createPayment">;
+  memberId: string;
+  onSaved(saved: SavedPayment): void;
+  onCancel(): void;
+}
+
+/**
+ * Record a payment for the member on screen (R-04 order: date, method, total, breakdown).
+ * One Idempotency-Key per attempt: pressing again after a failure sends the same key, and any
+ * change to a field starts a new attempt with a new key (D-46, D-48, A-209 item 6).
+ */
+function PaymentForm({ api, memberId, onSaved, onCancel }: PaymentFormProps) {
+  const [form, setForm] = useState<PaymentFormInput>(() => ({
+    paidOn: lagosToday(),
+    method: "BANK_TRANSFER",
+    total: "",
+    lines: [{ category: PAYMENT_CATEGORIES[0], amount: "" }],
+    sendSms: true,
+  }));
+  const [key, setKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function change(next: PaymentFormInput) {
+    setForm(next);
+    setKey(null);
+  }
+
+  function changeLine(index: number, patch: Partial<PaymentLineInput>) {
+    change({ ...form, lines: form.lines.map((l, i) => (i === index ? { ...l, ...patch } : l)) });
+  }
+
+  function addLine() {
+    const used = new Set(form.lines.map((l) => l.category));
+    const category = PAYMENT_CATEGORIES.find((c) => !used.has(c)) ?? PAYMENT_CATEGORIES[0];
+    change({ ...form, lines: [...form.lines, { category, amount: "" }] });
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const checked = checkPayment(form, lagosToday());
+    if (!checked.ok) {
+      setError(checked.message);
+      return;
+    }
+    const attemptKey = key ?? newIdempotencyKey();
+    setKey(attemptKey);
+    setBusy(true);
+    setError(null);
+    const result = await api.createPayment({ ...checked.value, idempotencyKey: attemptKey, memberId });
+    if (result.ok) {
+      onSaved(result);
+      return;
+    }
+    setBusy(false);
+    // The key was used with other details: the next press is a new attempt.
+    if (result.reason === "idempotency_conflict") setKey(null);
+    const message = paymentMessage(result);
+    if (message !== null) setError(message);
+  }
+
+  const total = nairaToKobo(form.total);
+  const sum = breakdownKobo(form.lines);
+  const matches = total !== null && total > 0n && sum === total;
+
+  return (
+    <form className="form payment-form" onSubmit={submit}>
+      <h2 className="form-title">Record payment</h2>
+      <fieldset disabled={busy}>
+        <label className="field">
+          <span>Date</span>
+          <input
+            type="date"
+            name="paidOn"
+            required
+            max={lagosToday()}
+            value={form.paidOn}
+            onChange={(e) => change({ ...form, paidOn: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Payment method</span>
+          <select
+            name="method"
+            value={form.method}
+            onChange={(e) => change({ ...form, method: e.target.value as PaymentMethod })}
+          >
+            <option value="BANK_TRANSFER">{METHOD_LABELS.BANK_TRANSFER}</option>
+            <option value="CASH">{METHOD_LABELS.CASH}</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Total amount (₦)</span>
+          <input
+            type="text"
+            name="total"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={form.total}
+            onChange={(e) => change({ ...form, total: e.target.value })}
+          />
+        </label>
+        <div className="breakdown-box">
+          <div className="breakdown-head">
+            <b>Payment breakdown</b>
+            <span className={matches ? "breakdown-match" : "breakdown-off"}>
+              Breakdown: {sum === null ? "—" : formatNaira(koboToNaira(sum))}{" "}
+              {matches ? "✓ matches the total" : "· must match the total"}
+            </span>
+          </div>
+          {form.lines.map((line, i) => (
+            <div className="breakdown-row" key={i}>
+              <select
+                aria-label={`Category, line ${i + 1}`}
+                value={line.category}
+                onChange={(e) => changeLine(i, { category: e.target.value })}
+              >
+                {PAYMENT_CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                inputMode="decimal"
+                aria-label={`Amount, line ${i + 1}`}
+                placeholder="0.00"
+                value={line.amount}
+                onChange={(e) => changeLine(i, { amount: e.target.value })}
+              />
+              {form.lines.length > 1 && (
+                <button
+                  type="button"
+                  className="remove-line"
+                  aria-label={`Remove line ${i + 1}`}
+                  onClick={() => change({ ...form, lines: form.lines.filter((_, n) => n !== i) })}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="add-line"
+            disabled={form.lines.length >= PAYMENT_LINES_MAX}
+            onClick={addLine}
+          >
+            + Add category
+          </button>
+        </div>
+        <label className="sms-toggle">
+          <input
+            type="checkbox"
+            name="sendSms"
+            checked={form.sendSms}
+            onChange={(e) => change({ ...form, sendSms: e.target.checked })}
+          />
+          Send an SMS receipt to the member
+        </label>
+      </fieldset>
+      {error && (
+        <em role="alert" className="error">
+          {error}
+        </em>
+      )}
+      <div className="form-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="submit" className="primary-btn" disabled={busy}>
+          {busy ? "Saving…" : recordButtonLabel(form.sendSms)}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 interface MemberDetailProps {
   api: DetailApi;
   id: string;
   canViewPayments: boolean;
   canViewLoans: boolean;
+  canRecordPayment: boolean;
   onBack(): void;
 }
 
 /**
- * One member: profile, balances (D-86), loans and payments (U.3f). The payments and loans
- * sections show only with payments.view and loans.view (A-201). Pay-offs are not listed: there is
- * no pay-off read (A-186); the balances already take them off.
+ * One member: profile, balances (D-86), loans and payments (U.3f), and the payment form for an
+ * Active member with payments.create (U.4e2, D-89). The payments and loans sections show only
+ * with payments.view and loans.view (A-201). Pay-offs are not listed: there is no pay-off read
+ * (A-186); the balances already take them off.
  */
-function MemberDetail({ api, id, canViewPayments, canViewLoans, onBack }: MemberDetailProps) {
+function MemberDetail({
+  api,
+  id,
+  canViewPayments,
+  canViewLoans,
+  canRecordPayment,
+  onBack,
+}: MemberDetailProps) {
   const [member, setMember] = useState<Section<Member>>({ kind: "loading" });
   const [balances, setBalances] = useState<Section<MemberBalances>>({ kind: "loading" });
   const [payments, setPayments] = useState<Section<Payment[]>>(
@@ -633,6 +855,20 @@ function MemberDetail({ api, id, canViewPayments, canViewLoans, onBack }: Member
   const [loans, setLoans] = useState<Section<Loan[]>>(
     canViewLoans ? { kind: "loading" } : { kind: "hidden" },
   );
+  const [paying, setPaying] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Bumped after a saved payment, so balances, payments and loans are read again.
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    api.getMember(id).then((result) => {
+      if (active) setMember(sectionOf(result));
+    });
+    return () => {
+      active = false;
+    };
+  }, [api, id]);
 
   useEffect(() => {
     let active = true;
@@ -641,14 +877,19 @@ function MemberDetail({ api, id, canViewPayments, canViewLoans, onBack }: Member
       (result: CallResult<T>) => {
         if (active) set(sectionOf(result));
       };
-    api.getMember(id).then(show(setMember));
     api.memberBalances(id).then(show(setBalances));
     if (canViewPayments) api.listPayments(id).then(show(setPayments));
     if (canViewLoans) api.listLoans(id).then(show(setLoans));
     return () => {
       active = false;
     };
-  }, [api, id, canViewPayments, canViewLoans]);
+  }, [api, id, canViewPayments, canViewLoans, reload]);
+
+  function saved(result: SavedPayment) {
+    setPaying(false);
+    setNotice(savedPaymentMessage(result));
+    setReload((n) => n + 1);
+  }
 
   const back = (
     <button type="button" className="secondary back" onClick={onBack}>
@@ -684,8 +925,33 @@ function MemberDetail({ api, id, canViewPayments, canViewLoans, onBack }: Member
             {m.status === "ACTIVE" ? "Active" : "Inactive"}
           </span>
           {onLoan && <span className="loan">On loan</span>}
+          {canRecordPayment && m.status === "ACTIVE" && !paying && (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                setNotice(null);
+                setPaying(true);
+              }}
+            >
+              Record payment
+            </button>
+          )}
         </div>
       </div>
+      {notice && (
+        <p role="status" className="notice">
+          {notice}
+        </p>
+      )}
+      {paying && m.status === "ACTIVE" && (
+        <PaymentForm
+          api={api}
+          memberId={m.id}
+          onSaved={saved}
+          onCancel={() => setPaying(false)}
+        />
+      )}
 
       <section className="panel detail-panel">
         <h2>Profile</h2>
@@ -805,7 +1071,7 @@ function MemberDetail({ api, id, canViewPayments, canViewLoans, onBack }: Member
                     .reverse()
                     .map((p) => (
                       <tr key={p.id}>
-                        <td>{formatDate(p.createdAt)}</td>
+                        <td>{formatDay(p.paidOn)}</td>
                         <td>{METHOD_LABELS[p.method]}</td>
                         <td>
                           {p.lines.map((l) => `${l.category} ${formatNaira(l.amount)}`).join(", ")}

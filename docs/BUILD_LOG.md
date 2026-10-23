@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4e2 (size M), 2026-10-23: payment form on member detail (D-89, A-210)
+
+The owner said: "fix Inconsistencies and go". So the payments table now shows `paidOn` (planned for U.4f), and the stale TRACEABILITY R-04 line is fixed.
+**Changed:** `web/src/Members.tsx` (`PaymentForm`, `formatDay`, `recordButtonLabel`, `savedPaymentMessage`; "Record payment" button on member detail for an Active member with `payments.create`; balances, payments and loans read again after a save; payments dated by `paidOn`), `web/src/App.tsx` (passes `payments.create`), `web/src/styles.css` (payment form), `web/test/app.test.tsx` (`createPayment` in the fake API; 15 tests: day format, labels, notice, no button without the permission or for an Inactive member, defaults, live match, browser refusal, save and reads, same key after a failure and a new key after a change, new key after a conflict, server refusal, line cap and removal, Cancel, `paidOn` in the list). No new decision (choices in A-210).
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean, 4 files, 124 passed (109 before). `npm run check` (server): 47 files, 1847 passed.
+**Not verified:** not run in a browser; break-on-purpose (owed at U.4g).
+
+---
+
 ## Step U.4e (size M), 2026-10-23: payment form helpers (D-89, A-209)
 
 The owner said: "go, use the default placement, split allowed". U.4e split at its start: helpers here, the form at U.4e2.

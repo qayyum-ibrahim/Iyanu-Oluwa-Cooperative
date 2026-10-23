@@ -15,13 +15,16 @@ import type {
   Api,
   CallResult,
   ChangePasswordResult,
+  CreatePaymentResult,
   LoginResult,
   Loan,
   Me,
   Member,
   MemberBalances,
   MemberStatusFilter,
+  NewPayment,
   Payment,
+  SmsOutcome,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
@@ -31,6 +34,7 @@ import {
   checkNewMember,
   checkPayment,
   formatDate,
+  formatDay,
   formatNaira,
   isCalendarDay,
   koboToNaira,
@@ -39,6 +43,8 @@ import {
   nairaToKobo,
   newIdempotencyKey,
   paymentMessage,
+  recordButtonLabel,
+  savedPaymentMessage,
   searchMembers,
   smsMessage,
   type PaymentFormInput,
@@ -134,6 +140,8 @@ const ME: Me = {
 
 interface FakeApi extends Api {
   calls: string[];
+  /** Every payment the screen sent, in order. */
+  paid: NewPayment[];
   signOutFromServer(): void;
 }
 
@@ -172,12 +180,16 @@ function fakeApi(
     balances?: CallResult<MemberBalances>;
     payments?: CallResult<Payment[]>;
     loans?: CallResult<Loan[]>;
+    /** Answers to createPayment in turn; the last one repeats. */
+    pay?: CreatePaymentResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
     const calls: string[] = [];
+    const paid: NewPayment[] = [];
     return {
       calls,
+      paid,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -219,8 +231,12 @@ function fakeApi(
         calls.push(`loans ${id}`);
         return opts.loans ?? { ok: true, value: [] };
       },
-      // No screen records a payment yet (U.4e).
-      createPayment: async () => ({ ok: false, reason: "server" }),
+      createPayment: async (input) => {
+        calls.push("pay");
+        paid.push(input);
+        const answers = opts.pay ?? [];
+        return answers[Math.min(paid.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
     };
   };
 }
@@ -1020,5 +1036,287 @@ describe("payment form helpers", () => {
     expect(a).toMatch(/^[0-9a-f]{32}$/);
     expect(a).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
     expect(a).not.toBe(b);
+  });
+});
+
+describe("payment form display helpers", () => {
+  it("writes a payment day as formatDate writes a day, and other text as it came", () => {
+    expect(formatDay("2026-10-05")).toBe("5 Oct 2026");
+    expect(formatDay("2026-01-31")).toBe("31 Jan 2026");
+    expect(formatDay("2026-12-01")).toBe("1 Dec 2026");
+    expect(formatDay("2026-13-01")).toBe("2026-13-01");
+    expect(formatDay("")).toBe("");
+  });
+
+  it("labels the button by the SMS toggle", () => {
+    expect(recordButtonLabel(true)).toBe("Record payment + SMS requested");
+    expect(recordButtonLabel(false)).toBe("Record payment without SMS");
+  });
+
+  it("says what was saved and what happened to the SMS", () => {
+    const saved = {
+      ok: true as const,
+      payment: { ...payment("p1", "2026-10-23T09:00:00.000Z", "20000.00"), paidOn: "2026-10-20" },
+      replayed: true,
+      sms: { status: "skipped_repeat" as const },
+    };
+    expect(savedPaymentMessage(saved)).toBe(
+      "Payment of ₦20,000.00 on 20 Oct 2026 recorded. This payment was already saved, so no new SMS receipt was sent.",
+    );
+  });
+});
+
+const PAYER: Me = {
+  ...ME,
+  user: { ...ME.user, role: "STAFF" },
+  permissions: ["members.view", "payments.view", "loans.view", "payments.create"],
+};
+
+function savedPayment(total: string, paidOn: string, sms: SmsOutcome): CreatePaymentResult {
+  return {
+    ok: true,
+    payment: { ...payment("p9", "2026-10-23T09:00:00.000Z", total), paidOn },
+    replayed: false,
+    sms,
+  };
+}
+
+// React reads a select's value on "change"; set it through the native setter as type() does.
+async function choose(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function amountInput(line: number): HTMLInputElement {
+  return el(`input[aria-label="Amount, line ${line}"]`);
+}
+
+function categorySelect(line: number): HTMLSelectElement {
+  return el(`select[aria-label="Category, line ${line}"]`);
+}
+
+async function openPaymentForm() {
+  await openDetail("Test Member One");
+  await click(button("Record payment"));
+}
+
+/** Total ₦20,000: Shares ₦5,000 and Savings ₦15,000 (the second line comes as Savings). */
+async function fillTwentyThousand() {
+  await type(el("input[name=total]"), "20000");
+  await type(amountInput(1), "5000");
+  await click(button("+ Add category"));
+  await type(amountInput(2), "15000");
+}
+
+async function submitPayment() {
+  await click(el(".payment-form button[type=submit]"));
+}
+
+function countCalls(api: FakeApi, call: string): number {
+  return api.calls.filter((c) => c === call).length;
+}
+
+describe("payment form (jsdom)", () => {
+  it("has no Record payment button without payments.create", async () => {
+    await mount(fakeApi({ restore: FULL, members: [ACTIVE_ONE] }));
+    await openDetail("Test Member One");
+    expect(el("h1").textContent).toBe("Test Member One");
+    expect(() => button("Record payment")).toThrow();
+  });
+
+  it("has no Record payment button for an Inactive member", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [INACTIVE_ONE] }));
+    await openMembers();
+    await click(button("All"));
+    await click(el('button[aria-label="View Example Inactive"]'));
+    expect(el("h1").textContent).toBe("Example Inactive");
+    expect(() => button("Record payment")).toThrow();
+  });
+
+  it("opens with today's day in Lagos, Bank transfer, one Shares line and the SMS receipt on", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    expect(() => button("Record payment")).toThrow(); // the open button hides while the form shows
+    expect(el<HTMLInputElement>("input[name=paidOn]").value).toBe(lagosToday());
+    expect(el<HTMLInputElement>("input[name=paidOn]").max).toBe(lagosToday());
+    expect(el<HTMLSelectElement>("select[name=method]").value).toBe("BANK_TRANSFER");
+    expect(categorySelect(1).value).toBe("Shares");
+    expect(Array.from(categorySelect(1).options, (o) => o.value)).toEqual([...PAYMENT_CATEGORIES]);
+    expect(container?.querySelectorAll(".remove-line")).toHaveLength(0);
+    const sms = el<HTMLInputElement>("input[name=sendSms]");
+    expect(sms.checked).toBe(true);
+    expect(el(".payment-form button[type=submit]").textContent).toBe("Record payment + SMS requested");
+    await click(sms);
+    expect(el(".payment-form button[type=submit]").textContent).toBe("Record payment without SMS");
+  });
+
+  it("shows the breakdown sum and whether it matches the total, as typed", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    await type(el("input[name=total]"), "20000");
+    await type(amountInput(1), "5000");
+    expect(el(".breakdown-head span").textContent).toBe("Breakdown: ₦5,000.00 · must match the total");
+    await click(button("+ Add category"));
+    expect(categorySelect(2).value).toBe("Savings");
+    await type(amountInput(2), "abc");
+    expect(el(".breakdown-head span").textContent).toBe("Breakdown: — · must match the total");
+    await type(amountInput(2), "15000");
+    expect(el(".breakdown-head span").textContent).toBe("Breakdown: ₦20,000.00 ✓ matches the total");
+  });
+
+  it("stops a breakdown that does not add up, with no call", async () => {
+    const api = await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    await type(el("input[name=total]"), "20000");
+    await type(amountInput(1), "19999.99");
+    await submitPayment();
+    expect(el("[role=alert]").textContent).toBe("The breakdown must add up to the total exactly.");
+    expect(api.paid).toEqual([]);
+  });
+
+  it("records the payment, shows the notice and reads balances, payments and loans again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
+        pay: [savedPayment("20000.00", "2026-10-20", { status: "sent" })],
+      }),
+    );
+    await openPaymentForm();
+    await type(el("input[name=paidOn]"), "2026-10-20");
+    await choose(el("select[name=method]"), "CASH");
+    await fillTwentyThousand();
+    await submitPayment();
+
+    expect(api.paid).toHaveLength(1);
+    const sent = api.paid[0]!;
+    expect(sent.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
+    expect({ ...sent, idempotencyKey: "" }).toEqual({
+      idempotencyKey: "",
+      memberId: "m1",
+      method: "CASH",
+      paidOn: "2026-10-20",
+      total: "20000.00",
+      lines: [
+        { category: "Shares", amount: "5000.00" },
+        { category: "Savings", amount: "15000.00" },
+      ],
+      sendSms: true,
+    });
+    expect(el("[role=status]").textContent).toBe(
+      "Payment of ₦20,000.00 on 20 Oct 2026 recorded. SMS receipt sent.",
+    );
+    expect(container?.querySelector(".payment-form")).toBeNull();
+    expect(button("Record payment")).toBeTruthy();
+    expect(countCalls(api, "get m1")).toBe(1);
+    expect(countCalls(api, "balances m1")).toBe(2);
+    expect(countCalls(api, "payments m1")).toBe(2);
+    expect(countCalls(api, "loans m1")).toBe(2);
+  });
+
+  it("sends the same key after a network failure, and a new key after any change", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER,
+        members: [ACTIVE_ONE],
+        pay: [
+          { ok: false, reason: "network" },
+          { ok: false, reason: "server" },
+          savedPayment("20000.00", lagosToday(), { status: "not_requested" }),
+        ],
+      }),
+    );
+    await openPaymentForm();
+    await fillTwentyThousand();
+    await submitPayment();
+    expect(el("[role=alert]").textContent).toBe(
+      "Cannot reach the server. Press Record payment again: it will not be saved twice.",
+    );
+    await submitPayment();
+    expect(el("[role=alert]").textContent).toContain("Something went wrong.");
+    expect(api.paid[1]!.idempotencyKey).toBe(api.paid[0]!.idempotencyKey);
+    expect(api.paid[1]).toEqual(api.paid[0]);
+
+    await click(el<HTMLInputElement>("input[name=sendSms]"));
+    await submitPayment();
+    expect(api.paid).toHaveLength(3);
+    expect(api.paid[2]!.sendSms).toBe(false);
+    expect(api.paid[2]!.idempotencyKey).not.toBe(api.paid[0]!.idempotencyKey);
+    expect(el("[role=status]").textContent).toContain("No SMS receipt was requested.");
+  });
+
+  it("makes a new key after idempotency_conflict", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER,
+        members: [ACTIVE_ONE],
+        pay: [{ ok: false, reason: "idempotency_conflict" }],
+      }),
+    );
+    await openPaymentForm();
+    await fillTwentyThousand();
+    await submitPayment();
+    await submitPayment();
+    expect(api.paid).toHaveLength(2);
+    expect(api.paid[1]!.idempotencyKey).not.toBe(api.paid[0]!.idempotencyKey);
+  });
+
+  it("keeps the form and shows the server's refusal with its line", async () => {
+    await mount(
+      fakeApi({
+        restore: PAYER,
+        members: [ACTIVE_ONE],
+        pay: [{ ok: false, reason: "invalid_input", code: "amount_not_positive", lineIndex: 1 }],
+      }),
+    );
+    await openPaymentForm();
+    await fillTwentyThousand();
+    await submitPayment();
+    expect(el("[role=alert]").textContent).toBe(
+      "Each breakdown amount must be above ₦0.00. (line 2)",
+    );
+    expect(el<HTMLInputElement>("input[name=total]").value).toBe("20000");
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("adds lines up to the cap and removes the chosen one", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    for (let i = 1; i < PAYMENT_LINES_MAX; i++) await click(button("+ Add category"));
+    expect(container?.querySelectorAll(".breakdown-row")).toHaveLength(PAYMENT_LINES_MAX);
+    expect(button("+ Add category").disabled).toBe(true);
+    await type(amountInput(2), "7");
+    await type(amountInput(3), "8");
+    await click(el('button[aria-label="Remove line 2"]'));
+    expect(container?.querySelectorAll(".breakdown-row")).toHaveLength(PAYMENT_LINES_MAX - 1);
+    expect(amountInput(2).value).toBe("8");
+    expect(button("+ Add category").disabled).toBe(false);
+  });
+
+  it("closes on Cancel with no call", async () => {
+    const api = await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE] }));
+    await openPaymentForm();
+    await click(button("Cancel"));
+    expect(container?.querySelector(".payment-form")).toBeNull();
+    expect(api.paid).toEqual([]);
+  });
+
+  it("lists each payment by the day it was paid, not the time it was recorded", async () => {
+    await mount(
+      fakeApi({
+        restore: FULL,
+        members: [ACTIVE_ONE],
+        payments: {
+          ok: true,
+          value: [{ ...payment("p1", "2026-10-23T09:00:00.000Z", "1000.00"), paidOn: "2026-09-30" }],
+        },
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(el("table.payments tbody tr").textContent).toBe("30 Sep 2026CashShares ₦1,000.00₦1,000.00");
   });
 });

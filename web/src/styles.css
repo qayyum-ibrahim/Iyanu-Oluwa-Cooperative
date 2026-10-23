@@ -400,3 +400,90 @@ td.amount {
     max-width: none;
   }
 }
+
+/* Payment form (U.4e2), from the prototype's breakdown box */
+.payment-form {
+  margin-bottom: 18px;
+}
+.payment-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.field select {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #dfe6e2;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+.breakdown-box {
+  border: 1px solid #e2e8e5;
+  border-radius: 11px;
+  padding: 14px;
+  background: #fafbfa;
+}
+.breakdown-head {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.breakdown-match {
+  color: #065f46;
+}
+.breakdown-off {
+  color: #9a3412;
+}
+.breakdown-row {
+  display: grid;
+  grid-template-columns: 1fr 140px 34px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.breakdown-row select,
+.breakdown-row input {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dfe6e2;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+.remove-line {
+  grid-column: 3;
+  border: 0;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 8px;
+  font-size: 18px;
+}
+.add-line {
+  border: 0;
+  background: #ecfdf5;
+  color: #065f46;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.sms-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+.sms-toggle input {
+  accent-color: #047857;
+}
+@media (max-width: 600px) {
+  .breakdown-row {
+    grid-template-columns: 1fr 100px 34px;
+  }
+}

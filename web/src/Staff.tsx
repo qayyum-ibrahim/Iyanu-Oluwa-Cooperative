@@ -2,8 +2,8 @@
 // `users.manage` (the Super Admin alone, D-25). The server checks every rule again; the Super
 // Admin is not listed (listStaff in server/src/staff.ts). Labels from legacy-prototype/src/App.jsx
 // (UserManagement); the server has no username or phone, so the form has neither (A-224).
-// Change a staff account's permissions (U.8b, A-225). Deactivate, reactivate and reset password
-// come in U.8c.
+// Change a staff account's permissions (U.8b, A-225). Deactivate, reactivate and reset a
+// password (U.8c, A-226).
 import { useEffect, useState, type FormEvent } from "react";
 import type { Api, CallFailure, CreateStaffResult, NewStaff, StaffAccount } from "./api.ts";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./ChangePassword.tsx";
@@ -174,6 +174,65 @@ export function savedPermissionsMessage(staff: StaffAccount): string {
 export function permissionCount(n: number): string {
   if (n === 0) return "None";
   return `${n} ${n === 1 ? "permission" : "permissions"}`;
+}
+
+/**
+ * The message for a refused deactivate or reactivate. Null for signed_out. A repeat is harmless
+ * (an account already in the wanted state answers with no change, A-59), so a failure says to try again.
+ */
+export function accountStatusMessage(reason: CallFailure): string | null {
+  switch (reason) {
+    case "not_found":
+      return "This staff account was not found. Reload the page.";
+    case "forbidden":
+      return "You do not have permission to do this.";
+    case "signed_out":
+      return null;
+    case "network":
+      return "Cannot reach the server. Try again.";
+    default:
+      return "Something went wrong. Try again.";
+  }
+}
+
+/** The notice after a deactivate or reactivate, from the account the server sent back. */
+export function accountStatusNotice(staff: StaffAccount): string {
+  return staff.isActive ? `${staff.displayName} is active again.` : `${staff.displayName} is deactivated.`;
+}
+
+/** A message for the new password, or null if it may be sent (the server's length rules). */
+export function checkResetPassword(password: string, confirm: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+    return `The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`;
+  }
+  if (password !== confirm) return "The two passwords do not match.";
+  return null;
+}
+
+/**
+ * The message for a refused password reset. Null for signed_out. Sending the same password again
+ * leaves the same password, so a network or server failure says to try again.
+ */
+export function resetPasswordMessage(reason: CallFailure): string | null {
+  switch (reason) {
+    case "not_found":
+      return "This staff account was not found. Reload the page.";
+    case "invalid_input":
+      return `The password was refused. It must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`;
+    case "forbidden":
+      return "You do not have permission to do this.";
+    case "signed_out":
+      return null;
+    case "network":
+      return "Cannot reach the server. Try again.";
+    default:
+      return "Something went wrong. Try again.";
+  }
+}
+
+/** The notice after a password reset. It never holds the password. */
+export function resetPasswordNotice(staff: StaffAccount): string {
+  return `Password reset for ${staff.displayName}.`;
 }
 
 /** The tick boxes for the permissions Staff may hold, in table order. */
@@ -358,8 +417,157 @@ function PermissionsForm({ api, staff, onSaved, onCancel }: PermissionsFormProps
   );
 }
 
-/** What is open above the list: nothing, the add staff form or one account's permissions. */
-type Panel = { kind: "none" } | { kind: "add" } | { kind: "permissions"; staff: StaffAccount };
+interface StatusConfirmProps {
+  api: Pick<Api, "deactivateStaff" | "reactivateStaff">;
+  staff: StaffAccount;
+  /** Called with the notice to show. */
+  onSaved(message: string): void;
+  onCancel(): void;
+}
+
+/**
+ * Asks before a deactivate or a reactivate, by the account's status. Deactivating ends the
+ * account's sessions and refuses its next request (staff.ts); reactivating lets it sign in again.
+ */
+function StatusConfirm({ api, staff, onSaved, onCancel }: StatusConfirmProps) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const deactivate = staff.isActive;
+
+  async function run() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const result = deactivate ? await api.deactivateStaff(staff.id) : await api.reactivateStaff(staff.id);
+    if (result.ok) {
+      onSaved(accountStatusNotice(result.value));
+      return;
+    }
+    setBusy(false);
+    const message = accountStatusMessage(result.reason);
+    if (message !== null) setError(message);
+  }
+
+  return (
+    <section className="form staff-form">
+      <h2 className="form-title">{deactivate ? "Deactivate" : "Reactivate"} staff account</h2>
+      <p className="form-note">
+        {deactivate
+          ? `Deactivate ${staff.displayName} (${staff.email})? They are signed out and cannot sign in until the account is reactivated.`
+          : `Reactivate ${staff.displayName} (${staff.email})? They can sign in again with their password and keep their permissions.`}
+      </p>
+      {error && (
+        <em role="alert" className="error">
+          {error}
+        </em>
+      )}
+      <div className="form-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={deactivate ? "danger-btn" : "primary-btn"}
+          onClick={() => void run()}
+          disabled={busy}
+        >
+          {deactivate ? (busy ? "Deactivating…" : "Deactivate account") : busy ? "Reactivating…" : "Reactivate account"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+interface PasswordFormProps {
+  api: Pick<Api, "resetStaffPassword">;
+  staff: StaffAccount;
+  /** Called with the notice to show. */
+  onSaved(message: string): void;
+  onCancel(): void;
+}
+
+/** Set a new password for one account, typed twice. The form closes, and forgets it, after a save. */
+function PasswordForm({ api, staff, onSaved, onCancel }: PasswordFormProps) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    const problem = checkResetPassword(password, confirm);
+    if (problem !== null) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await api.resetStaffPassword(staff.id, password);
+    if (result.ok) {
+      onSaved(resetPasswordNotice(result.value));
+      return;
+    }
+    setBusy(false);
+    const message = resetPasswordMessage(result.reason);
+    if (message !== null) setError(message);
+  }
+
+  return (
+    <form className="form staff-form" onSubmit={submit}>
+      <h2 className="form-title">Reset password for {staff.displayName}</h2>
+      <p className="panel-note">
+        {staff.email}. Their saved sign-ins end and a lockout is cleared. A page they already have open
+        works until its access token expires. An inactive account stays inactive.
+      </p>
+      <fieldset disabled={busy}>
+        <label className="field">
+          <span>
+            New password ({PASSWORD_MIN_LENGTH} to {PASSWORD_MAX_LENGTH} characters)
+          </span>
+          <input
+            type="password"
+            name="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Confirm new password</span>
+          <input
+            type="password"
+            name="confirm"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </label>
+      </fieldset>
+      {error && (
+        <em role="alert" className="error">
+          {error}
+        </em>
+      )}
+      <div className="form-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="submit" className="primary-btn" disabled={busy}>
+          {busy ? "Saving…" : "Reset password"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** What is open above the list: nothing, the add staff form, or one form or confirm for an account. */
+type Panel =
+  | { kind: "none" }
+  | { kind: "add" }
+  | { kind: "permissions"; staff: StaffAccount }
+  | { kind: "status"; staff: StaffAccount }
+  | { kind: "password"; staff: StaffAccount };
 
 type ListState =
   | { kind: "loading" }
@@ -367,7 +575,10 @@ type ListState =
   | { kind: "failed"; message: string | null };
 
 export interface StaffProps {
-  api: Pick<Api, "listStaff" | "createStaff" | "setStaffPermissions">;
+  api: Pick<
+    Api,
+    "listStaff" | "createStaff" | "setStaffPermissions" | "deactivateStaff" | "reactivateStaff" | "resetStaffPassword"
+  >;
 }
 
 /**
@@ -396,6 +607,11 @@ export default function Staff({ api }: StaffProps) {
     };
   }, [api, reads]);
 
+  function open(next: Panel) {
+    setNotice(null);
+    setPanel(next);
+  }
+
   function saved(message: string) {
     setPanel({ kind: "none" });
     setNotice(message);
@@ -414,10 +630,7 @@ export default function Staff({ api }: StaffProps) {
           <button
             type="button"
             className="primary-btn"
-            onClick={() => {
-              setNotice(null);
-              setPanel({ kind: "add" });
-            }}
+            onClick={() => open({ kind: "add" })}
           >
             + Add staff
           </button>
@@ -433,6 +646,24 @@ export default function Staff({ api }: StaffProps) {
       )}
       {panel.kind === "permissions" && (
         <PermissionsForm
+          key={panel.staff.id}
+          api={api}
+          staff={panel.staff}
+          onSaved={saved}
+          onCancel={() => setPanel({ kind: "none" })}
+        />
+      )}
+      {panel.kind === "status" && (
+        <StatusConfirm
+          key={panel.staff.id}
+          api={api}
+          staff={panel.staff}
+          onSaved={saved}
+          onCancel={() => setPanel({ kind: "none" })}
+        />
+      )}
+      {panel.kind === "password" && (
+        <PasswordForm
           key={panel.staff.id}
           api={api}
           staff={panel.staff}
@@ -480,17 +711,32 @@ export default function Staff({ api }: StaffProps) {
                     <td>{formatDate(s.createdAt)}</td>
                     <td className="row-actions">
                       {panel.kind === "none" && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          aria-label={`Change permissions for ${s.displayName}`}
-                          onClick={() => {
-                            setNotice(null);
-                            setPanel({ kind: "permissions", staff: s });
-                          }}
-                        >
-                          Permissions
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-label={`Change permissions for ${s.displayName}`}
+                            onClick={() => open({ kind: "permissions", staff: s })}
+                          >
+                            Permissions
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-label={`${s.isActive ? "Deactivate" : "Reactivate"} ${s.displayName}`}
+                            onClick={() => open({ kind: "status", staff: s })}
+                          >
+                            {s.isActive ? "Deactivate" : "Reactivate"}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-label={`Reset password for ${s.displayName}`}
+                            onClick={() => open({ kind: "password", staff: s })}
+                          >
+                            Reset password
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>

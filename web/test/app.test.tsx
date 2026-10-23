@@ -99,11 +99,16 @@ import {
   STAFF_NAME_MAX,
   STAFF_PERMISSIONS,
   UNKNOWN_PERMISSION,
+  accountStatusMessage,
+  accountStatusNotice,
   checkNewStaff,
+  checkResetPassword,
   cleanPermissions,
   createdStaffMessage,
   permissionCount,
   permissionsMessage,
+  resetPasswordMessage,
+  resetPasswordNotice,
   savedPermissionsMessage,
   staffListMessage,
   staffMessage,
@@ -133,6 +138,9 @@ const idleApi: Api = {
   listStaff: async () => ({ ok: false, reason: "server" }),
   createStaff: async () => ({ ok: false, reason: "server" }),
   setStaffPermissions: async () => ({ ok: false, reason: "server" }),
+  deactivateStaff: async () => ({ ok: false, reason: "server" }),
+  reactivateStaff: async () => ({ ok: false, reason: "server" }),
+  resetStaffPassword: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -229,6 +237,10 @@ interface FakeApi extends Api {
   hired: NewStaff[];
   /** Every permissions change the screen sent, in order. */
   granted: { id: string; permissions: string[] }[];
+  /** Every deactivate or reactivate the screen sent, in order, as "deactivate s1" or "reactivate s1". */
+  switched: string[];
+  /** Every password reset the screen sent, in order. */
+  resets: { id: string; password: string }[];
   signOutFromServer(): void;
 }
 
@@ -289,6 +301,10 @@ function fakeApi(
     hire?: CreateStaffResult[];
     /** Answers to setStaffPermissions in turn; the last one repeats. A success is saved as the server would. */
     grant?: CallResult<StaffAccount>[];
+    /** Answers to deactivateStaff and reactivateStaff in turn; the last one repeats. A success is saved. */
+    switch?: CallResult<StaffAccount>[];
+    /** Answers to resetStaffPassword in turn; the last one repeats. */
+    reset?: CallResult<StaffAccount>[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -303,6 +319,16 @@ function fakeApi(
     const reactivated: string[] = [];
     const hired: NewStaff[] = [];
     const granted: { id: string; permissions: string[] }[] = [];
+    const switched: string[] = [];
+    const resets: { id: string; password: string }[] = [];
+    const switchTo = (verb: string) => async (id: string) => {
+      calls.push(`${verb} ${id}`);
+      switched.push(`${verb} ${id}`);
+      const answers = opts.switch ?? [];
+      const result = answers[Math.min(switched.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      if (result.ok) opts.staff = (opts.staff ?? []).map((s) => (s.id === id ? result.value : s));
+      return result;
+    };
     return {
       calls,
       paid,
@@ -315,6 +341,8 @@ function fakeApi(
       reactivated,
       hired,
       granted,
+      switched,
+      resets,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -424,6 +452,14 @@ function fakeApi(
         const result = answers[Math.min(granted.length, answers.length) - 1] ?? { ok: false, reason: "server" };
         if (result.ok) opts.staff = (opts.staff ?? []).map((s) => (s.id === id ? result.value : s));
         return result;
+      },
+      deactivateStaff: switchTo("deactivate"),
+      reactivateStaff: switchTo("reactivate"),
+      resetStaffPassword: async (id, password) => {
+        calls.push(`reset ${id}`);
+        resets.push({ id, password });
+        const answers = opts.reset ?? [];
+        return answers[Math.min(resets.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
     };
   };
@@ -3249,8 +3285,8 @@ describe("staff & access (jsdom)", () => {
     expect(api.calls).toEqual(["staff"]);
     expect(el("h1").textContent).toBe("Staff & access");
     expect(rowTexts()).toEqual([
-      "Staff Ones1@example.testActive2 permissions23 Oct 2026Permissions",
-      "Staff Twos2@example.testInactiveNone23 Oct 2026Permissions",
+      "Staff Ones1@example.testActive2 permissions23 Oct 2026PermissionsDeactivateReset password",
+      "Staff Twos2@example.testInactiveNone23 Oct 2026PermissionsReactivateReset password",
     ]);
   });
 
@@ -3309,7 +3345,7 @@ describe("staff & access (jsdom)", () => {
     expect(api.calls).toEqual(["staff", "hire", "staff"]);
     expect(el("[role=status]").textContent).toBe("Staff account created for Staff Two (staff.two@example.test).");
     expect(container?.querySelector("form.staff-form")).toBeNull();
-    expect(rowTexts()).toEqual(["Staff Twostaff.two@example.testActive2 permissions23 Oct 2026Permissions"]);
+    expect(rowTexts()).toEqual(["Staff Twostaff.two@example.testActive2 permissions23 Oct 2026PermissionsDeactivateReset password"]);
   });
 
   it("keeps the form open with the message when the email is taken, and Cancel closes it", async () => {
@@ -3372,7 +3408,7 @@ describe("staff permissions (jsdom)", () => {
     expect(api.calls).toEqual(["staff", "grant s1", "staff"]);
     expect(el("[role=status]").textContent).toBe("Permissions saved for Staff One: 3 permissions.");
     expect(container?.querySelector("form.staff-form")).toBeNull();
-    expect(rowTexts()[0]).toBe("Staff Ones1@example.testActive3 permissions23 Oct 2026Permissions");
+    expect(rowTexts()[0]).toBe("Staff Ones1@example.testActive3 permissions23 Oct 2026PermissionsDeactivateReset password");
   });
 
   it("can take every permission away", async () => {
@@ -3417,5 +3453,148 @@ describe("staff permissions (jsdom)", () => {
     await click(button("Save permissions"));
     expect(el("[role=alert]").textContent).toBe(UNKNOWN_PERMISSION);
     expect(api.granted).toEqual([]);
+  });
+});
+
+describe("staff status and password helpers", () => {
+  it("gives a message for each refused deactivate or reactivate, and the notice from the reply", () => {
+    expect(accountStatusMessage("not_found")).toBe("This staff account was not found. Reload the page.");
+    expect(accountStatusMessage("forbidden")).toMatch(/permission/);
+    expect(accountStatusMessage("signed_out")).toBeNull();
+    expect(accountStatusMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(accountStatusMessage("invalid_input")).toBe("Something went wrong. Try again.");
+    expect(accountStatusMessage("server")).toBe("Something went wrong. Try again.");
+    expect(accountStatusNotice(staffAccount("s1", "Staff One", { isActive: false }))).toBe("Staff One is deactivated.");
+    expect(accountStatusNotice(staffAccount("s1", "Staff One"))).toBe("Staff One is active again.");
+  });
+
+  it("checks the new password's length, then that both match", () => {
+    expect(checkResetPassword("a".repeat(11), "a".repeat(11))).toBe("The password must be 12 to 128 characters.");
+    expect(checkResetPassword("a".repeat(129), "a".repeat(129))).toBe("The password must be 12 to 128 characters.");
+    expect(checkResetPassword("a".repeat(12), "a".repeat(13))).toBe("The two passwords do not match.");
+    expect(checkResetPassword("a".repeat(12), "a".repeat(12))).toBeNull();
+    expect(checkResetPassword("a".repeat(128), "a".repeat(128))).toBeNull();
+  });
+
+  it("gives a message for each refused password reset, and a notice without the password", () => {
+    expect(resetPasswordMessage("not_found")).toBe("This staff account was not found. Reload the page.");
+    expect(resetPasswordMessage("invalid_input")).toBe("The password was refused. It must be 12 to 128 characters.");
+    expect(resetPasswordMessage("forbidden")).toMatch(/permission/);
+    expect(resetPasswordMessage("signed_out")).toBeNull();
+    expect(resetPasswordMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(resetPasswordMessage("server")).toBe("Something went wrong. Try again.");
+    expect(resetPasswordNotice(staffAccount("s1", "Staff One"))).toBe("Password reset for Staff One.");
+  });
+});
+
+describe("staff deactivate, reactivate and reset password (jsdom)", () => {
+  const ONE = staffAccount("s1", "Staff One", { permissions: ["members.view"] });
+  const TWO = staffAccount("s2", "Staff Two", { isActive: false });
+
+  async function rowButton(label: string) {
+    await click(el(`button[aria-label="${label}"]`));
+  }
+
+  it("asks before a deactivate, sends nothing on Cancel, and one form is open at a time", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO] }));
+    await openStaff();
+    await rowButton("Deactivate Staff One");
+    expect(el(".form-title").textContent).toBe("Deactivate staff account");
+    expect(text()).toContain("Deactivate Staff One (s1@example.test)?");
+    expect(() => button("+ Add staff")).toThrow();
+    expect(() => button("Reset password")).toThrow();
+    await click(button("Cancel"));
+    expect(container?.querySelector(".staff-form")).toBeNull();
+    expect(api.calls).toEqual(["staff"]);
+  });
+
+  it("deactivates, shows the notice and reads the list again", async () => {
+    const api = await mount(
+      fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO], switch: [{ ok: true, value: { ...ONE, isActive: false } }] }),
+    );
+    await openStaff();
+    await rowButton("Deactivate Staff One");
+    await click(button("Deactivate account"));
+    expect(api.switched).toEqual(["deactivate s1"]);
+    expect(api.calls).toEqual(["staff", "deactivate s1", "staff"]);
+    expect(el("[role=status]").textContent).toBe("Staff One is deactivated.");
+    expect(container?.querySelector(".staff-form")).toBeNull();
+    expect(rowTexts()[0]).toBe("Staff Ones1@example.testInactive1 permission23 Oct 2026PermissionsReactivateReset password");
+  });
+
+  it("reactivates an inactive account after asking", async () => {
+    const api = await mount(
+      fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO], switch: [{ ok: true, value: { ...TWO, isActive: true } }] }),
+    );
+    await openStaff();
+    await rowButton("Reactivate Staff Two");
+    expect(el(".form-title").textContent).toBe("Reactivate staff account");
+    await click(button("Reactivate account"));
+    expect(api.calls).toEqual(["staff", "reactivate s2", "staff"]);
+    expect(el("[role=status]").textContent).toBe("Staff Two is active again.");
+    expect(rowTexts()[1]).toBe("Staff Twos2@example.testActiveNone23 Oct 2026PermissionsDeactivateReset password");
+  });
+
+  it("keeps the confirm open with the message on a refusal, and a retry sends again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: STAFF_MANAGER,
+        staff: [ONE],
+        switch: [{ ok: false, reason: "network" }, { ok: false, reason: "not_found" }],
+      }),
+    );
+    await openStaff();
+    await rowButton("Deactivate Staff One");
+    await click(button("Deactivate account"));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(button("Deactivate account").disabled).toBe(false);
+    await click(button("Deactivate account"));
+    expect(el("[role=alert]").textContent).toBe("This staff account was not found. Reload the page.");
+    expect(api.calls).toEqual(["staff", "deactivate s1", "deactivate s1"]);
+  });
+
+  it("stops a short or mismatched password with no call, and Cancel closes the form", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO] }));
+    await openStaff();
+    await rowButton("Reset password for Staff Two");
+    expect(el(".form-title").textContent).toBe("Reset password for Staff Two");
+    await type(el("input[name=password]"), "too short");
+    await type(el("input[name=confirm]"), "too short");
+    await click(button("Reset password"));
+    expect(el("[role=alert]").textContent).toBe("The password must be 12 to 128 characters.");
+    await type(el("input[name=password]"), "a new long password");
+    await click(button("Reset password"));
+    expect(el("[role=alert]").textContent).toBe("The two passwords do not match.");
+    expect(api.resets).toEqual([]);
+    await click(button("Cancel"));
+    expect(container?.querySelector(".staff-form")).toBeNull();
+  });
+
+  it("sends the password as typed, then closes the form, shows the notice and reads the list again", async () => {
+    const api = await mount(fakeApi({ restore: STAFF_MANAGER, staff: [ONE, TWO], reset: [{ ok: true, value: TWO }] }));
+    await openStaff();
+    await rowButton("Reset password for Staff Two");
+    await type(el("input[name=password]"), " a new long password ");
+    await type(el("input[name=confirm]"), " a new long password ");
+    await click(button("Reset password"));
+    expect(api.resets).toEqual([{ id: "s2", password: " a new long password " }]);
+    expect(api.calls).toEqual(["staff", "reset s2", "staff"]);
+    expect(el("[role=status]").textContent).toBe("Password reset for Staff Two.");
+    expect(container?.querySelector("input[type=password]")).toBeNull();
+    expect(text()).not.toContain("a new long password");
+  });
+
+  it("keeps the form with the message on a refused reset", async () => {
+    const api = await mount(
+      fakeApi({ restore: STAFF_MANAGER, staff: [ONE], reset: [{ ok: false, reason: "invalid_input" }] }),
+    );
+    await openStaff();
+    await rowButton("Reset password for Staff One");
+    await type(el("input[name=password]"), "a new long password");
+    await type(el("input[name=confirm]"), "a new long password");
+    await click(button("Reset password"));
+    expect(el("[role=alert]").textContent).toBe("The password was refused. It must be 12 to 128 characters.");
+    expect(el<HTMLInputElement>("input[name=password]").value).toBe("a new long password");
+    expect(api.calls).toEqual(["staff", "reset s1"]);
   });
 });

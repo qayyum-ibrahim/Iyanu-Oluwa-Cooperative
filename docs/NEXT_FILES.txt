@@ -5,11 +5,10 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/DECISIONS.md
 docs/DOMAIN_RULES.md
-server/src/staff.ts
-server/src/staff-routes.ts
+server/src/audit-routes.ts
+server/src/audit-view.ts
 web/src/api.ts
 web/src/Staff.tsx
-web/src/ChangePassword.tsx
 web/src/App.tsx
 web/src/styles.css
 web/test/api.test.ts

@@ -1684,3 +1684,134 @@ describe("setStaffPermissions", () => {
     expect(await wrong.api.setStaffPermissions("s1", LIST)).toEqual({ ok: false, reason: "server" });
   });
 });
+
+describe("deactivateStaff and reactivateStaff", () => {
+  const OFF = { ...STAFF, isActive: false };
+
+  it("posts to the account's path with no body and no key, and reads the account back", async () => {
+    const { api, calls, keys } = signedIn((call) =>
+      json(200, { staff: call.path.endsWith("/deactivate") ? OFF : STAFF }),
+    );
+    expect(await api.deactivateStaff("s1")).toEqual({ ok: true, value: OFF });
+    expect(await api.reactivateStaff("s1")).toEqual({ ok: true, value: STAFF });
+    expect(calls).toEqual([
+      { path: "/api/staff/s1/deactivate", method: "POST", auth: "Bearer acc1", body: null },
+      { path: "/api/staff/s1/reactivate", method: "POST", auth: "Bearer acc1", body: null },
+    ]);
+    expect(keys).toEqual([null, null]);
+  });
+
+  it("makes the id safe in the path", async () => {
+    const { api, calls } = signedIn(() => json(200, { staff: STAFF }));
+    await api.deactivateStaff("a/b?c");
+    await api.reactivateStaff("a/b?c");
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff/a%2Fb%3Fc/deactivate", "/api/staff/a%2Fb%3Fc/reactivate"]);
+  });
+
+  it("on a 401 refreshes once and posts again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, { staff: OFF }) : json(401, {});
+    });
+    expect(await api.deactivateStaff("s1")).toEqual({ ok: true, value: OFF });
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/deactivate", "/api/refresh", "/api/staff/s1/deactivate"]);
+  });
+
+  it("maps 400, 403, 404, 409, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(409, { error: "already_active" }), "server"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.deactivateStaff("s1")).toEqual({ ok: false, reason });
+      expect(await api.reactivateStaff("s1")).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.deactivateStaff("s1")).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 200 of the wrong shape and for a 201", async () => {
+    const bad: unknown[] = [null, {}, { staff: null }, { staff: { ...STAFF, isActive: "no" } }, { member: STAFF }];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.deactivateStaff("s1")).toEqual({ ok: false, reason: "server" });
+      expect(await api.reactivateStaff("s1")).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, { staff: STAFF }));
+    expect(await wrong.api.reactivateStaff("s1")).toEqual({ ok: false, reason: "server" });
+  });
+});
+
+describe("resetStaffPassword", () => {
+  const PASSWORD = " a new long password ";
+
+  it("puts the password as typed to the account's path, with no key, and reads the account back", async () => {
+    const { api, calls, keys } = signedIn(() => json(200, { staff: STAFF }));
+    expect(await api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: true, value: STAFF });
+    expect(calls).toEqual([
+      { path: "/api/staff/s1/password", method: "PUT", auth: "Bearer acc1", body: { password: PASSWORD } },
+    ]);
+    expect(keys).toEqual([null]);
+  });
+
+  it("makes the id safe in the path", async () => {
+    const { api, calls } = signedIn(() => json(200, { staff: STAFF }));
+    await api.resetStaffPassword("a/b?c", PASSWORD);
+    expect(calls[0]?.path).toBe("/api/staff/a%2Fb%3Fc/password");
+  });
+
+  it("on a 401 refreshes once and puts again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, { staff: STAFF }) : json(401, {});
+    });
+    expect(await api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: true, value: STAFF });
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/password", "/api/refresh", "/api/staff/s1/password"]);
+  });
+
+  it("maps 400, 403, 404, 409, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(409, { error: "email_taken" }), "server"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 200 of the wrong shape and for a 201", async () => {
+    const bad: unknown[] = [null, {}, { staff: null }, { staff: { ...STAFF, permissions: "all" } }];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, { staff: STAFF }));
+    expect(await wrong.api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: false, reason: "server" });
+  });
+});

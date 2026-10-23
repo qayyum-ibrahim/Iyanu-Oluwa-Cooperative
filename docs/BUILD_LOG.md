@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.8c (size M), 2026-10-23: deactivate, reactivate and reset a staff password (D-97, A-226)
+
+The owner said "go".
+**Changed:** `web/src/api.ts` (`deactivateStaff`, `reactivateStaff`: `POST /staff/:id/deactivate` and `/reactivate`, no body, no key; `resetStaffPassword`: `PUT /staff/:id/password` with `{ password }`, no key; all read the account back with `staffOf`; `staffPath`; header comment), `web/src/Staff.tsx` (`accountStatusMessage`, `accountStatusNotice`, `checkResetPassword`, `resetPasswordMessage`, `resetPasswordNotice`, `StatusConfirm`, `PasswordForm`, two more row buttons, `open`; header comment). Tests: `web/test/api.test.ts` (deactivate and reactivate 5, reset 5), `web/test/app.test.tsx` (helpers 3, screen 7; fakes have the three calls; U.8a and U.8b row texts now end with the new buttons). Docs: ASSUMPTIONS (A-226), PHASE_PLAN (U.8c done), TRACEABILITY (R-19, R-29), STATUS.
+**Check failure on the way:** one new api test used a 204 with a body; the fake `Response` throws for that, which the client reads as `network`. Test fault, not app code: changed to 201 as the other tests use.
+**Works (verified in this session):** `npm run check` (web): 4 files, 292 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
 ## Step U.8b (size M), 2026-10-23: change a staff account's permissions (D-97, A-225)
 
 The owner said "fix inconsistencies and go".

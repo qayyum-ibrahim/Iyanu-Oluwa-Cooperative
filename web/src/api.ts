@@ -3,8 +3,8 @@
 // (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b), the
 // expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
 // paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
-// staff list and add staff (server/src/staff-routes.ts, U.8a) and a staff account's permissions
-// (U.8b). Tokens travel in the JSON body
+// staff list and add staff (server/src/staff-routes.ts, U.8a), a staff account's permissions
+// (U.8b), and deactivate, reactivate and reset a staff password (U.8c). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -353,6 +353,9 @@ export interface Api {
   listStaff(): Promise<CallResult<StaffAccount[]>>;
   createStaff(input: NewStaff): Promise<CreateStaffResult>;
   setStaffPermissions(id: string, permissions: string[]): Promise<CallResult<StaffAccount>>;
+  deactivateStaff(id: string): Promise<CallResult<StaffAccount>>;
+  reactivateStaff(id: string): Promise<CallResult<StaffAccount>>;
+  resetStaffPassword(id: string, password: string): Promise<CallResult<StaffAccount>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -891,6 +894,7 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   const memberPath = (id: string) => `/members/${encodeURIComponent(id)}`;
+  const staffPath = (id: string) => `/staff/${encodeURIComponent(id)}`;
   const expensePath = (id: string) => `/expenses/${encodeURIComponent(id)}`;
 
   return {
@@ -1166,8 +1170,28 @@ export function createApi(deps: ApiDeps): Api {
     // No key: the whole list replaces the old one, so the same request sent twice is the same.
     setStaffPermissions(id, permissions) {
       return call(
-        `/staff/${encodeURIComponent(id)}/permissions`,
+        `${staffPath(id)}/permissions`,
         { method: "PUT", body: JSON.stringify({ permissions }) },
+        200,
+        "staff",
+        staffOf,
+      );
+    },
+
+    // No body and no key: an account already in the wanted state answers 200 with no change (A-59).
+    deactivateStaff(id) {
+      return call(`${staffPath(id)}/deactivate`, { method: "POST" }, 200, "staff", staffOf);
+    },
+
+    reactivateStaff(id) {
+      return call(`${staffPath(id)}/reactivate`, { method: "POST" }, 200, "staff", staffOf);
+    },
+
+    // No key: the same password sent twice leaves the same password. Sent as typed, never kept.
+    resetStaffPassword(id, password) {
+      return call(
+        `${staffPath(id)}/password`,
+        { method: "PUT", body: JSON.stringify({ password }) },
         200,
         "staff",
         staffOf,

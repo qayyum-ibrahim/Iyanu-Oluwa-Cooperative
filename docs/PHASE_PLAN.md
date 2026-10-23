@@ -119,7 +119,11 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.8b (M) Web: change a staff account's permissions (`PUT /staff/:id/permissions`). Done (A-225): `setStaffPermissions`, a "Permissions" button on each row; 272 web tests.
   - U.8c (M) Web: deactivate, reactivate and reset a staff password (`POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password`). Done (A-226): `deactivateStaff`, `reactivateStaff`, `resetStaffPassword`, row buttons; 292 web tests.
   - U.8d (M) Web: the audit viewer (`GET /audit`, actor and action filters, paging). Done (A-227): `listAudit`, `web/src/Audit.tsx`, "Audit log" in the menu; 308 web tests.
-- U.8e (proposed at U.8d) The Phase U end break-on-purpose run (D-90): the money, security and data-loss code of U.5a to U.8c (server: `givenOn` and `spentOn` rules, migrations and store code, the expense day filter; web: `createLoan`, `createExpense`, `updateExpense`, `deleteExpense`, `createPayOff`, `reactivateMember`, the staff calls and their forms). L as a whole, so it splits at its start; the gaps it finds get one test step and a rerun, as before. The U.8d audit page is read-only display code and gets none.
+- U.8e (proposed at U.8d) The Phase U end break-on-purpose run (D-90): the money, security and data-loss code of U.5a to U.8c (server: `givenOn` and `spentOn` rules, migrations and store code, the expense day filter; web: `createLoan`, `createExpense`, `updateExpense`, `deleteExpense`, `createPayOff`, `reactivateMember`, the staff calls and their forms). L as a whole, so it split at its start (D-98); the gaps it finds get one test step and a rerun, as before. The U.8d audit page is read-only display code and gets none.
+  - U.8e1 (M) Server code of U.5a to U.6b2: `givenOn` and `spentOn` rules, routes, the day filter, the pay-off day, both store adapters, the two migrations. Done (A-228): 74 mutations, 73 caught; X6 a test gap.
+  - U.8e2 (M) Web money code: `createLoan`, `createExpense`, `updateExpense`, `deleteExpense`, `createPayOff` and their forms in `Members.tsx` and `Expenses.tsx`.
+  - U.8e3 (M) Web security code: `reactivateMember` and its button, the five staff calls and the `Staff.tsx` forms.
+  - U.8f (S, proposed at U.8e1) Tests for the U.8e1 to U.8e3 gaps (so far X6: an edit with tomorrow's day), then a rerun of those mutations.
 - U.9 (S) Walk-through of every screen on the owner's machine against the dev server.
 Sizes stay a first look; an M step may split when it starts.
 

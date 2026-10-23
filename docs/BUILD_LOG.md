@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.8e1 (size M), 2026-10-23: break-on-purpose for the server code of U.5a to U.6b2 (D-98, A-228)
+
+The owner said "go", then chose "Three parts" for the U.8e split (D-98).
+**Changed:** no source file kept. New throwaway script `~/Desktop/mutate-U.8e1.mjs` (not in git), output `~/Desktop/mutate-U.8e1.out`. Docs: DECISIONS (D-98), ASSUMPTIONS (A-228), PHASE_PLAN (U.8e split; U.8f proposed), STATUS.
+**Works (verified in this session):** `node ~/Desktop/mutate-U.8e1.mjs --dry`: "dry run done: 74 mutations". Full run: baseline 11 server test files, 883 passed; 74 mutations, 73 caught, 1 escaped (X6), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` "(empty)". `npm run check` (server): 49 files, 1912 passed.
+**Escape (A-228):** X6 is a test gap (an edit may set tomorrow as the day spent; no edit test uses tomorrow). U.8f proposed.
+**Not verified:** a run on a server database; the live check (not part of this step).
+
 ## Step U.8d (size M), 2026-10-23: the audit viewer (D-97, A-227)
 
 The owner said "fix inconsistencies and go".

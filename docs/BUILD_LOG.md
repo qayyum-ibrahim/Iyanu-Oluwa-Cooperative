@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.3c (size S), 2026-10-23: tests for the U.3b test gaps G2, R2, G12 (A-198)
+
+**Works (verified in this session):** 2 tests in `server/test/members-routes.test.ts`: a Staff user with `members.view` but not `members.create` gets 200 from `GET /members/:id/balances` (G2, R2); the balances reads go through one counted `store.transaction` call, and reads outside a transaction throw (G12). `npm run check` (server): 46 files, 1794 passed. Tests committed as `bea1df7` (owner said yes) so the script could run. Full rerun of `~/Desktop/mutate-U.3b.mjs` (output in `~/Desktop/mutate-U.3c.out`): baseline 111; 32 mutations, 27 caught, 5 escaped (G1, G3, G9, R1, R9, equivalent), 0 errors, 0 timeouts, 0 not applied; G2, R2, G12 caught (1 failed each); "files restored: yes"; `git status --short` empty.
+**Tests:** server 1792 to 1794; web 55 unchanged (not rerun, no web change).
+**Not verified:** why each caught run reports `broken: 2` (my reading in A-198, vitest docs not checked); no live check; dev database not touched. No source change.
+
+---
+
 ## Step U.3b (size S), 2026-10-23: break-on-purpose for U.3a (A-198)
 
 **Works (verified in this session):** `~/Desktop/mutate-U.3b.mjs` (not in git): baseline 109 (`test/members-routes.test.ts`, `test/members.test.ts`); 32 mutations, 24 caught, 8 escaped (G1, G2, G3, G9, G12, R1, R2, R9), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` empty. `npm run check` (server): 46 files, 1792 passed.

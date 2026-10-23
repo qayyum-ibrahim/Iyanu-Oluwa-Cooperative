@@ -1,7 +1,8 @@
 // Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36), record a payment
 // from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
 // R-03), give a loan from member detail (U.5b, R-08, D-91), the pay-off confirmation at the
-// bottom of member detail (U.7a, R-12, R-13, DR-05). Search by name or Membership ID runs in the
+// bottom of member detail (U.7a, R-12, R-13, DR-05), reactivating an Inactive member (U.7b, R-35,
+// D-80). Search by name or Membership ID runs in the
 // browser over the list the server sent (A-191 item 2). The server checks every field again.
 // Amounts stay the naira strings the server sent (A-18); the browser only adds the naira sign and
 // thousands commas. The one sum is the payment form's breakdown check, in whole kobo as BigInt
@@ -23,6 +24,7 @@ import type {
   NewPayment,
   Payment,
   PaymentMethod,
+  ReactivateMemberResult,
   SmsOutcome,
 } from "./api.ts";
 
@@ -497,6 +499,29 @@ export function savedPayOffMessage(saved: SavedPayOff): string {
   return `Pay-off of ${formatNaira(saved.payOff.total)} recorded. The member is now Inactive.`;
 }
 
+/**
+ * The message for a refused reactivation. Null for signed_out: the sign-in screen already shows.
+ * A repeat is safe: an Active member answers already_active and nothing is saved (D-80).
+ */
+export function reactivateMessage(
+  result: Extract<ReactivateMemberResult, { ok: false }>,
+): string | null {
+  switch (result.reason) {
+    case "already_active":
+      return "This member is already Active.";
+    case "forbidden":
+      return "You do not have permission to do this.";
+    case "not_found":
+      return "Member not found.";
+    case "signed_out":
+      return null;
+    case "network":
+      return "Cannot reach the server. Try again.";
+    default:
+      return "Something went wrong. Try again.";
+  }
+}
+
 const EMPTY: NewMember = { fullName: "", phone: "", address: "", occupation: "" };
 
 type ListState =
@@ -513,6 +538,7 @@ type DetailApi = Pick<
   | "createPayment"
   | "createLoan"
   | "createPayOff"
+  | "reactivateMember"
 >;
 
 export interface MembersProps {
@@ -523,6 +549,7 @@ export interface MembersProps {
   canRecordPayment: boolean;
   canGiveLoan: boolean;
   canPayOff: boolean;
+  canReactivate: boolean;
 }
 
 export default function Members({
@@ -533,6 +560,7 @@ export default function Members({
   canRecordPayment,
   canGiveLoan,
   canPayOff,
+  canReactivate,
 }: MembersProps) {
   const [filter, setFilter] = useState<MemberStatusFilter>("active");
   const [search, setSearch] = useState("");
@@ -592,6 +620,7 @@ export default function Members({
         canRecordPayment={canRecordPayment}
         canGiveLoan={canGiveLoan}
         canPayOff={canPayOff}
+        canReactivate={canReactivate}
         firstPayment={firstPayment !== null && firstPayment.id === openId ? firstPayment : null}
         onBack={() => {
           setFirstPayment(null);
@@ -1281,6 +1310,7 @@ interface MemberDetailProps {
   canRecordPayment: boolean;
   canGiveLoan: boolean;
   canPayOff: boolean;
+  canReactivate: boolean;
   /** The member just added: open with the payment form and a first-payment notice (U.4f, R-03). */
   firstPayment: Member | null;
   onBack(): void;
@@ -1290,8 +1320,8 @@ interface MemberDetailProps {
  * One member: profile, balances (D-86), loans and payments (U.3f), the payment form for an
  * Active member with payments.create (U.4e2, D-89), the loan form for an Active member with
  * loans.disburse and no active loan seen (U.5b), and at the bottom the pay-off for an Active
- * member with payoff.process, a payout above ₦0.00 and no active loan seen (U.7a, R-13).
- * One form shows at a time. The payments and loans sections show only with payments.view and
+ * member with payoff.process, a payout above ₦0.00 and no active loan seen (U.7a, R-13), and
+ * the Reactivate button for an Inactive member with members.edit (U.7b, D-80). One form shows at a time. The payments and loans sections show only with payments.view and
  * loans.view (A-201). Pay-offs are not listed: there is no pay-off read (A-186); the balances
  * already take them off.
  */
@@ -1303,6 +1333,7 @@ function MemberDetail({
   canRecordPayment,
   canGiveLoan,
   canPayOff,
+  canReactivate,
   firstPayment,
   onBack,
 }: MemberDetailProps) {
@@ -1326,6 +1357,8 @@ function MemberDetail({
   const [reload, setReload] = useState(0);
   // Bumped after a pay-off, so the member is read again with its new status (DR-07).
   const [memberReload, setMemberReload] = useState(0);
+  const [reactivating, setReactivating] = useState(false);
+  const [reactivateError, setReactivateError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -1361,6 +1394,24 @@ function MemberDetail({
   function openForm(form: "payment" | "loan" | "payoff") {
     setNotice(null);
     setOpen(form);
+  }
+
+  // The reply holds the member as saved, so it shows at once. On already_active the member shown
+  // is out of date: it is read again.
+  async function reactivate(target: Member) {
+    if (reactivating) return;
+    setReactivating(true);
+    setNotice(null);
+    setReactivateError(null);
+    const result = await api.reactivateMember(target.id);
+    setReactivating(false);
+    if (result.ok) {
+      setMember({ kind: "loaded", value: result.member });
+      setNotice(`${result.member.fullName} is Active again.`);
+      return;
+    }
+    if (result.reason === "already_active") setMemberReload((n) => n + 1);
+    setReactivateError(reactivateMessage(result));
   }
 
   const back = (
@@ -1407,12 +1458,27 @@ function MemberDetail({
               Give loan
             </button>
           )}
+          {canReactivate && m.status === "INACTIVE" && open === null && (
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={reactivating}
+              onClick={() => void reactivate(m)}
+            >
+              {reactivating ? "Reactivating…" : "Reactivate member"}
+            </button>
+          )}
         </div>
       </div>
       {notice && (
         <p role="status" className="notice">
           {notice}
         </p>
+      )}
+      {reactivateError && (
+        <em role="alert" className="error">
+          {reactivateError}
+        </em>
       )}
       {open === "payment" && canRecordPayment && m.status === "ACTIVE" && (
         <PaymentForm

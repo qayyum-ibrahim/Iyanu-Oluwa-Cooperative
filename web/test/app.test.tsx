@@ -35,6 +35,7 @@ import type {
   NewPayment,
   NewPayOff,
   Payment,
+  ReactivateMemberResult,
   SmsOutcome,
   UpdateExpenseResult,
 } from "../src/api.ts";
@@ -79,6 +80,7 @@ import {
   payOffLines,
   payOffMessage,
   paymentMessage,
+  reactivateMessage,
   recordButtonLabel,
   savedLoanMessage,
   savedPayOffMessage,
@@ -109,6 +111,7 @@ const idleApi: Api = {
   updateExpense: async () => ({ ok: false, reason: "server" }),
   deleteExpense: async () => ({ ok: false, reason: "server" }),
   createPayOff: async () => ({ ok: false, reason: "server" }),
+  reactivateMember: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -199,6 +202,8 @@ interface FakeApi extends Api {
   deleted: string[];
   /** Every pay-off the screen sent, in order. */
   paidOff: NewPayOff[];
+  /** Every member id the screen reactivated, in order. */
+  reactivated: string[];
   signOutFromServer(): void;
 }
 
@@ -250,6 +255,8 @@ function fakeApi(
     remove?: DeleteExpenseResult[];
     /** Answers to createPayOff in turn; the last one repeats. */
     payOff?: CreatePayOffResult[];
+    /** Answers to reactivateMember in turn; the last one repeats. A success is saved as the server would. */
+    reactivate?: ReactivateMemberResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -261,6 +268,7 @@ function fakeApi(
     const edited: { id: string; input: ExpenseEdit }[] = [];
     const deleted: string[] = [];
     const paidOff: NewPayOff[] = [];
+    const reactivated: string[] = [];
     return {
       calls,
       paid,
@@ -270,6 +278,7 @@ function fakeApi(
       edited,
       deleted,
       paidOff,
+      reactivated,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -351,6 +360,14 @@ function fakeApi(
         paidOff.push(input);
         const answers = opts.payOff ?? [];
         return answers[Math.min(paidOff.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      reactivateMember: async (id) => {
+        calls.push(`reactivate ${id}`);
+        reactivated.push(id);
+        const answers = opts.reactivate ?? [];
+        const result = answers[Math.min(reactivated.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+        if (result.ok) opts.members = (opts.members ?? []).map((m) => (m.id === id ? result.member : m));
+        return result;
       },
     };
   };
@@ -2872,5 +2889,140 @@ describe("pay-off (jsdom)", () => {
     expect(button(PAY_OFF_BUTTON)).toBeTruthy();
     expect(button("Record payment")).toBeTruthy();
     expect(api.paidOff).toEqual([]);
+  });
+});
+
+describe("reactivate helpers", () => {
+  it("maps each refused reactivation to a message", () => {
+    const cases: [Extract<ReactivateMemberResult, { ok: false }>, string | null][] = [
+      [{ ok: false, reason: "already_active" }, "This member is already Active."],
+      [{ ok: false, reason: "forbidden" }, "You do not have permission to do this."],
+      [{ ok: false, reason: "not_found" }, "Member not found."],
+      [{ ok: false, reason: "signed_out" }, null],
+      [{ ok: false, reason: "network" }, "Cannot reach the server. Try again."],
+      [{ ok: false, reason: "invalid_input" }, "Something went wrong. Try again."],
+      [{ ok: false, reason: "server" }, "Something went wrong. Try again."],
+    ];
+    for (const [result, message] of cases) expect(reactivateMessage(result)).toBe(message);
+  });
+});
+
+const REACTIVATOR: Me = { ...ME, permissions: ["members.view", "members.edit", "payments.create"] };
+
+const REACTIVATE_BUTTON = "Reactivate member";
+
+async function openInactive() {
+  await openMembers();
+  await click(button("All"));
+  await click(el('button[aria-label="View Example Inactive"]'));
+}
+
+describe("reactivate (jsdom)", () => {
+  it("has no Reactivate button without members.edit, or for an Active member", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE, INACTIVE_ONE] }));
+    await openInactive();
+    expect(el("h1").textContent).toBe("Example Inactive");
+    expect(() => button(REACTIVATE_BUTTON)).toThrow();
+    await act(async () => root?.unmount());
+
+    await mount(fakeApi({ restore: REACTIVATOR, members: [ACTIVE_ONE, INACTIVE_ONE] }));
+    await openDetail("Test Member One");
+    expect(() => button(REACTIVATE_BUTTON)).toThrow();
+  });
+
+  it("reactivates with one call and shows the member Active from the reply, with no read again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: REACTIVATOR,
+        members: [INACTIVE_ONE],
+        reactivate: [{ ok: true, member: { ...INACTIVE_ONE, status: "ACTIVE" } }],
+      }),
+    );
+    await openInactive();
+    expect(el(".status-inactive").textContent).toBe("Inactive");
+    expect(() => button("Record payment")).toThrow();
+    await click(button(REACTIVATE_BUTTON));
+    expect(api.reactivated).toEqual(["m3"]);
+    expect(el("[role=status]").textContent).toBe("Example Inactive is Active again.");
+    expect(el(".badges .pill").textContent).toBe("Active");
+    expect(() => button(REACTIVATE_BUTTON)).toThrow();
+    expect(button("Record payment")).toBeTruthy();
+    expect(countCalls(api, "get m3")).toBe(1);
+  });
+
+  it("on already_active shows the message and reads the member again", async () => {
+    const api = await mount(
+      fakeApi({ restore: REACTIVATOR, members: [INACTIVE_ONE], reactivate: [{ ok: false, reason: "already_active" }] }),
+    );
+    await openInactive();
+    // Someone else reactivated the member after it was shown.
+    api.getMember = async (id) => {
+      api.calls.push(`get ${id}`);
+      return { ok: true, value: { ...INACTIVE_ONE, status: "ACTIVE" } };
+    };
+    await click(button(REACTIVATE_BUTTON));
+    expect(el("[role=alert]").textContent).toBe("This member is already Active.");
+    expect(countCalls(api, "get m3")).toBe(2);
+    expect(el(".badges .pill").textContent).toBe("Active");
+    expect(() => button(REACTIVATE_BUTTON)).toThrow();
+  });
+
+  it("keeps the member Inactive and the button on other refusals; a second press calls again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: REACTIVATOR,
+        members: [INACTIVE_ONE],
+        reactivate: [{ ok: false, reason: "network" }, { ok: false, reason: "forbidden" }],
+      }),
+    );
+    await openInactive();
+    await click(button(REACTIVATE_BUTTON));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(el(".status-inactive").textContent).toBe("Inactive");
+    await click(button(REACTIVATE_BUTTON));
+    expect(el("[role=alert]").textContent).toBe("You do not have permission to do this.");
+    expect(api.reactivated).toEqual(["m3", "m3"]);
+    expect(countCalls(api, "get m3")).toBe(1);
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("disables the button while the call runs, so a double click sends one call", async () => {
+    let finish: (result: ReactivateMemberResult) => void = () => undefined;
+    const api = await mount(fakeApi({ restore: REACTIVATOR, members: [INACTIVE_ONE] }));
+    api.reactivateMember = (id) => {
+      api.reactivated.push(id);
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    };
+    await openInactive();
+    const reactivateButton = button(REACTIVATE_BUTTON);
+    await click(reactivateButton);
+    expect(button("Reactivating…").disabled).toBe(true);
+    await click(button("Reactivating…"));
+    expect(api.reactivated).toEqual(["m3"]);
+    await act(async () => finish({ ok: true, member: { ...INACTIVE_ONE, status: "ACTIVE" } }));
+    expect(el("[role=status]").textContent).toBe("Example Inactive is Active again.");
+  });
+
+  it("shows the Reactivate button after a pay-off makes the member Inactive", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: { ...PAYER_OFF, permissions: [...PAYER_OFF.permissions, "members.edit"] },
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [paidOff("25000.05")],
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(() => button(REACTIVATE_BUTTON)).toThrow();
+    await click(button(PAY_OFF_BUTTON));
+    api.getMember = async (id) => {
+      api.calls.push(`get ${id}`);
+      return { ok: true, value: { ...ACTIVE_ONE, status: "INACTIVE" } };
+    };
+    await click(button(CONFIRM_BUTTON));
+    expect(el(".status-inactive").textContent).toBe("Inactive");
+    expect(button(REACTIVATE_BUTTON)).toBeTruthy();
   });
 });

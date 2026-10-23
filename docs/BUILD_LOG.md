@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.7b (size S), 2026-10-23: Reactivate button on an Inactive member (D-80, D-96, A-223)
+
+The owner said "go".
+**Changed:** `web/src/api.ts` (`ReactivateMemberResult`, `reactivateMember` with `POST /members/:id/reactivate`, no body and no key, 409 `already_active` passed on, reply shape checked; header comment), `web/src/Members.tsx` (`reactivateMessage`; "Reactivate member" on an Inactive member's detail with `members.edit`; the member shown from the reply; on `already_active` the member read again; header comments), `web/src/App.tsx` (passes `members.edit`; header comment). `web/src/styles.css` not changed (existing classes). Tests: `web/test/api.test.ts` (`reactivateMember` 5), `web/test/app.test.tsx` (helper 1, screen 6; fakes have `reactivateMember`). Docs: ASSUMPTIONS (A-223), PHASE_PLAN (U.7b done), TRACEABILITY (R-35 screen; "No screen (U.7)" fixed, inconsistency 1), STATUS.
+**Works (verified in this session):** `npm run check` (web): 4 files, 241 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.7a (size M), 2026-10-23: pay-off confirmation at the bottom of member detail (D-96, A-222)
 
 The owner said "fix inconsistencies and go". U.7 split into U.7a (pay-off) and U.7b (reactivate) (D-96).

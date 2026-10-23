@@ -1400,3 +1400,78 @@ describe("createPayOff", () => {
     expect(await wrong.api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "server" });
   });
 });
+
+/** The member as POST /members/:id/reactivate sends it back: Active again. */
+const REACTIVATED = { ...MEMBER, status: "ACTIVE" as const };
+
+describe("reactivateMember", () => {
+  it("posts to the member's reactivate path with no body and no key, the id made safe", async () => {
+    const { api, calls, keys } = signedIn(() => json(200, { member: REACTIVATED }));
+    expect(await api.reactivateMember("a/b?c")).toEqual({ ok: true, member: REACTIVATED });
+    expect(calls).toEqual([
+      { path: "/api/members/a%2Fb%3Fc/reactivate", method: "POST", auth: "Bearer acc1", body: null },
+    ]);
+    expect(keys).toEqual([null]);
+  });
+
+  it("on a 401 refreshes once and posts again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, { member: REACTIVATED }) : json(401, {});
+    });
+    expect(await api.reactivateMember("m1")).toEqual({ ok: true, member: REACTIVATED });
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/members/m1/reactivate",
+      "/api/refresh",
+      "/api/members/m1/reactivate",
+    ]);
+  });
+
+  it("passes already_active on, and answers server for a 409 it does not know", async () => {
+    const active = signedIn(() => json(409, { error: "already_active" }));
+    expect(await active.api.reactivateMember("m1")).toEqual({ ok: false, reason: "already_active" });
+    for (const body of [{ error: "member_inactive" }, { error: "toString" }, null, "x"]) {
+      const { api } = signedIn(() => json(409, body));
+      expect(await api.reactivateMember("m1")).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("maps 400, 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.reactivateMember("m1")).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.reactivateMember("m1")).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 200 of the wrong shape and for a 201", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { member: null },
+      { member: { ...REACTIVATED, status: "GONE" } },
+      { member: { ...REACTIVATED, fullName: 1 } },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.reactivateMember("m1")).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, { member: REACTIVATED }));
+    expect(await wrong.api.reactivateMember("m1")).toEqual({ ok: false, reason: "server" });
+  });
+});

@@ -2,7 +2,7 @@
 // (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
 // (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b), the
 // expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
-// paying a member out (server/src/payoffs-routes.ts, U.7a).
+// paying a member out (server/src/payoffs-routes.ts, U.7a) and reactivating a member (U.7b).
 // Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
@@ -265,6 +265,11 @@ export type CreatePayOffResult =
   | { ok: true; payOff: PayOff; replayed: boolean }
   | { ok: false; reason: CallFailure | PayOffConflict; code?: string };
 
+/** already_active: the member was Active already, nothing saved (D-80). */
+export type ReactivateMemberResult =
+  | { ok: true; member: Member }
+  | { ok: false; reason: CallFailure | "already_active" };
+
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
 
@@ -319,6 +324,7 @@ export interface Api {
   updateExpense(id: string, input: ExpenseEdit): Promise<UpdateExpenseResult>;
   deleteExpense(id: string): Promise<DeleteExpenseResult>;
   createPayOff(input: NewPayOff): Promise<CreatePayOffResult>;
+  reactivateMember(id: string): Promise<ReactivateMemberResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -1057,6 +1063,26 @@ export function createApi(deps: ApiDeps): Api {
       if (payOff === null) return { ok: false, reason: "server" };
       const replayed = response.headers.get("Idempotent-Replayed") === "true";
       return { ok: true, payOff, replayed };
+    },
+
+    // No body and no key: reactivation moves no money, and a repeat answers already_active (D-80).
+    async reactivateMember(id) {
+      let response: Response | null;
+      try {
+        response = await authed(`${memberPath(id)}/reactivate`, { method: "POST" });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status === 409) {
+        const known = isObject(reply) && reply["error"] === "already_active";
+        return { ok: false, reason: known ? "already_active" : "server" };
+      }
+      if (response.status !== 200) return { ok: false, reason: failureOf(response.status) };
+      const member = isObject(reply) ? memberOf(reply["member"]) : null;
+      if (member === null) return { ok: false, reason: "server" };
+      return { ok: true, member };
     },
   };
 }

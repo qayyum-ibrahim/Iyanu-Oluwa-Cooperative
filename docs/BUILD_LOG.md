@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.4g (size S), 2026-10-23: break-on-purpose for U.4d to U.4f (A-212)
+
+The owner said: "go".
+**Changed:** no source file kept. New throwaway script `~/Desktop/mutate-U.4g.mjs` (not in git), output `~/Desktop/mutate-U.4g.out`.
+**Works (verified in this session):** `node ~/Desktop/mutate-U.4g.mjs --dry`: "dry run done: 91 mutations". Full run: baseline `test/api.test.ts` and `test/app.test.tsx`, 114 passed; 91 mutations, 79 caught, 12 escaped (C3, C19, F5, F7, F10, F16, F17, G5, G6, G8, G11, G13), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` "(empty)". `npm run check` (web): 4 files, 128 passed. `npm run check` (server): 47 files, 1847 passed.
+**Escapes (A-212):** C3, C19, F7 and F10 are test gaps; F5, F16, F17, G5, G6, G8, G11 and G13 are equivalent as tested (read from code). U.4g2 proposed.
+**Not verified:** a browser run; the dev server.
+
+---
+
 ## Step U.4f (size S), 2026-10-23: first-payment flow after adding a member (R-03, A-211)
 
 The owner said: "fix inconsistencies and go". So "Save without payment" is a new button (there was only "Save member"), and a user without `payments.create` keeps the one "Save member" button.

@@ -11,7 +11,7 @@ import { memberBalances } from "./balances.js";
 import { SYSTEM_ONLY_CATEGORY } from "./categories.js";
 import { isLoanActive } from "./loans.js";
 import { MoneyError, parseNaira, type Kobo } from "./money.js";
-import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString, lagosDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import { DuplicatePayOffKeyError, type PaymentMethod, type PayOffRecord, type Store } from "./store.js";
 
@@ -181,6 +181,8 @@ export async function processPayOff(
         category: SYSTEM_ONLY_CATEGORY,
         amount: total,
         method,
+        // A pay-off is paid out on the day it is processed (step U.6a).
+        spentOn: lagosDay(new Date()),
         payOffId: payOff.id,
         createdById: actor.id,
       });

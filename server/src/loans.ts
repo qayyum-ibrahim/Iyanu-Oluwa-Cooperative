@@ -255,6 +255,8 @@ export async function disburseLoan(
         category: LOAN_EXPENSE_CATEGORY,
         amount: principal,
         method,
+        // The money left on the day the loan was given (step U.6a).
+        spentOn: givenOn,
         loanId: loan.id,
         createdById: actor.id,
       });

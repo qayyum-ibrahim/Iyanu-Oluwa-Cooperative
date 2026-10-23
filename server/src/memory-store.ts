@@ -379,6 +379,7 @@ export function createMemoryStore(): Store {
             method: input.method,
             description: input.description ?? "",
             narration: input.narration ?? "",
+            spentOn: input.spentOn,
             loanId: input.loanId ?? null,
             payOffId: input.payOffId ?? null,
             idempotencyKey: input.idempotencyKey ?? null,
@@ -422,6 +423,7 @@ export function createMemoryStore(): Store {
           if (changes.method !== undefined) found.method = changes.method;
           if (changes.description !== undefined) found.description = changes.description;
           if (changes.narration !== undefined) found.narration = changes.narration;
+          if (changes.spentOn !== undefined) found.spentOn = changes.spentOn;
           return copyExpense(found);
         },
         async softDelete(id, deletedById) {

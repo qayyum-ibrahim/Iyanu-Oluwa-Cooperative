@@ -165,7 +165,7 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("expense-loan@example.test");
     await expect(
       db.expense.create({
-        data: { category: "Loan", amountKobo: 100n, method: "CASH", loanId: "no-such-loan", createdById: u.id },
+        data: { category: "Loan", amountKobo: 100n, method: "CASH", spentOn: "2026-10-20", loanId: "no-such-loan", createdById: u.id },
       }),
     ).rejects.toMatchObject({ code: "P2003" });
   });
@@ -186,7 +186,7 @@ describe("database (real migration, temporary SQLite file)", () => {
       },
     });
     await db.expense.create({
-      data: { category: "Loan", amountKobo: 100n, method: "CASH", loanId: paidOut.id, createdById: u.id },
+      data: { category: "Loan", amountKobo: 100n, method: "CASH", spentOn: "2026-10-20", loanId: paidOut.id, createdById: u.id },
     });
     await expect(db.loan.delete({ where: { id: repaid.id } })).rejects.toMatchObject({ code: "P2003" });
     await expect(db.loan.delete({ where: { id: paidOut.id } })).rejects.toMatchObject({ code: "P2003" });
@@ -197,7 +197,7 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("expense-payoff@example.test");
     await expect(
       db.expense.create({
-        data: { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH", payOffId: "no-such-pay-off", createdById: u.id },
+        data: { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH", spentOn: "2026-10-20", payOffId: "no-such-pay-off", createdById: u.id },
       }),
     ).rejects.toMatchObject({ code: "P2003" });
   });
@@ -206,7 +206,7 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("payoff-keep@example.test");
     const m = await newMember(9005, u.id);
     const p = await db.payOff.create({ data: { memberId: m.id, method: "CASH", totalKobo: 100n, createdById: u.id } });
-    const data = { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH" as const, payOffId: p.id, createdById: u.id };
+    const data = { category: "Membership Withdrawal", amountKobo: 100n, method: "CASH" as const, spentOn: "2026-10-20", payOffId: p.id, createdById: u.id };
     await db.expense.create({ data });
     await expect(db.expense.create({ data })).rejects.toMatchObject({ code: "P2002" });
     await expect(db.payOff.delete({ where: { id: p.id } })).rejects.toMatchObject({ code: "P2003" });

@@ -157,6 +157,8 @@ model Expense {
   description String        @default("")
   // The free text for "Others" (DR-11). Empty for other categories.
   narration   String        @default("")
+  // The day the money left, "YYYY-MM-DD" in Lagos time (step U.6a). A Loan expense has its loan's givenOn.
+  spentOn     String
   // The loan this expense pays out (DR-10). At most one expense per loan (A-148).
   loanId      String?       @unique
   loan        Loan?         @relation(fields: [loanId], references: [id], onDelete: Restrict)
@@ -176,6 +178,7 @@ model Expense {
 
   @@index([createdById])
   @@index([createdAt])
+  @@index([spentOn])
   @@unique([createdById, idempotencyKey])
 }
 

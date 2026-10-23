@@ -65,6 +65,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       category: "Office Maintenance",
       amount: 1_500_000n,
       method: "CASH",
+      spentOn: "2026-10-20",
       ...over,
     });
 
@@ -79,6 +80,7 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         method: "CASH",
         description: "",
         narration: "",
+        spentOn: "2026-10-20",
         loanId: null,
         payOffId: null,
         idempotencyKey: null,
@@ -88,6 +90,15 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
         deletedById: null,
       });
       expect(e.createdAt).toBeInstanceOf(Date);
+    });
+
+    it("saves the day spent as given, apart from the time recorded (U.6a)", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "e-spent");
+      const e = await store.expenses.create(expense(u.id, { spentOn: "2025-12-31" }));
+      expect(e.spentOn).toBe("2025-12-31");
+      expect((await store.expenses.findById(e.id))?.spentOn).toBe("2025-12-31");
+      expect((await store.expenses.list({ createdById: u.id })).map((x) => x.spentOn)).toEqual(["2025-12-31"]);
     });
 
     it("keeps the texts, the loan id, the method and an amount above the largest safe integer exactly", async () => {
@@ -518,6 +529,17 @@ export function runExpensesContract(makeStore: () => Promise<Store> | Store): vo
       expect(await store.expenses.findById(saved.id)).toEqual(wanted);
       const onlyText = await store.expenses.update(saved.id, { description: "" });
       expect(onlyText).toEqual({ ...wanted, description: "" });
+    });
+
+    it("changes the day spent only when given (U.6a)", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "eu-spent");
+      const saved = await store.expenses.create(expense(u.id));
+      const moved = await store.expenses.update(saved.id, { spentOn: "2026-09-30" });
+      expect(moved).toEqual({ ...saved, spentOn: "2026-09-30" });
+      const other = await store.expenses.update(saved.id, { amount: 2_000_000n });
+      expect(other).toEqual({ ...saved, spentOn: "2026-09-30", amount: 2_000_000n });
+      expect(await store.expenses.findById(saved.id)).toEqual(other);
     });
 
     it("returns the expense unchanged for an empty change", async () => {

@@ -341,6 +341,8 @@ export interface ExpenseRecord {
   description: string;
   /** The free text for "Others" (DR-11). Empty for other categories. */
   narration: string;
+  /** The day the money left, "YYYY-MM-DD" in Lagos time (step U.6a). */
+  spentOn: string;
   /** The loan this expense pays out (DR-10), or null. At most one expense per loan (A-148). */
   loanId: string | null;
   /** The pay-off this Membership Withdrawal pays out (DR-05, step 6.3b), or null. At most one expense per pay-off. */
@@ -364,6 +366,8 @@ export interface NewExpense {
   description?: string;
   /** Defaults to "". */
   narration?: string;
+  /** "YYYY-MM-DD". The store saves it as given: checking it is the logic code's job. */
+  spentOn: string;
   loanId?: string;
   payOffId?: string;
   idempotencyKey?: string;
@@ -385,8 +389,8 @@ export interface ExpenseListQuery {
 }
 
 /**
- * The fields an edit may change (step 5.9). A field left out keeps its value. The creator, the
- * date, the loan link, the pay-off link, the key and the request hash never change.
+ * The fields an edit may change (step 5.9; spentOn since U.6a). A field left out keeps its value.
+ * The creator, the time recorded, the loan link, the pay-off link, the key and the request hash never change.
  */
 export interface ExpenseChanges {
   category?: string;
@@ -394,6 +398,7 @@ export interface ExpenseChanges {
   method?: PaymentMethod;
   description?: string;
   narration?: string;
+  spentOn?: string;
 }
 
 export class DuplicateExpenseLoanError extends Error {

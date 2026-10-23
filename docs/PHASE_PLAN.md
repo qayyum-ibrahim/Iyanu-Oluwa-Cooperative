@@ -104,7 +104,11 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
 - U.5 Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status. The loans list on member detail exists since U.3f. The owner asked for a loan date (D-91), so U.5 split at its start:
   - U.5a (M) Server: `Loan.givenOn`, migration that fills old rows, store field in both adapters, `givenOn` in `POST /loans` (checked, in the hash when sent, view, list, audit). Done (D-91, A-214): 1871 server tests.
   - U.5b (M) Web: `createLoan` in `web/src/api.ts`, `givenOn` in the loan reads, the "Give loan" form on member detail (date, principal, method, interest note, notes; one key per attempt), the loans table by `givenOn`. Done (A-215): 154 web tests; the table shows `givenOn`, rows keep the server order.
-- U.6 (M) Expenses: record, list with filters and total, edit, delete.
+- U.6 Expenses: record, list with filters and total, edit, delete. The owner chose a date of its own, `spentOn` (D-92), and U.6 was L, so it split at its start (D-90 item 4):
+  - U.6a (M) Server: `Expense.spentOn` (indexed), migration that fills old rows (a Loan expense gets its loan's `givenOn`, others the Lagos day of `createdAt`), store field in both adapters (`create`, `update`); `createExpense` saves today in Lagos, `disburseLoan` the loan's `givenOn`, `processPayOff` today. Done (D-92, A-216): 1882 server tests.
+  - U.6b (M) Server: `spentOn` in `POST /expenses` and `PUT /expenses/:id` (checked as D-88, in the hash when sent), view and audit; `GET /expenses` filters by `spentOn` days in Lagos, so the screen sends days, not UTC times (changes D-67 and A-173; the query names and the list order are settled at U.6b's start).
+  - U.6c (M) Web: expense calls in `web/src/api.ts`, an Expenses page in the menu with `expenses.view` (list newest first, filters for category, method and days, total; DR-11 list copied into the web code, A-191 item 5).
+  - U.6d (M) Web: record, edit and delete on the Expenses page (`expenses.create`, `.edit`, `.delete`; one key per attempt for record). Loan and Membership Withdrawal rows show no edit or delete button, read from the category, as the server checks both the category and the link (D-69, D-78); a 409 `loan_linked` or `pay_off` is still shown if it comes.
 - U.7 (M) Pay-off confirmation at the bottom of member detail (R-13; balances from U.3a, `total` sent back, `payout_changed` shown, DR-05, A-185) and the reactivate button on an Inactive member (D-80).
 - U.8 (M) Staff and access (create, permissions, deactivate, reactivate, reset password); audit viewer.
 - U.9 (S) Walk-through of every screen on the owner's machine against the dev server.
@@ -120,7 +124,7 @@ Sizes stay a first look; an M step may split when it starts.
 | Member detail | `GET /members/:id`, `GET /payments?memberId=`, `GET /loans?memberId=`, `GET /members/:id/balances` (U.3a) | `members.view`, `payments.view`, `loans.view` | no member edit route (`members.edit` is used only by reactivation) |
 | Record payment | `POST /payments` | `payments.create` | payment date `paidOn` added at U.4a and taken from the request since U.4b (D-87, D-88; the prototype README orders the form member, date, method, total, breakdown) |
 | Loans | `POST /loans`, `GET /loans?memberId=` | `loans.disburse`, `loans.view` | no list of all loans (A-167); loan date `givenOn` since U.5a (D-91) |
-| Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | no "date spent" (A-172); no paging |
+| Expenses | `POST /expenses`, `GET /expenses`, `PUT /expenses/:id`, `DELETE /expenses/:id` | `expenses.create`, `.view`, `.edit`, `.delete` | date spent `spentOn` since U.6a (D-92); no paging |
 | Pay-off | `GET /members/:id/balances` (U.3a), `POST /payoffs` | `payoff.process` | no pay-off read (A-186) |
 | Reactivate member | `POST /members/:id/reactivate` | `members.edit` | none |
 | Staff and access | `GET /staff`, `POST /staff`, `PUT /staff/:id/permissions`, `POST /staff/:id/deactivate`, `/reactivate`, `PUT /staff/:id/password` | `users.manage` (Super Admin only) | none |

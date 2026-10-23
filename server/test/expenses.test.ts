@@ -12,6 +12,7 @@ import {
 } from "../src/expenses.js";
 import { subjectOf } from "../src/guards.js";
 import { createMemoryStore } from "../src/memory-store.js";
+import { lagosDay } from "../src/payments.js";
 import { createPrismaStore } from "../src/prisma-store.js";
 import {
   DuplicateExpenseKeyError,
@@ -152,6 +153,15 @@ describe("createExpense: success", () => {
   it("accepts blank narration for a category other than Others", async () => {
     const { store, a } = await build();
     expect(must(await createExpense(store, actorOf(a), body({ narration: "   " }))).narration).toBe("");
+  });
+
+  it("saves the day in Lagos as the day spent (U.6a)", async () => {
+    const { store, a } = await build();
+    const before = lagosDay(new Date());
+    const r = must(await createExpense(store, actorOf(a), body()));
+    const after = lagosDay(new Date());
+    const saved = await store.expenses.findById(r.id);
+    expect([before, after]).toContain(saved?.spentOn);
   });
 });
 
@@ -849,6 +859,7 @@ async function buildDelete(store: Store = createMemoryStore()) {
     category: "Loan",
     amount: 30_000_000n,
     method: "CASH",
+    spentOn: "2026-10-20",
     loanId: loan.id,
     createdById: base.admin.id,
   });
@@ -856,6 +867,7 @@ async function buildDelete(store: Store = createMemoryStore()) {
     category: "Membership Withdrawal",
     amount: 2_500_000n,
     method: "CASH",
+    spentOn: "2026-10-20",
     createdById: base.admin.id,
   });
   return { ...base, d, e, d1, e1, loanExpense, payOff };
@@ -884,6 +896,7 @@ async function payOffLinkedExpense(store: Store, adminId: string) {
     category: "Allowances",
     amount: 100n,
     method: "CASH",
+    spentOn: "2026-10-20",
     payOffId: payOff.id,
     createdById: adminId,
   });
@@ -999,6 +1012,7 @@ describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
       category: "Loan",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       createdById: admin.id,
     });
     expect(await deleteExpense(store, actorOf(admin), unlinked.id)).toEqual({
@@ -1023,6 +1037,7 @@ describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
       category: "Allowances",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       loanId: loan.id,
       createdById: admin.id,
     });
@@ -1298,7 +1313,7 @@ describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-1
 
   it("refuses a Loan expense without a loan link, and another category that names a loan, with loan_linked", async () => {
     const { store, admin } = await buildEdit();
-    const unlinked = await store.expenses.create({ category: "Loan", amount: 100n, method: "CASH", createdById: admin.id });
+    const unlinked = await store.expenses.create({ category: "Loan", amount: 100n, method: "CASH", spentOn: "2026-10-20", createdById: admin.id });
     expect(await updateExpense(store, actorOf(admin), unlinked.id, edit())).toEqual({
       ok: false,
       reason: "not_editable",
@@ -1316,6 +1331,7 @@ describe("updateExpense: Loan-linked and pay-off expenses stay as they are (DR-1
       category: "Allowances",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       loanId: loan.id,
       createdById: admin.id,
     });

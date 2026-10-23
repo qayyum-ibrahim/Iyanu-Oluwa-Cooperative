@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.6a (size M), 2026-10-23: expense date `spentOn` in the store (D-92, A-216)
+
+The owner said "fix inconsistencies and go" and chose "Yes, add spentOn". U.6 split into U.6a to U.6d (PHASE_PLAN).
+**Changed:** `server/prisma/schema.prisma` (`Expense.spentOn`, index), new migration `server/prisma/migrations/20261023150000_expense_spent_on/migration.sql` (SQL from `prisma migrate diff` on a temporary database in the scratchpad; row copy edited by hand: Loan expenses get the loan's `givenOn`, others the Lagos day of `createdAt`), `server/src/store.ts`, `memory-store.ts`, `prisma-store.ts` (`spentOn` in `create`, the record and `update`), `server/src/expenses.ts` (today in Lagos), `server/src/loans.ts` (the loan's `givenOn`), `server/src/payoffs.ts` (today in Lagos). Tests: `test/helpers/expenses-contract.ts` (2 cases), `test/expenses.test.ts` (1), `test/loans.test.ts` (1), `test/payoffs.test.ts` (1 check), new `test/migration-expense-spent-on.test.ts` (5), and `spentOn` added to direct expense saves in `test/db.test.ts`, `test/expenses.test.ts`, `test/expenses-routes.test.ts`. Docs: DECISIONS (D-92), ASSUMPTIONS (A-216; A-172, A-191 item 4, A-214 item 6 marked superseded), PHASE_PLAN (U.6 split; screen table), TRACEABILITY, DATA_MODEL, STATUS (inconsistencies fixed: duplicate optional check in item 1 removed, item 10 answered).
+**Works (verified in this session):** `npm run check` (server): 49 files, 1882 passed. `npx vitest run` on the 8 touched test files: 735 passed.
+After the owner's yes: `npm run db:deploy` applied `20261023150000_expense_spent_on` to the dev database ("All migrations have been successfully applied.", verified in this session).
+**Not verified:** dev database rows not read; no live check; web not changed.
+
+---
+
 ## Step U.5b (size M), 2026-10-23: "Give loan" form on member detail (A-215)
 
 The owner said "go".

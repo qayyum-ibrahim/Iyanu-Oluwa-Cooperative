@@ -8,6 +8,7 @@ import {
   type PayOffResult,
   type PayOffView,
 } from "../src/payoffs.js";
+import { lagosDay } from "../src/payments.js";
 import { createPrismaStore } from "../src/prisma-store.js";
 import type { Role, Store, UserRecord } from "../src/store.js";
 import { createTempDb, type TempDb } from "./helpers/temp-db.js";
@@ -94,6 +95,7 @@ describe("processPayOff: success (DR-05)", () => {
     const { store, a, addMember, payExample } = await build();
     const m = await addMember(a.id, "A One");
     await payExample(m.id, a.id);
+    const before = lagosDay(new Date());
     const r = await processPayOff(store, actorOf(a), payOffBody(m.id));
     expect(r).toMatchObject({ ok: true, replayed: false });
     const v = must(r);
@@ -113,6 +115,8 @@ describe("processPayOff: success (DR-05)", () => {
       createdAt: v.createdAt,
     });
     expect(Number.isNaN(Date.parse(v.createdAt))).toBe(false);
+    // The pay-off is paid out today in Lagos (U.6a). Read around the call, in case midnight passes.
+    expect([before, lagosDay(new Date())]).toContain((await store.expenses.findById(v.expenseId))?.spentOn);
 
     const saved = await store.payOffs.findById(v.id);
     expect(saved).toMatchObject({ memberId: m.id, method: "BANK_TRANSFER", total: 2_500_000n, createdById: a.id });

@@ -84,6 +84,7 @@ const toExpense = (r: ExpenseRow): ExpenseRecord => ({
   method: r.method,
   description: r.description,
   narration: r.narration,
+  spentOn: r.spentOn,
   loanId: r.loanId,
   payOffId: r.payOffId,
   idempotencyKey: r.idempotencyKey,
@@ -501,6 +502,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
               method: input.method,
               description: input.description ?? "",
               narration: input.narration ?? "",
+              spentOn: input.spentOn,
               loanId: input.loanId ?? null,
               payOffId: input.payOffId ?? null,
               idempotencyKey: input.idempotencyKey ?? null,
@@ -556,6 +558,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
           ...(changes.method !== undefined ? { method: changes.method } : {}),
           ...(changes.description !== undefined ? { description: changes.description } : {}),
           ...(changes.narration !== undefined ? { narration: changes.narration } : {}),
+          ...(changes.spentOn !== undefined ? { spentOn: changes.spentOn } : {}),
         };
         // An updateMany with no data reported 0 rows on SQLite (5.9, A-175), so nothing to change is a read.
         if (Object.keys(data).length === 0) {

@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { CategoryError } from "./categories.js";
 import { isExpenseCategory, parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
 import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
-import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString } from "./payments.js";
+import { IDEMPOTENCY_KEY_PATTERN, koboToNairaString, lagosDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import { DuplicateExpenseKeyError, type ExpenseRecord, type PaymentMethod, type Store } from "./store.js";
 
@@ -176,6 +176,7 @@ function checkFields(input: ExpenseFieldsInput): FieldsCheck {
  * returns the first expense, a different request with the same key is refused), saves the expense
  * with its key and writes the audit entry. If either write fails, nothing is saved (D-45). A
  * refused request does not use up the key (as D-48). The expense is not linked to a loan (DR-10, A-148).
+ * Until U.6b the day spent is today in Lagos (step U.6a, as U.4a).
  */
 export async function createExpense(
   store: Store,
@@ -195,6 +196,7 @@ export async function createExpense(
   const { category, amount, method, description, narration } = checked.value;
 
   const requestHash = hashRequest(category, method, amount, description, narration);
+  const spentOn = lagosDay(new Date());
 
   const attempt = (): Promise<ExpenseResult> =>
     store.transaction<ExpenseResult>(async (tx) => {
@@ -209,6 +211,7 @@ export async function createExpense(
         method,
         description,
         narration,
+        spentOn,
         idempotencyKey: key,
         requestHash,
         createdById: actor.id,

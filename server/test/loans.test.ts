@@ -208,6 +208,16 @@ describe("disburseLoan: loan date (U.5a)", () => {
     expect(mustList(await listLoans(store, actorOf(a), { memberId: m.id }))[0]?.givenOn).toBe("2019-03-07");
   });
 
+  it("gives the Loan expense the loan's date as its day spent (U.6a)", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const r = must(await disburseLoan(store, actorOf(a), loanBody(m.id, { givenOn: "2019-03-07" })));
+    expect((await store.expenses.findById(r.expenseId))?.spentOn).toBe("2019-03-07");
+    const n = await addMember(a.id, "A Two");
+    const today = must(await disburseLoan(store, actorOf(a), loanBody(n.id)));
+    expect((await store.expenses.findById(today.expenseId))?.spentOn).toBe(today.givenOn);
+  });
+
   it("accepts today in Lagos", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");

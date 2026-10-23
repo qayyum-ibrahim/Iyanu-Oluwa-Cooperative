@@ -430,6 +430,7 @@ describe("DELETE /expenses/:id (5.9b)", () => {
       category: "Loan",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       loanId: loan.id,
       createdById: admin.id,
     });
@@ -437,6 +438,7 @@ describe("DELETE /expenses/:id (5.9b)", () => {
       category: "Membership Withdrawal",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       createdById: admin.id,
     });
     const loanRes = await request(app).delete(`/expenses/${loanExpense.id}`).set("Authorization", bearer(admin));
@@ -567,6 +569,7 @@ describe("PUT /expenses/:id (5.9c)", () => {
       category: "Loan",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       loanId: loan.id,
       createdById: admin.id,
     });
@@ -574,6 +577,7 @@ describe("PUT /expenses/:id (5.9c)", () => {
       category: "Membership Withdrawal",
       amount: 100n,
       method: "CASH",
+      spentOn: "2026-10-20",
       createdById: admin.id,
     });
     const loanRes = await request(app).put(`/expenses/${loanExpense.id}`).set("Authorization", bearer(admin)).send(editBody);

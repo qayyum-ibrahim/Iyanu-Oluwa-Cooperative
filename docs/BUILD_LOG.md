@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step U.4e (size M), 2026-10-23: payment form helpers (D-89, A-209)
+
+The owner said: "go, use the default placement, split allowed". U.4e split at its start: helpers here, the form at U.4e2.
+**Changed:** `web/src/Members.tsx` (`PAYMENT_CATEGORIES`, `PAYMENT_LINES_MAX`, `nairaToKobo`, `koboToNaira`, `breakdownKobo`, `lagosToday`, `isCalendarDay`, `checkPayment`, `paymentMessage`, `smsMessage`, `newIdempotencyKey`; header comment), `web/src/api.ts` (header comment only), `web/test/app.test.tsx` (12 tests: category list and cap, naira to kobo and back, exact breakdown sum, Lagos day also under `TZ=UTC`, calendar days, the form check and its order, every payment failure message, every SMS message, the key).
+**During the step:** the first check failed: the typecheck refused `getRandomValues` on a `Uint8Array<ArrayBufferLike>` (fixed by a fill that changes the bytes in place). Then one test failed: an unknown server code `toString` read an inherited function from the message table (fixed with a `Map`).
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean, 4 files, 109 passed (97 before). `npm run check` (server): 47 files, 1847 passed.
+**Not verified:** no screen uses the helpers yet (U.4e2); break-on-purpose (owed at U.4g).
+
+---
+
 ## Step U.4d (size S), 2026-10-23: web payment call and `paidOn` in the reads (A-208)
 
 The owner said: "go", then "yes, add app.test.tsx to U.4d" (the required `paidOn` broke the typecheck of `web/test/app.test.tsx`; the file was added before it was edited).

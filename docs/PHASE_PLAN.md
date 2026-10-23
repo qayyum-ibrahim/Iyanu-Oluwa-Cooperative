@@ -95,7 +95,8 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.4c (M, grew from S when the owner added the store adapters) Break-on-purpose for U.4a and U.4b (migration fill, `lagosDay`, `isCalendarDay`, the date checks, the request hash, the view, the audit detail, the route, both store adapters; CLAUDE.md rule 10). Done (A-206): 39 mutations, 34 caught; C4, H2 test gaps, L2 equivalent on a Lagos-time machine only, C5 and C6 equivalent.
   - U.4c2 (S, proposed at U.4c) Tests for the U.4c gaps (C4, H2) and `lagosDay` under `TZ=UTC` for L2, then a full rerun of `mutate-U.4c.mjs`. Done (A-207): 1847 server tests; rerun 37 of 39 caught (C5, C6 equivalent).
   - U.4d (S) Web: `createPayment` in `web/src/api.ts` and `paidOn` in the payment reads. Done (A-208): web 97 tests; the owner added `web/test/app.test.tsx` to the step.
-  - U.4e (M) Web: the payment form (member, date, method, total, breakdown, SMS toggle, R-04).
+  - U.4e (M) Web: the payment form helpers in `Members.tsx` (categories, kobo sum, Lagos day, form check, messages, key maker). Split at its start (owner: "split allowed", D-89). Done (A-209): web 109 tests.
+  - U.4e2 (M) Web: the payment form on member detail, opened by "Record payment" for an Active member with `payments.create` (date, method, total, breakdown, SMS toggle, R-04, R-06; D-89).
   - U.4f (S) Web: the first-payment flow after adding a member and "Save without payment" (R-03); the date shown on member detail.
   - U.4g (S) Break-on-purpose for U.4d to U.4f.
 - U.5 (M) Give a loan (`loans.disburse`, not the prototype's `loans.create`), a member's loans with outstanding and status.

@@ -5,10 +5,8 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/DECISIONS.md
 docs/DOMAIN_RULES.md
-legacy-prototype/README.md
 legacy-prototype/src/App.jsx
-server/src/categories.ts
-server/src/breakdown.ts
+legacy-prototype/src/index.css
 web/src/api.ts
 web/src/Members.tsx
 web/src/App.tsx

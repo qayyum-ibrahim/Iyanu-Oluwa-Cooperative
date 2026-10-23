@@ -25,11 +25,23 @@ import type {
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
+  PAYMENT_CATEGORIES,
+  PAYMENT_LINES_MAX,
+  breakdownKobo,
   checkNewMember,
+  checkPayment,
   formatDate,
   formatNaira,
+  isCalendarDay,
+  koboToNaira,
+  lagosToday,
   memberMessage,
+  nairaToKobo,
+  newIdempotencyKey,
+  paymentMessage,
   searchMembers,
+  smsMessage,
+  type PaymentFormInput,
 } from "../src/Members.tsx";
 import SignIn from "../src/SignIn.tsx";
 
@@ -780,5 +792,233 @@ describe("member detail (jsdom)", () => {
     expect(el("button[aria-pressed=true]").textContent).toBe("All");
     expect(rowTexts()).toHaveLength(1);
     expect(api.calls.filter((c) => c.startsWith("list"))).toEqual(["list active", "list all"]);
+  });
+});
+
+const FORM: PaymentFormInput = {
+  paidOn: "2026-10-20",
+  method: "CASH",
+  total: "20000",
+  lines: [
+    { category: "Shares", amount: "5000" },
+    { category: "Savings", amount: "10000.5" },
+    { category: "Loan Repaid", amount: "4999.50" },
+  ],
+  sendSms: true,
+};
+
+describe("payment form helpers", () => {
+  it("offers the DR-04 categories in order, without Membership Withdrawal", () => {
+    expect(PAYMENT_CATEGORIES).toEqual([
+      "Shares",
+      "Savings",
+      "Special Savings",
+      "Development Levy",
+      "Loan Repaid",
+      "Loan Interest",
+      "Entrance Fee",
+      "Stationeries",
+      "Empowerment Repaid",
+      "Committee Gift",
+      "Special Deposit",
+      "Investment Repaid",
+      "Investment Income",
+      "Building Funds",
+    ]);
+    expect(PAYMENT_LINES_MAX).toBe(20);
+  });
+
+  it("reads typed naira as whole kobo, as the server does", () => {
+    expect(nairaToKobo("20000")).toBe(2000000n);
+    expect(nairaToKobo("20000.5")).toBe(2000050n);
+    expect(nairaToKobo("20000.05")).toBe(2000005n);
+    expect(nairaToKobo(" 0.01 ")).toBe(1n);
+    expect(nairaToKobo("0")).toBe(0n);
+    expect(nairaToKobo("999999999999.99")).toBe(99999999999999n);
+    for (const bad of ["", "1.234", "-5", "1,000", "₦5", "1e3", ".5", "5.", "1000000000000"]) {
+      expect(nairaToKobo(bad)).toBeNull();
+    }
+  });
+
+  it("writes whole kobo as the server's naira string", () => {
+    expect(koboToNaira(0n)).toBe("0.00");
+    expect(koboToNaira(5n)).toBe("0.05");
+    expect(koboToNaira(2000050n)).toBe("20000.50");
+    expect(() => koboToNaira(-1n)).toThrow(RangeError);
+  });
+
+  it("adds the breakdown exactly, and gives null while a line is not an amount", () => {
+    expect(breakdownKobo(FORM.lines)).toBe(2000000n);
+    // 0.1 + 0.2 is not 0.3 in floating point; in kobo it is.
+    expect(
+      breakdownKobo([
+        { category: "Shares", amount: "0.1" },
+        { category: "Savings", amount: "0.2" },
+      ]),
+    ).toBe(30n);
+    expect(breakdownKobo([])).toBe(0n);
+    expect(breakdownKobo([...FORM.lines, { category: "Shares", amount: "" }])).toBeNull();
+  });
+
+  it("gives the day in Lagos, also near midnight UTC", () => {
+    expect(lagosToday(new Date("2026-10-23T09:00:00.000Z"))).toBe("2026-10-23");
+    expect(lagosToday(new Date("2026-10-31T23:30:00.000Z"))).toBe("2026-11-01");
+    expect(lagosToday(new Date("2026-10-31T22:59:59.000Z"))).toBe("2026-10-31");
+  });
+
+  it("gives the day in Lagos when the machine runs in another time zone", async () => {
+    const before = process.env["TZ"];
+    process.env["TZ"] = "UTC";
+    try {
+      vi.resetModules();
+      const fresh = await import("../src/Members.tsx");
+      expect(fresh.lagosToday(new Date("2026-10-31T23:30:00.000Z"))).toBe("2026-11-01");
+    } finally {
+      if (before === undefined) delete process.env["TZ"];
+      else process.env["TZ"] = before;
+      vi.resetModules();
+    }
+  });
+
+  it("knows a real calendar day", () => {
+    for (const good of ["2026-10-23", "2028-02-29", "2000-02-29", "2026-12-31", "2026-01-01"]) {
+      expect(isCalendarDay(good)).toBe(true);
+    }
+    for (const bad of [
+      "2026-02-29",
+      "1900-02-29",
+      "2026-04-31",
+      "2026-13-01",
+      "2026-00-10",
+      "2026-10-00",
+      "26-10-23",
+      "12026-10-01",
+      "2026-1-5",
+      "",
+    ]) {
+      expect(isCalendarDay(bad)).toBe(false);
+    }
+  });
+
+  it("checks the form and gives the fields to send, amounts as the server writes them", () => {
+    expect(checkPayment(FORM, "2026-10-23")).toEqual({
+      ok: true,
+      value: {
+        paidOn: "2026-10-20",
+        method: "CASH",
+        total: "20000.00",
+        lines: [
+          { category: "Shares", amount: "5000.00" },
+          { category: "Savings", amount: "10000.50" },
+          { category: "Loan Repaid", amount: "4999.50" },
+        ],
+        sendSms: true,
+      },
+    });
+    const today = checkPayment({ ...FORM, paidOn: "2026-10-23", sendSms: false }, "2026-10-23");
+    expect(today.ok && today.value.paidOn).toBe("2026-10-23");
+    expect(today.ok && today.value.sendSms).toBe(false);
+  });
+
+  it("refuses each bad field with its own message, in the server's order", () => {
+    const refused = (input: Partial<PaymentFormInput>) => {
+      const result = checkPayment({ ...FORM, ...input }, "2026-10-23");
+      return result.ok ? null : result.message;
+    };
+    expect(refused({ paidOn: "" })).toBe("Enter the payment date.");
+    expect(refused({ paidOn: "2026-02-30" })).toBe("Enter the payment date.");
+    expect(refused({ paidOn: "2026-10-24" })).toBe("The payment date cannot be after today.");
+    expect(refused({ paidOn: "2026-10-24", total: "" })).toBe(
+      "The payment date cannot be after today.",
+    );
+    expect(refused({ lines: [] })).toBe("Add at least one breakdown line.");
+    const many = Array.from({ length: 21 }, () => ({ category: "Shares", amount: "1" }));
+    expect(refused({ total: "21", lines: many })).toBe(
+      "A payment may have at most 20 breakdown lines.",
+    );
+    expect(refused({ total: "20", lines: many.slice(0, 20) })).toBeNull();
+    expect(refused({ total: "" })).toBe("Enter a total above ₦0.00, with at most 2 decimals.");
+    expect(refused({ total: "0" })).toBe("Enter a total above ₦0.00, with at most 2 decimals.");
+    expect(refused({ total: "20000.001" })).toBe(
+      "Enter a total above ₦0.00, with at most 2 decimals.",
+    );
+    const line = (category: string, amount: string) => [FORM.lines[0]!, { category, amount }];
+    expect(refused({ lines: line("Membership Withdrawal", "15000") })).toBe(
+      "Choose a category on line 2.",
+    );
+    expect(refused({ lines: line("", "15000") })).toBe("Choose a category on line 2.");
+    expect(refused({ lines: line("Savings", "0") })).toBe(
+      "Enter an amount above ₦0.00 on line 2, with at most 2 decimals.",
+    );
+    expect(refused({ lines: line("Savings", "abc") })).toBe(
+      "Enter an amount above ₦0.00 on line 2, with at most 2 decimals.",
+    );
+    expect(refused({ total: "20000.01" })).toBe("The breakdown must add up to the total exactly.");
+    expect(refused({ total: "19999.99" })).toBe("The breakdown must add up to the total exactly.");
+  });
+
+  it("maps each refused payment to a message", () => {
+    const msg = (reason: Parameters<typeof paymentMessage>[0]["reason"], extra = {}) =>
+      paymentMessage({ ok: false, reason, ...extra });
+    expect(msg("member_inactive")).toBe(
+      "This member is Inactive. Reactivate the member before recording a payment.",
+    );
+    expect(msg("no_active_loan")).toBe("Loan Repaid needs an active loan, and this member has none.");
+    expect(msg("loan_overpayment")).toBe("The Loan Repaid amount is more than the loan outstanding.");
+    expect(msg("idempotency_conflict")).toBe(
+      "This attempt was already sent with other details. Check the member's payments, then start again.",
+    );
+    expect(msg("invalid_input", { code: "mismatch" })).toBe(
+      "The breakdown must add up to the total exactly.",
+    );
+    expect(msg("invalid_input", { code: "future_paid_on" })).toBe(
+      "The payment date cannot be after today.",
+    );
+    expect(msg("invalid_input", { code: "invalid_amount", lineIndex: 2 })).toBe(
+      "A breakdown amount was refused. Use at most 2 decimals. (line 3)",
+    );
+    expect(msg("invalid_input", { code: "something_new", lineIndex: 0 })).toBe(
+      "The payment was refused. Check the fields and try again. (line 1)",
+    );
+    expect(msg("invalid_input")).toBe("The payment was refused. Check the fields and try again.");
+    expect(msg("invalid_input", { code: "toString" })).toBe(
+      "The payment was refused. Check the fields and try again.",
+    );
+    expect(msg("forbidden")).toBe("You do not have permission to do this.");
+    expect(msg("not_found")).toBe("Member not found.");
+    expect(msg("signed_out")).toBeNull();
+    expect(msg("network")).toBe(
+      "Cannot reach the server. Press Record payment again: it will not be saved twice.",
+    );
+    expect(msg("server")).toBe(
+      "Something went wrong. Press Record payment again: it will not be saved twice.",
+    );
+  });
+
+  it("says what happened to the SMS receipt", () => {
+    expect(smsMessage({ status: "sent" })).toBe("SMS receipt sent.");
+    expect(smsMessage({ status: "not_requested" })).toBe("No SMS receipt was requested.");
+    expect(smsMessage({ status: "skipped_repeat" })).toBe(
+      "This payment was already saved, so no new SMS receipt was sent.",
+    );
+    expect(smsMessage({ status: "failed", reason: "invalid_number" })).toBe(
+      "The SMS receipt was not sent: the member's phone number was refused.",
+    );
+    expect(smsMessage({ status: "failed", reason: "invalid_message" })).toBe(
+      "The SMS receipt was not sent: the message was refused.",
+    );
+    expect(smsMessage({ status: "failed", reason: "provider_error" })).toBe(
+      "The SMS receipt was not sent: the SMS provider failed.",
+    );
+  });
+
+  it("makes a 32-character hex key the server accepts, new each time", () => {
+    const fixed = newIdempotencyKey((bytes) => bytes.forEach((_, i) => (bytes[i] = i * 17)));
+    expect(fixed).toBe("00112233445566778899aabbccddeeff");
+    const a = newIdempotencyKey();
+    const b = newIdempotencyKey();
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+    expect(a).not.toBe(b);
   });
 });

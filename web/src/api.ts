@@ -3,7 +3,8 @@
 // (server/src/payments-routes.ts, U.4d). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
-// Amounts arrive as naira strings (A-18) and are kept as strings; the browser does no money sums.
+// Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
+// The payment form's breakdown check sums whole kobo as BigInt (Members.tsx, A-209).
 
 import { API_PREFIX } from "./api-proxy.ts";
 import type { SessionKeeper } from "./session.ts";

@@ -18,6 +18,7 @@ import type {
   CreateExpenseResult,
   CreateLoanResult,
   CreatePaymentResult,
+  CreatePayOffResult,
   DeleteExpenseResult,
   Expense,
   ExpenseEdit,
@@ -32,6 +33,7 @@ import type {
   NewExpense,
   NewLoan,
   NewPayment,
+  NewPayOff,
   Payment,
   SmsOutcome,
   UpdateExpenseResult,
@@ -66,6 +68,7 @@ import {
   formatDate,
   formatDay,
   formatNaira,
+  hasPayout,
   isCalendarDay,
   koboToNaira,
   lagosToday,
@@ -73,9 +76,12 @@ import {
   memberMessage,
   nairaToKobo,
   newIdempotencyKey,
+  payOffLines,
+  payOffMessage,
   paymentMessage,
   recordButtonLabel,
   savedLoanMessage,
+  savedPayOffMessage,
   savedPaymentMessage,
   searchMembers,
   smsMessage,
@@ -102,6 +108,7 @@ const idleApi: Api = {
   createExpense: async () => ({ ok: false, reason: "server" }),
   updateExpense: async () => ({ ok: false, reason: "server" }),
   deleteExpense: async () => ({ ok: false, reason: "server" }),
+  createPayOff: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -190,6 +197,8 @@ interface FakeApi extends Api {
   edited: { id: string; input: ExpenseEdit }[];
   /** Every expense id the screen deleted, in order. */
   deleted: string[];
+  /** Every pay-off the screen sent, in order. */
+  paidOff: NewPayOff[];
   signOutFromServer(): void;
 }
 
@@ -239,6 +248,8 @@ function fakeApi(
     edit?: UpdateExpenseResult[];
     /** Answers to deleteExpense in turn; the last one repeats. */
     remove?: DeleteExpenseResult[];
+    /** Answers to createPayOff in turn; the last one repeats. */
+    payOff?: CreatePayOffResult[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -249,6 +260,7 @@ function fakeApi(
     const spent: NewExpense[] = [];
     const edited: { id: string; input: ExpenseEdit }[] = [];
     const deleted: string[] = [];
+    const paidOff: NewPayOff[] = [];
     return {
       calls,
       paid,
@@ -257,6 +269,7 @@ function fakeApi(
       spent,
       edited,
       deleted,
+      paidOff,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -332,6 +345,12 @@ function fakeApi(
         deleted.push(id);
         const answers = opts.remove ?? [];
         return answers[Math.min(deleted.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      createPayOff: async (input) => {
+        calls.push("payoff");
+        paidOff.push(input);
+        const answers = opts.payOff ?? [];
+        return answers[Math.min(paidOff.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
     };
   };
@@ -2519,5 +2538,339 @@ describe("expense edit and delete (jsdom)", () => {
     expect(rowButtons(0)).toEqual(["Edit", "Delete"]);
     expect(api.deleted).toEqual(["e4"]);
     expect(api.expenseQueries).toHaveLength(1);
+  });
+});
+
+const PAY_OFF_BALANCES: MemberBalances = {
+  memberId: "m1",
+  categories: [
+    { category: "Shares", balance: "20000.05", refundable: true },
+    { category: "Savings", balance: "5000.00", refundable: true },
+    { category: "Special Savings", balance: "0.00", refundable: true },
+    { category: "Development Levy", balance: "1500.00", refundable: false },
+  ],
+  refundableTotal: "25000.05",
+  nonRefundableTotal: "1500.00",
+};
+
+const ZERO_BALANCES: MemberBalances = {
+  memberId: "m1",
+  categories: [
+    { category: "Shares", balance: "0.00", refundable: true },
+    { category: "Development Levy", balance: "1500.00", refundable: false },
+  ],
+  refundableTotal: "0.00",
+  nonRefundableTotal: "1500.00",
+};
+
+function paidOff(total: string): Extract<CreatePayOffResult, { ok: true }> {
+  return {
+    ok: true,
+    payOff: {
+      id: "po1",
+      memberId: "m1",
+      membershipId: "IO-001",
+      method: "BANK_TRANSFER",
+      total,
+      lines: [{ category: "Shares", amount: total }],
+      expenseId: "e9",
+      createdById: "u1",
+      createdAt: "2026-10-23T09:00:00.000Z",
+    },
+    replayed: false,
+  };
+}
+
+describe("pay-off helpers", () => {
+  it("lists only the refundable categories above ₦0.00, in the server's order", () => {
+    expect(payOffLines(PAY_OFF_BALANCES)).toEqual([
+      { category: "Shares", balance: "20000.05" },
+      { category: "Savings", balance: "5000.00" },
+    ]);
+    expect(payOffLines(ZERO_BALANCES)).toEqual([]);
+  });
+
+  it("offers a pay-off only for a payout above ₦0.00", () => {
+    expect(hasPayout(PAY_OFF_BALANCES)).toBe(true);
+    expect(hasPayout({ ...PAY_OFF_BALANCES, refundableTotal: "0.01" })).toBe(true);
+    expect(hasPayout(ZERO_BALANCES)).toBe(false);
+    expect(hasPayout({ ...PAY_OFF_BALANCES, refundableTotal: "odd" })).toBe(false);
+  });
+
+  it("maps each refused pay-off to a message", () => {
+    const cases: [Extract<CreatePayOffResult, { ok: false }>, string | null][] = [
+      [{ ok: false, reason: "member_inactive" }, "This member is already Inactive."],
+      [
+        { ok: false, reason: "active_loan" },
+        "This member has an active loan. The loan must be fully repaid before a pay-off.",
+      ],
+      [{ ok: false, reason: "nothing_to_pay_off" }, "This member has no refundable balance to pay out."],
+      [
+        { ok: false, reason: "payout_changed" },
+        "The balances changed after they were shown. Check the new payout and confirm again.",
+      ],
+      [
+        { ok: false, reason: "idempotency_conflict" },
+        "This attempt was already sent with other details. Check the member's balances, then start again.",
+      ],
+      [{ ok: false, reason: "invalid_input", code: "invalid_method" }, "Choose Cash or Bank transfer."],
+      [{ ok: false, reason: "invalid_input", code: "invalid_total" }, "The pay-off was refused. Try again."],
+      [{ ok: false, reason: "invalid_input" }, "The pay-off was refused. Try again."],
+      [{ ok: false, reason: "forbidden" }, "You do not have permission to do this."],
+      [{ ok: false, reason: "not_found" }, "Member not found."],
+      [{ ok: false, reason: "signed_out" }, null],
+      [
+        { ok: false, reason: "network" },
+        "Cannot reach the server. Press Confirm pay-off again: it will not be paid twice.",
+      ],
+      [
+        { ok: false, reason: "server" },
+        "Something went wrong. Press Confirm pay-off again: it will not be paid twice.",
+      ],
+    ];
+    for (const [result, message] of cases) expect(payOffMessage(result)).toBe(message);
+  });
+
+  it("says what was paid out and that the member is now Inactive", () => {
+    expect(savedPayOffMessage(paidOff("25000.05"))).toBe(
+      "Pay-off of ₦25,000.05 recorded. The member is now Inactive.",
+    );
+  });
+});
+
+const PAYER_OFF: Me = {
+  ...ME,
+  permissions: ["members.view", "payments.view", "loans.view", "payments.create", "payoff.process"],
+};
+
+const PAY_OFF_BUTTON = "Process pay-off / exit member";
+const CONFIRM_BUTTON = "Confirm pay-off & inactivate";
+
+async function openPayOff() {
+  await openDetail("Test Member One");
+  await click(button(PAY_OFF_BUTTON));
+}
+
+describe("pay-off (jsdom)", () => {
+  it("has no pay-off button without payoff.process", async () => {
+    await mount(fakeApi({ restore: PAYER, members: [ACTIVE_ONE], balances: { ok: true, value: PAY_OFF_BALANCES } }));
+    await openDetail("Test Member One");
+    expect(button("Record payment")).toBeTruthy();
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+  });
+
+  it("has no pay-off button for an Inactive member, with an active loan, or with nothing to pay out", async () => {
+    await mount(fakeApi({ restore: PAYER_OFF, members: [INACTIVE_ONE], balances: { ok: true, value: PAY_OFF_BALANCES } }));
+    await openMembers();
+    await click(button("All"));
+    await click(el('button[aria-label="View Example Inactive"]'));
+    expect(el("h1").textContent).toBe("Example Inactive");
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+    await act(async () => root?.unmount());
+
+    await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        loans: { ok: true, value: [ACTIVE_LOAN] },
+      }),
+    );
+    await openDetail("Test Member One");
+    expect(el(".loan").textContent).toBe("On loan");
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+    await act(async () => root?.unmount());
+
+    await mount(fakeApi({ restore: PAYER_OFF, members: [ACTIVE_ONE], balances: { ok: true, value: ZERO_BALANCES } }));
+    await openDetail("Test Member One");
+    expect(sectionText("Balances")).toContain("₦0.00");
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+    await act(async () => root?.unmount());
+
+    await mount(fakeApi({ restore: PAYER_OFF, members: [ACTIVE_ONE], balances: { ok: false, reason: "network" } }));
+    await openDetail("Test Member One");
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+  });
+
+  it("shows the button at the bottom, after the payments, and opens the confirmation there", async () => {
+    await mount(fakeApi({ restore: PAYER_OFF, members: [ACTIVE_ONE], balances: { ok: true, value: PAY_OFF_BALANCES } }));
+    await openDetail("Test Member One");
+    const bar = el(".payoff-bar");
+    expect(bar.previousElementSibling?.querySelector("h2")?.textContent).toBe("Payments");
+    expect(bar.nextElementSibling).toBeNull();
+    await click(button(PAY_OFF_BUTTON));
+    const confirm = el("section.payoff-confirm");
+    expect(confirm.previousElementSibling?.querySelector("h2")?.textContent).toBe("Payments");
+    expect(confirm.nextElementSibling).toBeNull();
+  });
+
+  it("lists the refundable balances paid out, the total and what is retained; one form at a time", async () => {
+    const api = await mount(
+      fakeApi({ restore: PAYER_OFF, members: [ACTIVE_ONE], balances: { ok: true, value: PAY_OFF_BALANCES } }),
+    );
+    await openPayOff();
+    const confirm = el("section.payoff-confirm");
+    expect(confirm.querySelector("h2")?.textContent).toBe("Confirm member pay-off / exit");
+    expect(confirm.textContent).toContain("You are about to close Test Member One's cooperative account.");
+    const rows = Array.from(confirm.querySelectorAll("table.payoff-lines tr")).map((r) => r.textContent);
+    expect(rows).toEqual(["Shares₦20,000.05", "Savings₦5,000.00"]);
+    expect(el(".payoff-total").textContent).toBe("Total pay-off₦25,000.05");
+    expect(confirm.textContent).toContain("Retained by cooperative, not paid out: ₦1,500.00.");
+    expect(el<HTMLSelectElement>("select[name=payOffMethod]").value).toBe("BANK_TRANSFER");
+    expect(() => button("Record payment")).toThrow();
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+    expect(api.paidOff).toEqual([]);
+  });
+
+  it("pays out the total shown, then shows the notice and reads the member and balances again", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [paidOff("25000.05")],
+      }),
+    );
+    await openPayOff();
+    await choose(el("select[name=payOffMethod]"), "CASH");
+    // The reads after the pay-off find the member Inactive with ₦0.00 to pay out (DR-07).
+    api.getMember = async (id) => {
+      api.calls.push(`get ${id}`);
+      return { ok: true, value: { ...ACTIVE_ONE, status: "INACTIVE" } };
+    };
+    api.memberBalances = async (id) => {
+      api.calls.push(`balances ${id}`);
+      return { ok: true, value: ZERO_BALANCES };
+    };
+    await click(button(CONFIRM_BUTTON));
+
+    expect(api.paidOff).toHaveLength(1);
+    const sent = api.paidOff[0]!;
+    expect(sent.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
+    expect({ ...sent, idempotencyKey: "" }).toEqual({
+      idempotencyKey: "",
+      memberId: "m1",
+      method: "CASH",
+      total: "25000.05",
+    });
+    expect(el("[role=status]").textContent).toBe("Pay-off of ₦25,000.05 recorded. The member is now Inactive.");
+    expect(container?.querySelector(".payoff-confirm")).toBeNull();
+    expect(countCalls(api, "get m1")).toBe(2);
+    expect(countCalls(api, "balances m1")).toBe(2);
+    expect(countCalls(api, "payments m1")).toBe(2);
+    expect(countCalls(api, "loans m1")).toBe(2);
+    expect(el(".status-inactive").textContent).toBe("Inactive");
+    expect(() => button(PAY_OFF_BUTTON)).toThrow();
+    expect(() => button("Record payment")).toThrow();
+  });
+
+  it("sends the same key after a network failure, and a new key after a method change", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [{ ok: false, reason: "network" }, { ok: false, reason: "server" }, paidOff("25000.05")],
+      }),
+    );
+    await openPayOff();
+    await click(button(CONFIRM_BUTTON));
+    expect(el("[role=alert]").textContent).toBe(
+      "Cannot reach the server. Press Confirm pay-off again: it will not be paid twice.",
+    );
+    await click(button(CONFIRM_BUTTON));
+    expect(el("[role=alert]").textContent).toContain("Something went wrong.");
+    expect(api.paidOff[1]).toEqual(api.paidOff[0]);
+
+    await choose(el("select[name=payOffMethod]"), "CASH");
+    await click(button(CONFIRM_BUTTON));
+    expect(api.paidOff).toHaveLength(3);
+    expect(api.paidOff[2]!.method).toBe("CASH");
+    expect(api.paidOff[2]!.idempotencyKey).not.toBe(api.paidOff[0]!.idempotencyKey);
+    expect(el("[role=status]").textContent).toContain("Pay-off of ₦25,000.05");
+  });
+
+  it("makes a new key after idempotency_conflict", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [{ ok: false, reason: "idempotency_conflict" }],
+      }),
+    );
+    await openPayOff();
+    await click(button(CONFIRM_BUTTON));
+    await click(button(CONFIRM_BUTTON));
+    expect(api.paidOff).toHaveLength(2);
+    expect(api.paidOff[1]!.idempotencyKey).not.toBe(api.paidOff[0]!.idempotencyKey);
+  });
+
+  it("on payout_changed reads the balances again and sends the new payout with a new key", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [{ ok: false, reason: "payout_changed" }, paidOff("30000.05")],
+      }),
+    );
+    await openPayOff();
+    // A payment saved elsewhere raised Savings after the balances were shown.
+    const raised: MemberBalances = {
+      ...PAY_OFF_BALANCES,
+      categories: PAY_OFF_BALANCES.categories.map((c) =>
+        c.category === "Savings" ? { ...c, balance: "10000.00" } : c,
+      ),
+      refundableTotal: "30000.05",
+    };
+    api.memberBalances = async (id) => {
+      api.calls.push(`balances ${id}`);
+      return { ok: true, value: raised };
+    };
+    await click(button(CONFIRM_BUTTON));
+    expect(el("[role=alert]").textContent).toBe(
+      "The balances changed after they were shown. Check the new payout and confirm again.",
+    );
+    expect(countCalls(api, "balances m1")).toBe(2);
+    expect(el(".payoff-total").textContent).toBe("Total pay-off₦30,000.05");
+    expect(el(".payoff-confirm").textContent).toContain("Savings₦10,000.00");
+
+    await click(button(CONFIRM_BUTTON));
+    expect(api.paidOff).toHaveLength(2);
+    expect(api.paidOff[0]!.total).toBe("25000.05");
+    expect(api.paidOff[1]!.total).toBe("30000.05");
+    expect(api.paidOff[1]!.idempotencyKey).not.toBe(api.paidOff[0]!.idempotencyKey);
+    expect(el("[role=status]").textContent).toBe("Pay-off of ₦30,000.05 recorded. The member is now Inactive.");
+  });
+
+  it("keeps the confirmation and shows the server's refusal", async () => {
+    await mount(
+      fakeApi({
+        restore: PAYER_OFF,
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: PAY_OFF_BALANCES },
+        payOff: [{ ok: false, reason: "active_loan" }],
+      }),
+    );
+    await openPayOff();
+    await click(button(CONFIRM_BUTTON));
+    expect(el("[role=alert]").textContent).toBe(
+      "This member has an active loan. The loan must be fully repaid before a pay-off.",
+    );
+    expect(el(".payoff-confirm")).toBeTruthy();
+    expect(container?.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("closes on Cancel with no call", async () => {
+    const api = await mount(
+      fakeApi({ restore: PAYER_OFF, members: [ACTIVE_ONE], balances: { ok: true, value: PAY_OFF_BALANCES } }),
+    );
+    await openPayOff();
+    await click(button("Cancel"));
+    expect(container?.querySelector(".payoff-confirm")).toBeNull();
+    expect(button(PAY_OFF_BUTTON)).toBeTruthy();
+    expect(button("Record payment")).toBeTruthy();
+    expect(api.paidOff).toEqual([]);
   });
 });

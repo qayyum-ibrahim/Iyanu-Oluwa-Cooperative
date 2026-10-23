@@ -1276,3 +1276,127 @@ describe("deleteExpense", () => {
     expect(gone.signedOutCount()).toBe(1);
   });
 });
+
+const PAY_OFF = {
+  id: "po1",
+  memberId: "m1",
+  membershipId: "IO-001",
+  method: "BANK_TRANSFER",
+  total: "25000.05",
+  lines: [
+    { category: "Shares", amount: "20000.05" },
+    { category: "Savings", amount: "5000.00" },
+  ],
+  expenseId: "e9",
+  createdById: "u1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+};
+
+const NEW_PAY_OFF = {
+  idempotencyKey: "key-0000000000000004",
+  memberId: "m1",
+  method: "BANK_TRANSFER" as const,
+  total: "25000.05",
+};
+
+const SENT_PAY_OFF = { memberId: "m1", method: "BANK_TRANSFER", total: "25000.05" };
+
+describe("createPayOff", () => {
+  it("posts the pay-off with the key in the Idempotency-Key header, not in the body", async () => {
+    const { api, calls, keys } = signedIn(() => json(201, { payOff: PAY_OFF }));
+    expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: true, payOff: PAY_OFF, replayed: false });
+    expect(calls).toEqual([{ path: "/api/payoffs", method: "POST", auth: "Bearer acc1", body: SENT_PAY_OFF }]);
+    expect(keys).toEqual(["key-0000000000000004"]);
+  });
+
+  it("reads the Idempotent-Replayed header", async () => {
+    const { api } = signedIn(() => replayed({ payOff: PAY_OFF }));
+    expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: true, payOff: PAY_OFF, replayed: true });
+  });
+
+  it("on a 401 refreshes once and sends the same key and body again", async () => {
+    const { api, calls, keys } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(201, { payOff: PAY_OFF }) : json(401, {});
+    });
+    expect(await api.createPayOff(NEW_PAY_OFF)).toMatchObject({ ok: true, replayed: false });
+    expect(calls.map((c) => c.path)).toEqual(["/api/payoffs", "/api/refresh", "/api/payoffs"]);
+    expect(calls[2]?.body).toEqual(SENT_PAY_OFF);
+    expect(keys[2]).toBe("key-0000000000000004");
+  });
+
+  it("passes each 409 reason on, and answers server for a 409 it does not know", async () => {
+    for (const error of [
+      "member_inactive",
+      "active_loan",
+      "nothing_to_pay_off",
+      "payout_changed",
+      "idempotency_conflict",
+    ]) {
+      const { api } = signedIn(() => json(409, { error }));
+      expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: error });
+    }
+    for (const body of [{ error: "loan_overpayment" }, { error: "toString" }, null, "x"]) {
+      const { api } = signedIn(() => json(409, body));
+      expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("passes the code of a 400 on", async () => {
+    const total = signedIn(() => json(400, { error: "invalid_input", code: "invalid_total" }));
+    expect(await total.api.createPayOff(NEW_PAY_OFF)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_total",
+    });
+    for (const body of [{ error: "invalid_input", code: 3 }, { error: "invalid_input" }, null]) {
+      const { api } = signedIn(() => json(400, body));
+      expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "invalid_input" });
+    }
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 201 of the wrong shape and for a 200", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { payOff: null },
+      { payOff: { ...PAY_OFF, total: 25000.05 } },
+      { payOff: { ...PAY_OFF, total: "25000.5" } },
+      { payOff: { ...PAY_OFF, method: "CHEQUE" } },
+      { payOff: { ...PAY_OFF, lines: null } },
+      { payOff: { ...PAY_OFF, lines: [{ category: "Shares", amount: "20000" }] } },
+      { payOff: { ...PAY_OFF, lines: [{ amount: "20000.05" }] } },
+      { payOff: { ...PAY_OFF, lines: ["Shares"] } },
+      { payOff: { ...PAY_OFF, expenseId: undefined } },
+      { payOff: { ...PAY_OFF, membershipId: 1 } },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(201, body));
+      expect(await api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, { payOff: PAY_OFF }));
+    expect(await wrong.api.createPayOff(NEW_PAY_OFF)).toEqual({ ok: false, reason: "server" });
+  });
+});

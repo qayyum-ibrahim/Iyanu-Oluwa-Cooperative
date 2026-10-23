@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.7a (size M), 2026-10-23: pay-off confirmation at the bottom of member detail (D-96, A-222)
+
+The owner said "fix inconsistencies and go". U.7 split into U.7a (pay-off) and U.7b (reactivate) (D-96).
+**Changed:** `web/src/api.ts` (`PayOff`, `NewPayOff`, `PayOffConflict`, `CreatePayOffResult`, `payOffOf`, `payOffFailureOf`, `createPayOff` with `POST /payoffs`, the key in the `Idempotency-Key` header and the reply shape checked; header comment), `web/src/Members.tsx` (`payOffLines`, `hasPayout`, `payOffMessage`, `savedPayOffMessage`, `PayOffConfirm`; the button and the confirmation at the bottom of member detail; the member read again after a pay-off; header comment rewritten, inconsistency 2), `web/src/App.tsx` (passes `payoff.process`; header comment), `web/src/styles.css` (`.payoff-bar`, `.payoff-confirm`, `.payoff-total`). Tests: `web/test/api.test.ts` (`createPayOff` 7), `web/test/app.test.tsx` (helpers 4, pay-off 10; fakes have `createPayOff`). Docs: DECISIONS (D-96), ASSUMPTIONS (A-222), PHASE_PLAN (U.7 split; U.6e wording fixed, inconsistency 1), TRACEABILITY (R-12, R-13), STATUS (U.6e wording gone with the new "Where we stopped").
+**Works (verified in this session):** `npm run check` (web): 4 files, 229 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.6e (size M), 2026-10-23: edit and delete an expense on the Expenses page (D-95, A-221)
 
 The owner said "go".

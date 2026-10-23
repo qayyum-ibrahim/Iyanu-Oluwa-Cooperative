@@ -1,9 +1,11 @@
 // Members list and add member (U.3e, R-01, R-02), member detail (U.3f, R-36), record a payment
 // from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
-// R-03), give a loan from member detail (U.5b, R-08, D-91). Search by name or Membership ID runs in the browser over the list the server sent (A-191 item 2). The server
-// checks every field again. Amounts stay the naira strings the server sent (A-18); the browser
-// only adds the naira sign and thousands commas. The one sum is the payment form's breakdown
-// check, in whole kobo as BigInt (U.4e, A-209); the server checks again.
+// R-03), give a loan from member detail (U.5b, R-08, D-91), the pay-off confirmation at the
+// bottom of member detail (U.7a, R-12, R-13, DR-05). Search by name or Membership ID runs in the
+// browser over the list the server sent (A-191 item 2). The server checks every field again.
+// Amounts stay the naira strings the server sent (A-18); the browser only adds the naira sign and
+// thousands commas. The one sum is the payment form's breakdown check, in whole kobo as BigInt
+// (U.4e, A-209); the server checks again. The pay-off sends back the payout the server sent.
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   Api,
@@ -11,6 +13,7 @@ import type {
   CallResult,
   CreateLoanResult,
   CreatePaymentResult,
+  CreatePayOffResult,
   Loan,
   Member,
   MemberBalances,
@@ -439,6 +442,61 @@ export function savedLoanMessage(saved: SavedLoan): string {
   return `Loan of ${formatNaira(saved.loan.principal)} on ${formatDay(saved.loan.givenOn)} given.`;
 }
 
+// Pay-off helpers (U.7a, R-12, DR-05). The confirmation is PayOffConfirm below.
+
+/** The refundable categories above ₦0.00: what a pay-off pays out, as the server's lines (DR-05). */
+export function payOffLines(balances: MemberBalances): { category: string; balance: string }[] {
+  return balances.categories
+    .filter((c) => c.refundable && (nairaToKobo(c.balance) ?? 0n) > 0n)
+    .map(({ category, balance }) => ({ category, balance }));
+}
+
+/** True when there is a payout above ₦0.00 to offer. */
+export function hasPayout(balances: MemberBalances): boolean {
+  return (nairaToKobo(balances.refundableTotal) ?? 0n) > 0n;
+}
+
+/**
+ * The message for a refused pay-off. Null for signed_out: the sign-in screen already shows.
+ * After network and server the pay-off may be saved; the confirmation keeps the key, so pressing
+ * again sends the same attempt and the server never pays out twice (D-76).
+ */
+export function payOffMessage(result: Extract<CreatePayOffResult, { ok: false }>): string | null {
+  switch (result.reason) {
+    case "member_inactive":
+      return "This member is already Inactive.";
+    case "active_loan":
+      return "This member has an active loan. The loan must be fully repaid before a pay-off.";
+    case "nothing_to_pay_off":
+      return "This member has no refundable balance to pay out.";
+    case "payout_changed":
+      return "The balances changed after they were shown. Check the new payout and confirm again.";
+    case "idempotency_conflict":
+      return "This attempt was already sent with other details. Check the member's balances, then start again.";
+    case "invalid_input":
+      return result.code === "invalid_method"
+        ? "Choose Cash or Bank transfer."
+        : "The pay-off was refused. Try again.";
+    case "forbidden":
+      return "You do not have permission to do this.";
+    case "not_found":
+      return "Member not found.";
+    case "signed_out":
+      return null;
+    case "network":
+      return "Cannot reach the server. Press Confirm pay-off again: it will not be paid twice.";
+    default:
+      return "Something went wrong. Press Confirm pay-off again: it will not be paid twice.";
+  }
+}
+
+type SavedPayOff = Extract<CreatePayOffResult, { ok: true }>;
+
+/** The notice after a pay-off: the amount paid out and the new status (DR-07). */
+export function savedPayOffMessage(saved: SavedPayOff): string {
+  return `Pay-off of ${formatNaira(saved.payOff.total)} recorded. The member is now Inactive.`;
+}
+
 const EMPTY: NewMember = { fullName: "", phone: "", address: "", occupation: "" };
 
 type ListState =
@@ -448,7 +506,13 @@ type ListState =
 
 type DetailApi = Pick<
   Api,
-  "getMember" | "memberBalances" | "listPayments" | "listLoans" | "createPayment" | "createLoan"
+  | "getMember"
+  | "memberBalances"
+  | "listPayments"
+  | "listLoans"
+  | "createPayment"
+  | "createLoan"
+  | "createPayOff"
 >;
 
 export interface MembersProps {
@@ -458,6 +522,7 @@ export interface MembersProps {
   canViewLoans: boolean;
   canRecordPayment: boolean;
   canGiveLoan: boolean;
+  canPayOff: boolean;
 }
 
 export default function Members({
@@ -467,6 +532,7 @@ export default function Members({
   canViewLoans,
   canRecordPayment,
   canGiveLoan,
+  canPayOff,
 }: MembersProps) {
   const [filter, setFilter] = useState<MemberStatusFilter>("active");
   const [search, setSearch] = useState("");
@@ -525,6 +591,7 @@ export default function Members({
         canViewLoans={canViewLoans}
         canRecordPayment={canRecordPayment}
         canGiveLoan={canGiveLoan}
+        canPayOff={canPayOff}
         firstPayment={firstPayment !== null && firstPayment.id === openId ? firstPayment : null}
         onBack={() => {
           setFirstPayment(null);
@@ -1099,6 +1166,113 @@ function LoanForm({ api, memberId, onSaved, onCancel }: LoanFormProps) {
   );
 }
 
+interface PayOffConfirmProps {
+  api: Pick<Api, "createPayOff">;
+  member: Member;
+  balances: MemberBalances;
+  onSaved(saved: SavedPayOff): void;
+  /** The server said the payout changed: read the balances again (A-185). */
+  onPayoutChanged(): void;
+  onCancel(): void;
+}
+
+/**
+ * Confirm a member's pay-off (R-12, DR-05; wording from the prototype's PayoffModal): the
+ * refundable balances paid out, the total, what the cooperative keeps, and the pay-out method.
+ * The total sent is the payout shown, so a change in between answers payout_changed (A-185).
+ * One Idempotency-Key per attempt, as PaymentForm (D-76): a new key after a method change,
+ * idempotency_conflict or payout_changed.
+ */
+function PayOffConfirm({ api, member, balances, onSaved, onPayoutChanged, onCancel }: PayOffConfirmProps) {
+  const [method, setMethod] = useState<PaymentMethod>("BANK_TRANSFER");
+  const [key, setKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function confirm() {
+    if (busy) return;
+    const attemptKey = key ?? newIdempotencyKey();
+    setKey(attemptKey);
+    setBusy(true);
+    setError(null);
+    const result = await api.createPayOff({
+      idempotencyKey: attemptKey,
+      memberId: member.id,
+      method,
+      total: balances.refundableTotal,
+    });
+    if (result.ok) {
+      onSaved(result);
+      return;
+    }
+    setBusy(false);
+    // The next press is a new attempt: the key was used with other details, or the total changes.
+    if (result.reason === "idempotency_conflict" || result.reason === "payout_changed") setKey(null);
+    if (result.reason === "payout_changed") onPayoutChanged();
+    const message = payOffMessage(result);
+    if (message !== null) setError(message);
+  }
+
+  const lines = payOffLines(balances);
+
+  return (
+    <section className="form payoff-confirm" aria-label="Confirm member pay-off">
+      <h2 className="form-title">Confirm member pay-off / exit</h2>
+      <p className="form-note">
+        You are about to close <b>{member.fullName}</b>'s cooperative account. These refundable
+        balances are paid out and become ₦0.00. The member becomes Inactive.
+      </p>
+      <div className="table-wrap">
+        <table className="payoff-lines">
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.category}>
+                <td>{l.category}</td>
+                <td className="amount">{formatNaira(l.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="payoff-total">
+        <span>Total pay-off</span>
+        <b>{formatNaira(balances.refundableTotal)}</b>
+      </div>
+      <p className="form-note">
+        Retained by cooperative, not paid out: {formatNaira(balances.nonRefundableTotal)}.
+      </p>
+      <label className="field">
+        <span>Pay-out method</span>
+        <select
+          name="payOffMethod"
+          value={method}
+          disabled={busy}
+          onChange={(e) => {
+            setMethod(e.target.value as PaymentMethod);
+            setKey(null);
+          }}
+        >
+          <option value="BANK_TRANSFER">{METHOD_LABELS.BANK_TRANSFER}</option>
+          <option value="CASH">{METHOD_LABELS.CASH}</option>
+        </select>
+      </label>
+      {error && (
+        <em role="alert" className="error">
+          {error}
+        </em>
+      )}
+      <div className="form-actions">
+        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className="danger-btn" onClick={() => void confirm()} disabled={busy}>
+          {busy ? "Paying out…" : "Confirm pay-off & inactivate"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 interface MemberDetailProps {
   api: DetailApi;
   id: string;
@@ -1106,6 +1280,7 @@ interface MemberDetailProps {
   canViewLoans: boolean;
   canRecordPayment: boolean;
   canGiveLoan: boolean;
+  canPayOff: boolean;
   /** The member just added: open with the payment form and a first-payment notice (U.4f, R-03). */
   firstPayment: Member | null;
   onBack(): void;
@@ -1113,10 +1288,12 @@ interface MemberDetailProps {
 
 /**
  * One member: profile, balances (D-86), loans and payments (U.3f), the payment form for an
- * Active member with payments.create (U.4e2, D-89) and the loan form for an Active member with
- * loans.disburse and no active loan seen (U.5b). One form shows at a time. The payments and loans sections show only
- * with payments.view and loans.view (A-201). Pay-offs are not listed: there is no pay-off read
- * (A-186); the balances already take them off.
+ * Active member with payments.create (U.4e2, D-89), the loan form for an Active member with
+ * loans.disburse and no active loan seen (U.5b), and at the bottom the pay-off for an Active
+ * member with payoff.process, a payout above ₦0.00 and no active loan seen (U.7a, R-13).
+ * One form shows at a time. The payments and loans sections show only with payments.view and
+ * loans.view (A-201). Pay-offs are not listed: there is no pay-off read (A-186); the balances
+ * already take them off.
  */
 function MemberDetail({
   api,
@@ -1125,6 +1302,7 @@ function MemberDetail({
   canViewLoans,
   canRecordPayment,
   canGiveLoan,
+  canPayOff,
   firstPayment,
   onBack,
 }: MemberDetailProps) {
@@ -1136,7 +1314,7 @@ function MemberDetail({
   const [loans, setLoans] = useState<Section<Loan[]>>(
     canViewLoans ? { kind: "loading" } : { kind: "hidden" },
   );
-  const [open, setOpen] = useState<"payment" | "loan" | null>(
+  const [open, setOpen] = useState<"payment" | "loan" | "payoff" | null>(
     firstPayment !== null && canRecordPayment ? "payment" : null,
   );
   const [notice, setNotice] = useState<string | null>(
@@ -1144,8 +1322,10 @@ function MemberDetail({
       ? null
       : `${firstPayment.fullName} was added as ${firstPayment.membershipId}. Record the first payment now.`,
   );
-  // Bumped after a saved payment or loan, so balances, payments and loans are read again.
+  // Bumped after a saved payment, loan or pay-off, so balances, payments and loans are read again.
   const [reload, setReload] = useState(0);
+  // Bumped after a pay-off, so the member is read again with its new status (DR-07).
+  const [memberReload, setMemberReload] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -1155,7 +1335,7 @@ function MemberDetail({
     return () => {
       active = false;
     };
-  }, [api, id]);
+  }, [api, id, memberReload]);
 
   useEffect(() => {
     let active = true;
@@ -1178,7 +1358,7 @@ function MemberDetail({
     setReload((n) => n + 1);
   }
 
-  function openForm(form: "payment" | "loan") {
+  function openForm(form: "payment" | "loan" | "payoff") {
     setNotice(null);
     setOpen(form);
   }
@@ -1383,6 +1563,32 @@ function MemberDetail({
           )}
         </section>
       )}
+
+      {open === "payoff" && canPayOff && m.status === "ACTIVE" && balances.kind === "loaded" && (
+        <PayOffConfirm
+          api={api}
+          member={m}
+          balances={balances.value}
+          onSaved={(result) => {
+            saved(savedPayOffMessage(result));
+            setMemberReload((n) => n + 1);
+          }}
+          onPayoutChanged={() => setReload((n) => n + 1)}
+          onCancel={() => setOpen(null)}
+        />
+      )}
+      {canPayOff &&
+        m.status === "ACTIVE" &&
+        balances.kind === "loaded" &&
+        hasPayout(balances.value) &&
+        !onLoan &&
+        open === null && (
+          <div className="payoff-bar">
+            <button type="button" className="danger-btn" onClick={() => openForm("payoff")}>
+              Process pay-off / exit member
+            </button>
+          </div>
+        )}
     </>
   );
 }

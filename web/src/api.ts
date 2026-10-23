@@ -1,7 +1,8 @@
 // API client for the auth routes (server/src/auth-routes.ts), the member routes
 // (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
-// (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b) and the
-// expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e).
+// (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b), the
+// expense calls (server/src/expenses-routes.ts: list U.6c, record U.6d, edit and delete U.6e) and
+// paying a member out (server/src/payoffs-routes.ts, U.7a).
 // Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
@@ -183,6 +184,41 @@ export interface ExpenseList {
   total: string;
 }
 
+/** A pay-off as POST /payoffs sends it (PayOffView in server/src/payoffs.ts). */
+export interface PayOff {
+  id: string;
+  memberId: string;
+  membershipId: string;
+  method: PaymentMethod;
+  total: string;
+  /** One line per refundable category paid out (DR-05). */
+  lines: { category: string; amount: string }[];
+  /** The Membership Withdrawal expense saved with the pay-off. */
+  expenseId: string;
+  createdById: string;
+  createdAt: string;
+}
+
+/**
+ * The body of POST /payoffs plus its Idempotency-Key header. total is the payout the user saw and
+ * confirmed, a naira string; the server refuses it if the balances changed since (A-185).
+ */
+export interface NewPayOff {
+  /** Made by the caller once per pay-off attempt; a retry sends the same key (D-76). */
+  idempotencyKey: string;
+  memberId: string;
+  method: PaymentMethod;
+  total: string;
+}
+
+/** The 409 answers of POST /payoffs (PayOffFailure in server/src/payoffs.ts). */
+export type PayOffConflict =
+  | "member_inactive"
+  | "active_loan"
+  | "nothing_to_pay_off"
+  | "payout_changed"
+  | "idempotency_conflict";
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -223,6 +259,11 @@ export type UpdateExpenseResult =
 export type DeleteExpenseResult =
   | { ok: true }
   | { ok: false; reason: CallFailure | "not_deletable"; code?: string };
+
+/** replayed: the key had been used and the server sent back the first pay-off. */
+export type CreatePayOffResult =
+  | { ok: true; payOff: PayOff; replayed: boolean }
+  | { ok: false; reason: CallFailure | PayOffConflict; code?: string };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -277,6 +318,7 @@ export interface Api {
   createExpense(input: NewExpense): Promise<CreateExpenseResult>;
   updateExpense(id: string, input: ExpenseEdit): Promise<UpdateExpenseResult>;
   deleteExpense(id: string): Promise<DeleteExpenseResult>;
+  createPayOff(input: NewPayOff): Promise<CreatePayOffResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -494,6 +536,39 @@ function expenseOf(value: unknown): Expense | null {
   };
 }
 
+const PAY_OFF_TEXT_FIELDS = ["id", "memberId", "membershipId", "expenseId", "createdById", "createdAt"] as const;
+
+function payOffOf(value: unknown): PayOff | null {
+  if (!isObject(value) || !Array.isArray(value["lines"])) return null;
+  for (const field of PAY_OFF_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  const { method, total } = value;
+  if (method !== "CASH" && method !== "BANK_TRANSFER") return null;
+  if (typeof total !== "string" || !NAIRA.test(total)) return null;
+  const lines: PayOff["lines"] = [];
+  for (const line of value["lines"]) {
+    if (!isObject(line)) return null;
+    const { category, amount } = line;
+    if (typeof category !== "string" || typeof amount !== "string" || !NAIRA.test(amount)) {
+      return null;
+    }
+    lines.push({ category, amount });
+  }
+  const v = value as Record<(typeof PAY_OFF_TEXT_FIELDS)[number], string>;
+  return {
+    id: v.id,
+    memberId: v.memberId,
+    membershipId: v.membershipId,
+    method,
+    total,
+    lines,
+    expenseId: v.expenseId,
+    createdById: v.createdById,
+    createdAt: v.createdAt,
+  };
+}
+
 /** The query string for GET /expenses, fields in a fixed order, each value made safe. */
 function expenseQuery(filter: ExpenseFilter): string {
   const parts: string[] = [];
@@ -574,6 +649,26 @@ function loanFailureOf(status: number, body: unknown): Extract<CreateLoanResult,
   const reply = isObject(body) ? body : {};
   if (status === 409) {
     const conflict = LOAN_CONFLICTS.find((c) => c === reply["error"]);
+    return { ok: false, reason: conflict ?? "server" };
+  }
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  const { code } = reply;
+  return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
+}
+
+const PAY_OFF_CONFLICTS = [
+  "member_inactive",
+  "active_loan",
+  "nothing_to_pay_off",
+  "payout_changed",
+  "idempotency_conflict",
+] as const;
+
+/** A refused POST /payoffs. A 409 with an error we do not know answers server. */
+function payOffFailureOf(status: number, body: unknown): Extract<CreatePayOffResult, { ok: false }> {
+  const reply = isObject(body) ? body : {};
+  if (status === 409) {
+    const conflict = PAY_OFF_CONFLICTS.find((c) => c === reply["error"]);
     return { ok: false, reason: conflict ?? "server" };
   }
   if (status !== 400) return { ok: false, reason: failureOf(status) };
@@ -941,6 +1036,27 @@ export function createApi(deps: ApiDeps): Api {
       if (response === null) return { ok: false, reason: "signed_out" };
       if (response.status === 204) return { ok: true };
       return expenseChangeFailureOf(response.status, await readJson(response), "not_deletable");
+    },
+
+    async createPayOff(input) {
+      const { idempotencyKey, ...body } = input;
+      let response: Response | null;
+      try {
+        response = await authed("/payoffs", {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status !== 201) return payOffFailureOf(response.status, reply);
+      const payOff = isObject(reply) ? payOffOf(reply["payOff"]) : null;
+      if (payOff === null) return { ok: false, reason: "server" };
+      const replayed = response.headers.get("Idempotent-Replayed") === "true";
+      return { ok: true, payOff, replayed };
     },
   };
 }

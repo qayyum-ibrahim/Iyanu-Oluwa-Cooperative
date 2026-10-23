@@ -528,3 +528,34 @@ td.amount {
   background: #fff2f0;
   color: #a51d16;
 }
+
+/* Pay-off at the bottom of member detail (U.7a, R-13) */
+.payoff-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+.payoff-bar .danger-btn {
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 14px;
+  font-weight: 700;
+}
+.payoff-confirm {
+  max-width: 620px;
+  margin-left: auto;
+}
+.payoff-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  background: #ecfdf5;
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #53605a;
+  font-size: 13px;
+}
+.payoff-total b {
+  color: #065f46;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}

@@ -5,7 +5,12 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/DECISIONS.md
 docs/DOMAIN_RULES.md
+legacy-prototype/README.md
+legacy-prototype/src/App.jsx
+server/src/categories.ts
+server/src/breakdown.ts
 web/src/api.ts
-web/test/api.test.ts
-server/src/payments-routes.ts
-server/src/payments.ts
+web/src/Members.tsx
+web/src/App.tsx
+web/src/styles.css
+web/test/app.test.tsx

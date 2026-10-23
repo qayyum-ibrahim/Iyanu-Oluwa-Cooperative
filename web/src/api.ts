@@ -1,5 +1,6 @@
 // API client for the auth routes (server/src/auth-routes.ts), the member routes
-// (server/src/members-routes.ts, U.3d) and the payment and loan lists (U.3f). Tokens travel in the JSON body
+// (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f) and recording a payment
+// (server/src/payments-routes.ts, U.4d). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; the browser does no money sums.
@@ -64,10 +65,38 @@ export interface Payment {
   membershipId: string;
   method: PaymentMethod;
   total: string;
+  /** The day the member paid, "YYYY-MM-DD" in Lagos (D-87). */
+  paidOn: string;
   lines: { category: string; amount: string }[];
   createdById: string;
   createdAt: string;
 }
+
+/** The body of POST /payments plus its Idempotency-Key header. Amounts are naira strings (A-18). */
+export interface NewPayment {
+  /** Made by the caller once per payment attempt; a retry sends the same key (D-46). */
+  idempotencyKey: string;
+  memberId: string;
+  method: PaymentMethod;
+  paidOn: string;
+  total: string;
+  lines: { category: string; amount: string }[];
+  sendSms: boolean;
+}
+
+/** The sms part of the POST /payments reply (SmsOutcome in server/src/payment-sms.ts). */
+export type SmsOutcome =
+  | { status: "not_requested" }
+  | { status: "skipped_repeat" }
+  | { status: "sent" }
+  | { status: "failed"; reason: "invalid_number" | "invalid_message" | "provider_error" };
+
+/** The 409 answers of POST /payments (PaymentFailure in server/src/payments.ts). */
+export type PaymentConflict =
+  | "member_inactive"
+  | "idempotency_conflict"
+  | "no_active_loan"
+  | "loan_overpayment";
 
 /** A loan as GET /loans?memberId= sends it (LoanListView in server/src/loans.ts). */
 export interface Loan {
@@ -97,6 +126,14 @@ export type CallFailure =
   | "server";
 
 export type CallResult<T> = { ok: true; value: T } | { ok: false; reason: CallFailure };
+
+/**
+ * replayed: the key had been used and the server sent back the first payment.
+ * code and lineIndex come with invalid_input when the server names the check that failed.
+ */
+export type CreatePaymentResult =
+  | { ok: true; payment: Payment; replayed: boolean; sms: SmsOutcome }
+  | { ok: false; reason: CallFailure | PaymentConflict; code?: string; lineIndex?: number };
 
 /** "rejected": the server refused the refresh token. "failed": no answer or an odd answer. */
 type RefreshOutcome = "ok" | "rejected" | "failed";
@@ -144,6 +181,7 @@ export interface Api {
   createMember(input: NewMember): Promise<CallResult<Member>>;
   memberBalances(id: string): Promise<CallResult<MemberBalances>>;
   listPayments(memberId: string): Promise<CallResult<Payment[]>>;
+  createPayment(input: NewPayment): Promise<CreatePaymentResult>;
   listLoans(memberId: string): Promise<CallResult<Loan[]>>;
 }
 
@@ -250,6 +288,9 @@ function balancesOf(value: unknown): MemberBalances | null {
 
 const PAYMENT_TEXT_FIELDS = ["id", "memberId", "membershipId", "createdById", "createdAt"] as const;
 
+/** The shape of a day as the server writes it; the server checks that it is a real day. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 function paymentOf(value: unknown): Payment | null {
   if (!isObject(value) || !Array.isArray(value["lines"])) return null;
   for (const field of PAYMENT_TEXT_FIELDS) {
@@ -258,6 +299,8 @@ function paymentOf(value: unknown): Payment | null {
   const { method, total } = value;
   if (method !== "CASH" && method !== "BANK_TRANSFER") return null;
   if (typeof total !== "string" || !NAIRA.test(total)) return null;
+  const paidOn = value["paidOn"];
+  if (typeof paidOn !== "string" || !DAY.test(paidOn)) return null;
   const lines: Payment["lines"] = [];
   for (const line of value["lines"]) {
     if (!isObject(line)) return null;
@@ -274,6 +317,7 @@ function paymentOf(value: unknown): Payment | null {
     membershipId: v.membershipId,
     method,
     total,
+    paidOn,
     lines,
     createdById: v.createdById,
     createdAt: v.createdAt,
@@ -343,6 +387,48 @@ function failureOf(status: number): CallFailure {
   if (status === 400) return "invalid_input";
   if (status === 404) return "not_found";
   return "server";
+}
+
+const SMS_FAILURES = ["invalid_number", "invalid_message", "provider_error"] as const;
+
+function smsOf(value: unknown): SmsOutcome | null {
+  if (!isObject(value)) return null;
+  const { status, reason } = value;
+  if (status === "not_requested" || status === "skipped_repeat" || status === "sent") {
+    return { status };
+  }
+  if (status !== "failed") return null;
+  const known = SMS_FAILURES.find((r) => r === reason);
+  return known === undefined ? null : { status, reason: known };
+}
+
+const PAYMENT_CONFLICTS = [
+  "member_inactive",
+  "idempotency_conflict",
+  "no_active_loan",
+  "loan_overpayment",
+] as const;
+
+/** A refused POST /payments. A 409 with an error we do not know answers server. */
+function paymentFailureOf(
+  status: number,
+  body: unknown,
+): Extract<CreatePaymentResult, { ok: false }> {
+  const reply = isObject(body) ? body : {};
+  if (status === 409) {
+    const conflict = PAYMENT_CONFLICTS.find((c) => c === reply["error"]);
+    return { ok: false, reason: conflict ?? "server" };
+  }
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  const { code, lineIndex } = reply;
+  return {
+    ok: false,
+    reason: "invalid_input",
+    ...(typeof code === "string" ? { code } : {}),
+    ...(Number.isInteger(lineIndex) && (lineIndex as number) >= 0
+      ? { lineIndex: lineIndex as number }
+      : {}),
+  };
 }
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -564,6 +650,28 @@ export function createApi(deps: ApiDeps): Api {
     listPayments(memberId) {
       const query = `?memberId=${encodeURIComponent(memberId)}`;
       return call(`/payments${query}`, {}, 200, "payments", listOf(paymentOf));
+    },
+
+    async createPayment(input) {
+      const { idempotencyKey, ...body } = input;
+      let response: Response | null;
+      try {
+        response = await authed("/payments", {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      const reply = await readJson(response);
+      if (response.status !== 201) return paymentFailureOf(response.status, reply);
+      const payment = isObject(reply) ? paymentOf(reply["payment"]) : null;
+      const sms = isObject(reply) ? smsOf(reply["sms"]) : null;
+      if (payment === null || sms === null) return { ok: false, reason: "server" };
+      const replayed = response.headers.get("Idempotent-Replayed") === "true";
+      return { ok: true, payment, replayed, sms };
     },
 
     listLoans(memberId) {

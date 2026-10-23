@@ -45,6 +45,7 @@ const idleApi: Api = {
   memberBalances: async () => ({ ok: false, reason: "server" }),
   listPayments: async () => ({ ok: false, reason: "server" }),
   listLoans: async () => ({ ok: false, reason: "server" }),
+  createPayment: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -206,6 +207,8 @@ function fakeApi(
         calls.push(`loans ${id}`);
         return opts.loans ?? { ok: true, value: [] };
       },
+      // No screen records a payment yet (U.4e).
+      createPayment: async () => ({ ok: false, reason: "server" }),
     };
   };
 }
@@ -594,6 +597,7 @@ function payment(id: string, createdAt: string, total: string): Payment {
     membershipId: "IO-001",
     method: "CASH",
     total,
+    paidOn: createdAt.slice(0, 10),
     lines: [{ category: "Shares", amount: total }],
     createdById: "u1",
     createdAt,

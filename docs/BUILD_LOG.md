@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4d (size S), 2026-10-23: web payment call and `paidOn` in the reads (A-208)
+
+The owner said: "go", then "yes, add app.test.tsx to U.4d" (the required `paidOn` broke the typecheck of `web/test/app.test.tsx`; the file was added before it was edited).
+**Changed:** `web/src/api.ts` (`Payment.paidOn`, checked in `paymentOf`; types `NewPayment`, `SmsOutcome`, `PaymentConflict`, `CreatePaymentResult`; `smsOf`, `paymentFailureOf`; `createPayment` on `Api`), `web/test/api.test.ts` (Idempotency-Key header recorded by the fake fetch; `paidOn` in `PAYMENT` and four bad `paidOn` list cases; 7 `createPayment` tests: request shape, replay header and every SMS outcome, 401 retry with the same key and body, the four 409 reasons and unknown 409s, 400 code and line position, 403/404/500/network/signed out, wrong-shape 201 and a 200), `web/test/app.test.tsx` (`paidOn` in the `payment()` helper; `createPayment` in `idleApi` and `fakeApi`).
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean, 4 files, 97 passed (90 before). `npm run check` (server): 47 files, 1847 passed, 91.70 s.
+**Not verified:** the call against the running server (no live check in this step; the dev proxy is still not run against the API, A-192); break-on-purpose (owed at U.4g).
+
+---
+
 ## Step U.4c2 (size S), 2026-10-23: tests for the U.4c gaps (A-207)
 
 The owner said: "go", then "yes, commit" for the tests commit.

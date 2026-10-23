@@ -66,6 +66,7 @@ function setup(
   options: { storage?: TokenStorage; lock?: RefreshLock } = {},
 ) {
   const calls: Call[] = [];
+  const keys: (string | null)[] = [];
   const storage = options.storage ?? memoryStorage();
   const keeper = createSessionKeeper(storage);
   if (refreshToken !== undefined) storage.setItem("iyanu.refreshToken", refreshToken);
@@ -79,6 +80,7 @@ function setup(
       body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
     };
     calls.push(call);
+    keys.push(headers.get("Idempotency-Key"));
     return handler(call);
   }) as typeof fetch;
   const api = createApi({
@@ -87,7 +89,7 @@ function setup(
     lock: options.lock,
     onSignedOut: () => void signedOut++,
   });
-  return { api, keeper, calls, signedOutCount: () => signedOut };
+  return { api, keeper, calls, keys, signedOutCount: () => signedOut };
 }
 
 describe("login", () => {
@@ -569,6 +571,7 @@ const PAYMENT = {
   membershipId: "IOC/0001",
   method: "BANK_TRANSFER",
   total: "7000.50",
+  paidOn: "2026-10-22",
   lines: [
     { category: "Savings", amount: "5000.50" },
     { category: "Shares", amount: "2000.00" },
@@ -629,6 +632,10 @@ describe("payment and loan lists", () => {
       { payments: [{ ...PAYMENT, total: 7000.5 }] },
       { payments: [{ ...PAYMENT, total: "7000.5" }] },
       { payments: [{ ...PAYMENT, createdAt: 1 }] },
+      { payments: [{ ...PAYMENT, paidOn: undefined }] },
+      { payments: [{ ...PAYMENT, paidOn: 20261022 }] },
+      { payments: [{ ...PAYMENT, paidOn: "22-10-2026" }] },
+      { payments: [{ ...PAYMENT, paidOn: "2026-10-22T00:00:00.000Z" }] },
       { payments: [{ ...PAYMENT, lines: "none" }] },
       { payments: [{ ...PAYMENT, lines: "" }] },
       { payments: [{ ...PAYMENT, lines: [null] }] },
@@ -657,5 +664,178 @@ describe("payment and loan lists", () => {
       const { api } = signedIn(() => json(200, body));
       expect(await api.listLoans("m1")).toEqual({ ok: false, reason: "server" });
     }
+  });
+});
+
+const NEW_PAYMENT = {
+  idempotencyKey: "key-0000000000000001",
+  memberId: "m1",
+  method: "BANK_TRANSFER" as const,
+  paidOn: "2026-10-22",
+  total: "7000.50",
+  lines: [
+    { category: "Savings", amount: "5000.50" },
+    { category: "Shares", amount: "2000.00" },
+  ],
+  sendSms: true,
+};
+
+const SENT_BODY = {
+  memberId: "m1",
+  method: "BANK_TRANSFER",
+  paidOn: "2026-10-22",
+  total: "7000.50",
+  lines: NEW_PAYMENT.lines,
+  sendSms: true,
+};
+
+function replayed(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 201,
+    headers: { "Content-Type": "application/json", "Idempotent-Replayed": "true" },
+  });
+}
+
+describe("createPayment", () => {
+  it("posts the payment with the key in the Idempotency-Key header, not in the body", async () => {
+    const { api, calls, keys } = signedIn(() =>
+      json(201, { payment: PAYMENT, sms: { status: "sent" } }),
+    );
+    expect(await api.createPayment(NEW_PAYMENT)).toEqual({
+      ok: true,
+      payment: PAYMENT,
+      replayed: false,
+      sms: { status: "sent" },
+    });
+    expect(calls).toEqual([
+      { path: "/api/payments", method: "POST", auth: "Bearer acc1", body: SENT_BODY },
+    ]);
+    expect(keys).toEqual(["key-0000000000000001"]);
+  });
+
+  it("reads the Idempotent-Replayed header and each SMS outcome", async () => {
+    const outcomes: unknown[] = [
+      { status: "not_requested" },
+      { status: "skipped_repeat" },
+      { status: "failed", reason: "invalid_number" },
+      { status: "failed", reason: "invalid_message" },
+      { status: "failed", reason: "provider_error" },
+    ];
+    for (const sms of outcomes) {
+      const { api } = signedIn(() => replayed({ payment: PAYMENT, sms }));
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({
+        ok: true,
+        payment: PAYMENT,
+        replayed: true,
+        sms,
+      });
+    }
+  });
+
+  it("on a 401 refreshes once and sends the same key and body again", async () => {
+    const { api, calls, keys } = signedIn((call) => {
+      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2"
+        ? json(201, { payment: PAYMENT, sms: { status: "sent" } })
+        : json(401, {});
+    });
+    expect(await api.createPayment(NEW_PAYMENT)).toMatchObject({ ok: true, replayed: false });
+    expect(calls.map((c) => c.path)).toEqual(["/api/payments", "/api/refresh", "/api/payments"]);
+    expect(calls[2]?.body).toEqual(SENT_BODY);
+    expect(keys[2]).toBe("key-0000000000000001");
+  });
+
+  it("passes each 409 reason on, and answers server for a 409 it does not know", async () => {
+    for (const error of [
+      "member_inactive",
+      "idempotency_conflict",
+      "no_active_loan",
+      "loan_overpayment",
+    ]) {
+      const { api } = signedIn(() => json(409, { error }));
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: error });
+    }
+    for (const body of [{ error: "already_active" }, { error: "toString" }, null, "x"]) {
+      const { api } = signedIn(() => json(409, body));
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "server" });
+    }
+  });
+
+  it("passes the code and the line position of a 400 on", async () => {
+    const line = signedIn(() =>
+      json(400, { error: "invalid_input", code: "invalid_amount", lineIndex: 1 }),
+    );
+    expect(await line.api.createPayment(NEW_PAYMENT)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_amount",
+      lineIndex: 1,
+    });
+    const first = signedIn(() =>
+      json(400, { error: "invalid_input", code: "invalid_amount", lineIndex: 0 }),
+    );
+    expect(await first.api.createPayment(NEW_PAYMENT)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "invalid_amount",
+      lineIndex: 0,
+    });
+    const date = signedIn(() => json(400, { error: "invalid_input", code: "future_paid_on" }));
+    expect(await date.api.createPayment(NEW_PAYMENT)).toEqual({
+      ok: false,
+      reason: "invalid_input",
+      code: "future_paid_on",
+    });
+    for (const body of [
+      { error: "invalid_input", code: 3, lineIndex: -1 },
+      { error: "invalid_input", lineIndex: 1.5 },
+      { error: "invalid_input", lineIndex: "1" },
+      null,
+    ]) {
+      const { api } = signedIn(() => json(400, body));
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "invalid_input" });
+    }
+  });
+
+  it("maps 403, 404, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(404, { error: "not_found" }), "not_found"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api, keeper } = signedIn(handler);
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason });
+      expect(keeper.refreshToken()).toBe("ref1");
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a 201 of the wrong shape and for a 200", async () => {
+    const bad: unknown[] = [
+      null,
+      { sms: { status: "sent" } },
+      { payment: PAYMENT },
+      { payment: { ...PAYMENT, paidOn: undefined }, sms: { status: "sent" } },
+      { payment: { ...PAYMENT, total: 7000.5 }, sms: { status: "sent" } },
+      { payment: PAYMENT, sms: { status: "queued" } },
+      { payment: PAYMENT, sms: { status: "failed" } },
+      { payment: PAYMENT, sms: { status: "failed", reason: "timeout" } },
+      { payment: PAYMENT, sms: "sent" },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(201, body));
+      expect(await api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(200, { payment: PAYMENT, sms: { status: "sent" } }));
+    expect(await wrong.api.createPayment(NEW_PAYMENT)).toEqual({ ok: false, reason: "server" });
   });
 });

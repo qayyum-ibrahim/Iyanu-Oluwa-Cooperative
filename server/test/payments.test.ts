@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { subjectOf } from "../src/guards.js";
 import { isLoanActive, loanOutstanding } from "../src/loans.js";
 import { createMemoryStore } from "../src/memory-store.js";
@@ -179,6 +179,21 @@ describe("lagosDay (U.4a)", () => {
     expect(lagosDay(new Date("2026-01-05T00:00:00.000Z"))).toBe("2026-01-05");
     expect(lagosDay(new Date("2026-06-30T23:30:00.000Z"))).toBe("2026-07-01");
   });
+
+  it("gives the day in Lagos when the machine runs in another time zone", async () => {
+    // The day format is made when the module loads, so load it again under UTC (A-206, L2).
+    const before = process.env["TZ"];
+    process.env["TZ"] = "UTC";
+    try {
+      vi.resetModules();
+      const fresh = await import("../src/payments.js");
+      expect(fresh.lagosDay(new Date("2026-10-31T23:30:00.000Z"))).toBe("2026-11-01");
+    } finally {
+      if (before === undefined) delete process.env["TZ"];
+      else process.env["TZ"] = before;
+      vi.resetModules();
+    }
+  });
 });
 
 describe("isCalendarDay (U.4b)", () => {
@@ -199,6 +214,8 @@ describe("isCalendarDay (U.4b)", () => {
     "2026-10-32",
     "2026-1-05",
     "26-10-23",
+    "12026-10-01",
+    "02026-10-01",
     "2026/10/23",
     " 2026-10-23",
     "2026-10-23T00:00:00Z",
@@ -289,6 +306,7 @@ describe("createPayment: refusals", () => {
     { label: "not a real day", value: "2026-02-30" },
     { label: "not YYYY-MM-DD", value: "23/10/2026" },
     { label: "a date with a time", value: "2026-10-01T10:00:00Z" },
+    { label: "a five-digit year", value: "12026-10-01" },
     { label: "empty", value: "" },
     { label: "null", value: null },
     { label: "a number", value: 20261001 },

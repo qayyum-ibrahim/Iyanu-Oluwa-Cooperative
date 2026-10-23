@@ -5,6 +5,7 @@ import { subjectOf } from "../src/guards.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import {
   createPayment,
+  lagosDay,
   type PaymentActor,
   type PaymentResult,
   type PaymentView,
@@ -80,6 +81,24 @@ describe("createPayment: idempotency key and payment date (U.4b)", () => {
     }
     expect(await store.payments.listByMember(m.id)).toHaveLength(1);
     expect(await store.audit.listByActor(a.id)).toHaveLength(1);
+  });
+
+  it("refuses the same key once without a payment date and once with today's date (A-205, H2)", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    const today = lagosDay(new Date());
+    await createPayment(store, actorOf(a), pay(m.id, key(903)));
+    expect(await createPayment(store, actorOf(a), pay(m.id, key(903), { paidOn: today }))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    await createPayment(store, actorOf(a), pay(m.id, key(904), { paidOn: today }));
+    expect(await createPayment(store, actorOf(a), pay(m.id, key(904)))).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    expect(await store.payments.listByMember(m.id)).toHaveLength(2);
+    expect(await store.audit.listByActor(a.id)).toHaveLength(2);
   });
 });
 

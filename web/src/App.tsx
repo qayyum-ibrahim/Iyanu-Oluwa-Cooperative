@@ -1,7 +1,9 @@
-// Sign-in, sign-out and change own password (U.2, D-81). Other screens come in U.3 to U.8.
+// Sign-in, sign-out and change own password (U.2, D-81), members list and add member (U.3e).
+// Other screens come in U.3f to U.8.
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import ChangePassword from "./ChangePassword.tsx";
+import Members from "./Members.tsx";
 import { browserLocalStorage, createSessionKeeper } from "./session.ts";
 import SignIn from "./SignIn.tsx";
 
@@ -9,10 +11,12 @@ export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
 export const SESSION_ENDED = "Your session has ended. Please sign in again.";
 export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
 
+type Page = "home" | "password" | "members";
+
 type View =
   | { kind: "loading" }
   | { kind: "signed-out"; notice?: string }
-  | { kind: "signed-in"; me: Me; page: "home" | "password" };
+  | { kind: "signed-in"; me: Me; page: Page };
 
 /** Every sign-in refusal reads the same (D-26), with the lockout rule (D-30) for everyone. */
 export const SIGN_IN_FAILED =
@@ -106,6 +110,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
   }
 
   const { me } = view;
+  const can = (permission: string) => me.permissions.includes(permission);
+  const go = (page: Page) => setView({ ...view, page });
   return (
     <div className="app">
       <header>
@@ -120,11 +126,25 @@ export default function App({ makeApi = browserApi }: AppProps) {
           {me.user.displayName}
           <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
         </span>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setView({ ...view, page: "password" })}
-        >
+        <nav>
+          <button
+            type="button"
+            className={view.page === "home" ? "active" : ""}
+            onClick={() => go("home")}
+          >
+            Home
+          </button>
+          {can("members.view") && (
+            <button
+              type="button"
+              className={view.page === "members" ? "active" : ""}
+              onClick={() => go("members")}
+            >
+              Members
+            </button>
+          )}
+        </nav>
+        <button type="button" className="secondary" onClick={() => go("password")}>
           Change password
         </button>
         <button type="button" className="logout" onClick={signOut}>
@@ -133,10 +153,9 @@ export default function App({ makeApi = browserApi }: AppProps) {
       </header>
       <main>
         {view.page === "password" ? (
-          <ChangePassword
-            onSubmit={changePassword}
-            onCancel={() => setView({ ...view, page: "home" })}
-          />
+          <ChangePassword onSubmit={changePassword} onCancel={() => go("home")} />
+        ) : view.page === "members" && can("members.view") ? (
+          <Members api={api} canCreate={can("members.create")} />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

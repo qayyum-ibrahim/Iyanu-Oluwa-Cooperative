@@ -11,8 +11,17 @@ import App, {
   changePasswordMessage,
   loginMessage,
 } from "../src/App";
-import type { Api, ChangePasswordResult, LoginResult, Me } from "../src/api.ts";
+import type {
+  Api,
+  CallResult,
+  ChangePasswordResult,
+  LoginResult,
+  Me,
+  Member,
+  MemberStatusFilter,
+} from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
+import { checkNewMember, memberMessage, searchMembers } from "../src/Members.tsx";
 import SignIn from "../src/SignIn.tsx";
 
 const idleApi: Api = {
@@ -104,8 +113,39 @@ interface FakeApi extends Api {
   signOutFromServer(): void;
 }
 
+function member(id: string, membershipId: string, fullName: string, status: Member["status"] = "ACTIVE"): Member {
+  return {
+    id,
+    membershipId,
+    fullName,
+    phone: "08000000000",
+    address: "",
+    occupation: "",
+    status,
+    createdById: "u1",
+    createdAt: "2026-10-23T00:00:00.000Z",
+  };
+}
+
+const ACTIVE_ONE = member("m1", "IO-001", "Test Member One");
+const ACTIVE_TWO = member("m2", "IO-002", "Sample Person Two");
+const INACTIVE_ONE = member("m3", "IO-003", "Example Inactive", "INACTIVE");
+
+/** Members the fake server holds, answered by status filter as GET /members does. */
+function byStatus(members: Member[], status: MemberStatusFilter): Member[] {
+  if (status === "all") return members;
+  return members.filter((m) => m.status === (status === "active" ? "ACTIVE" : "INACTIVE"));
+}
+
 function fakeApi(
-  opts: { restore?: Me | null; login?: LoginResult; change?: ChangePasswordResult } = {},
+  opts: {
+    restore?: Me | null;
+    login?: LoginResult;
+    change?: ChangePasswordResult;
+    members?: Member[];
+    list?: CallResult<Member[]>;
+    create?: CallResult<Member>;
+  } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
     const calls: string[] = [];
@@ -125,9 +165,17 @@ function fakeApi(
         calls.push(`change ${current} ${next}`);
         return opts.change ?? { ok: true };
       },
-      listMembers: idleApi.listMembers,
+      listMembers: async (status) => {
+        calls.push(`list ${status}`);
+        return opts.list ?? { ok: true, value: byStatus(opts.members ?? [], status) };
+      },
       getMember: idleApi.getMember,
-      createMember: idleApi.createMember,
+      createMember: async (input) => {
+        calls.push(`create ${JSON.stringify(input)}`);
+        const result = opts.create ?? { ok: false, reason: "server" };
+        if (result.ok) opts.members = [...(opts.members ?? []), result.value];
+        return result;
+      },
       memberBalances: idleApi.memberBalances,
     };
   };
@@ -301,5 +349,162 @@ describe("screens (jsdom)", () => {
     expect(inputs("password")).toHaveLength(0);
     expect(text()).toContain("Signed in as Ada Test");
     expect(api.calls).toEqual([]);
+  });
+});
+
+describe("members helpers", () => {
+  it("searches by name or Membership ID, ignoring case and outer spaces", () => {
+    const all = [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE];
+    expect(searchMembers(all, "")).toEqual(all);
+    expect(searchMembers(all, "   ")).toEqual(all);
+    expect(searchMembers(all, "sample")).toEqual([ACTIVE_TWO]);
+    expect(searchMembers(all, " MEMBER one ")).toEqual([ACTIVE_ONE]);
+    expect(searchMembers(all, "io-003")).toEqual([INACTIVE_ONE]);
+    expect(searchMembers(all, "IO-00")).toEqual(all);
+    expect(searchMembers(all, "nobody")).toEqual([]);
+  });
+
+  it("checks the new member's fields before sending them", () => {
+    const ok = { fullName: "A", phone: "", address: "", occupation: "" };
+    expect(checkNewMember(ok)).toBeNull();
+    expect(checkNewMember({ ...ok, fullName: "   " })).toMatch(/1 to 100/);
+    expect(checkNewMember({ ...ok, fullName: "a".repeat(100) })).toBeNull();
+    expect(checkNewMember({ ...ok, fullName: "a".repeat(101) })).toMatch(/1 to 100/);
+    expect(checkNewMember({ ...ok, phone: "1".repeat(200) })).toBeNull();
+    expect(checkNewMember({ ...ok, phone: "1".repeat(201) })).toMatch(/at most 200/);
+    expect(checkNewMember({ ...ok, address: "a".repeat(201) })).toMatch(/at most 200/);
+    expect(checkNewMember({ ...ok, occupation: "a".repeat(201) })).toMatch(/at most 200/);
+  });
+
+  it("maps each member call failure", () => {
+    expect(memberMessage("forbidden")).toMatch(/permission/);
+    expect(memberMessage("invalid_input")).toMatch(/refused/);
+    expect(memberMessage("not_found")).toMatch(/not found/);
+    expect(memberMessage("signed_out")).toBeNull();
+    expect(memberMessage("network")).toMatch(/Cannot reach/);
+    expect(memberMessage("server")).toMatch(/went wrong/);
+  });
+});
+
+const VIEWER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["members.view"] };
+const ADDER: Me = { ...ME, permissions: ["members.view", "members.create"] };
+
+function rowTexts(): string[] {
+  return Array.from(container?.querySelectorAll("tbody tr") ?? []).map((r) => r.textContent ?? "");
+}
+
+async function openMembers() {
+  await click(button("Members"));
+}
+
+describe("members screen (jsdom)", () => {
+  it("has no Members button without members.view", async () => {
+    await mount(fakeApi({ restore: ME }));
+    expect(() => button("Members")).toThrow();
+  });
+
+  it("lists Active members first and changes the filter", async () => {
+    const api = await mount(
+      fakeApi({ restore: VIEWER, members: [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE] }),
+    );
+    await openMembers();
+    expect(api.calls).toEqual(["list active"]);
+    expect(el("h1").textContent).toBe("Members");
+    expect(rowTexts()).toHaveLength(2);
+    expect(rowTexts()[0]).toContain("IO-001");
+    expect(rowTexts()[0]).toContain("Test Member One");
+    expect(el("section h2").textContent).toBe("2 active members");
+
+    await click(button("Inactive"));
+    expect(api.calls).toEqual(["list active", "list inactive"]);
+    expect(rowTexts()).toHaveLength(1);
+    expect(rowTexts()[0]).toContain("Inactive");
+
+    await click(button("All"));
+    expect(api.calls.at(-1)).toBe("list all");
+    expect(rowTexts()).toHaveLength(3);
+    expect(el("section h2").textContent).toBe("3 members");
+  });
+
+  it("filters the list in the browser by search text", async () => {
+    const api = await mount(fakeApi({ restore: VIEWER, members: [ACTIVE_ONE, ACTIVE_TWO] }));
+    await openMembers();
+    await type(el("input[type=search]"), "io-002");
+    expect(rowTexts()).toHaveLength(1);
+    expect(rowTexts()[0]).toContain("Sample Person Two");
+    await type(el("input[type=search]"), "nobody");
+    expect(rowTexts()).toHaveLength(0);
+    expect(text()).toContain("No members found.");
+    expect(api.calls).toEqual(["list active"]);
+  });
+
+  it("shows the message when the list cannot be read", async () => {
+    await mount(fakeApi({ restore: VIEWER, list: { ok: false, reason: "network" } }));
+    await openMembers();
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(rowTexts()).toHaveLength(0);
+  });
+
+  it("has no add button without members.create", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await openMembers();
+    expect(() => button("+ Add member")).toThrow();
+  });
+
+  it("adds a member, shows the new Membership ID and reloads the list", async () => {
+    const added = member("m9", "IO-009", "New Test Member");
+    const api = await mount(
+      fakeApi({ restore: ADDER, members: [ACTIVE_ONE], create: { ok: true, value: added } }),
+    );
+    await openMembers();
+    await click(button("+ Add member"));
+    await type(el("input[name=fullName]"), "  New Test Member ");
+    await type(el("input[name=phone]"), "08000000009");
+    await type(el("input[name=occupation]"), "Trader");
+    await click(button("Save member"));
+    expect(api.calls).toEqual([
+      "list active",
+      'create {"fullName":"New Test Member","phone":"08000000009","address":"","occupation":"Trader"}',
+      "list active",
+    ]);
+    expect(el("[role=status]").textContent).toBe("New Test Member was added as IO-009.");
+    expect(container?.querySelector("form")).toBeNull();
+    expect(rowTexts()).toHaveLength(2);
+    expect(rowTexts()[1]).toContain("IO-009");
+  });
+
+  it("stops an empty full name in the browser", async () => {
+    const api = await mount(fakeApi({ restore: ADDER }));
+    await openMembers();
+    await click(button("+ Add member"));
+    await type(el("input[name=fullName]"), "   ");
+    await act(async () => {
+      el<HTMLFormElement>("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(el("[role=alert]").textContent).toMatch(/1 to 100/);
+    expect(api.calls).toEqual(["list active"]);
+  });
+
+  it("keeps the form and shows the message when the server refuses", async () => {
+    const api = await mount(
+      fakeApi({ restore: ADDER, create: { ok: false, reason: "forbidden" } }),
+    );
+    await openMembers();
+    await click(button("+ Add member"));
+    await type(el("input[name=fullName]"), "Test Member");
+    await click(button("Save member"));
+    expect(el("[role=alert]").textContent).toBe("You do not have permission to do this.");
+    expect(el<HTMLInputElement>("input[name=fullName]").value).toBe("Test Member");
+    expect(button("Save member").disabled).toBe(false);
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("closes the form on Cancel without a call", async () => {
+    const api = await mount(fakeApi({ restore: ADDER }));
+    await openMembers();
+    await click(button("+ Add member"));
+    await click(button("Cancel"));
+    expect(container?.querySelector("form")).toBeNull();
+    expect(api.calls).toEqual(["list active"]);
   });
 });

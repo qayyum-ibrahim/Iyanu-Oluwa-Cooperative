@@ -1,6 +1,7 @@
 // API client for the auth routes (server/src/auth-routes.ts), the member routes
 // (server/src/members-routes.ts, U.3d), the payment and loan lists (U.3f), recording a payment
-// (server/src/payments-routes.ts, U.4d) and giving a loan (server/src/loans-routes.ts, U.5b). Tokens travel in the JSON body
+// (server/src/payments-routes.ts, U.4d), giving a loan (server/src/loans-routes.ts, U.5b) and the
+// expense list (server/src/expenses-routes.ts, U.6c). Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -136,6 +137,36 @@ export interface NewLoan {
 /** The 409 answers of POST /loans (LoanFailure in server/src/loans.ts). */
 export type LoanConflict = "member_inactive" | "active_loan" | "idempotency_conflict";
 
+/** An expense as GET /expenses sends it (ExpenseView in server/src/expenses.ts). */
+export interface Expense {
+  id: string;
+  category: string;
+  amount: string;
+  method: PaymentMethod;
+  /** The day the money left, "YYYY-MM-DD" in Lagos (D-92). */
+  spentOn: string;
+  description: string;
+  narration: string;
+  createdById: string;
+  createdAt: string;
+}
+
+/** The query of GET /expenses (D-94). A field left out is not filtered on. */
+export interface ExpenseFilter {
+  category?: string;
+  method?: PaymentMethod;
+  /** First day spent, "YYYY-MM-DD", included. */
+  fromDay?: string;
+  /** Last day spent, "YYYY-MM-DD", included. */
+  toDay?: string;
+}
+
+/** GET /expenses: oldest first by day spent, and the server's sum of the listed amounts. */
+export interface ExpenseList {
+  expenses: Expense[];
+  total: string;
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -211,6 +242,7 @@ export interface Api {
   createPayment(input: NewPayment): Promise<CreatePaymentResult>;
   listLoans(memberId: string): Promise<CallResult<Loan[]>>;
   createLoan(input: NewLoan): Promise<CreateLoanResult>;
+  listExpenses(filter: ExpenseFilter): Promise<CallResult<ExpenseList>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -396,6 +428,48 @@ function loanOf(value: unknown): Loan | null {
   return { ...loan, repaid, outstanding, status };
 }
 
+const EXPENSE_TEXT_FIELDS = [
+  "id",
+  "category",
+  "description",
+  "narration",
+  "createdById",
+  "createdAt",
+] as const;
+
+function expenseOf(value: unknown): Expense | null {
+  if (!isObject(value)) return null;
+  for (const field of EXPENSE_TEXT_FIELDS) {
+    if (typeof value[field] !== "string") return null;
+  }
+  const { amount, method, spentOn } = value;
+  if (typeof amount !== "string" || !NAIRA.test(amount)) return null;
+  if (method !== "CASH" && method !== "BANK_TRANSFER") return null;
+  if (typeof spentOn !== "string" || !DAY.test(spentOn)) return null;
+  const v = value as Record<(typeof EXPENSE_TEXT_FIELDS)[number], string>;
+  return {
+    id: v.id,
+    category: v.category,
+    amount,
+    method,
+    spentOn,
+    description: v.description,
+    narration: v.narration,
+    createdById: v.createdById,
+    createdAt: v.createdAt,
+  };
+}
+
+/** The query string for GET /expenses, fields in a fixed order, each value made safe. */
+function expenseQuery(filter: ExpenseFilter): string {
+  const parts: string[] = [];
+  for (const name of ["category", "method", "fromDay", "toDay"] as const) {
+    const value = filter[name];
+    if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
+  }
+  return parts.length === 0 ? "" : `?${parts.join("&")}`;
+}
+
 /** Every item read by `read`, or null if any one is of the wrong shape. */
 function listOf<T>(read: (value: unknown) => T | null): (value: unknown) => T[] | null {
   return (value) => {
@@ -569,14 +643,15 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /**
-   * A signed-in call whose reply is read by `read` from the body's `key` field.
-   * `expected` is the success status; any other status maps through failureOf.
+   * A signed-in call whose reply is read by `read` from the body's `key` field, or from the
+   * whole body when `key` is null. `expected` is the success status; any other status maps
+   * through failureOf.
    */
   async function call<T>(
     path: string,
     init: RequestInit,
     expected: number,
-    key: string,
+    key: string | null,
     read: (value: unknown) => T | null,
   ): Promise<CallResult<T>> {
     let response: Response | null;
@@ -588,7 +663,7 @@ export function createApi(deps: ApiDeps): Api {
     if (response === null) return { ok: false, reason: "signed_out" };
     if (response.status !== expected) return { ok: false, reason: failureOf(response.status) };
     const body = await readJson(response);
-    const value = isObject(body) ? read(body[key]) : null;
+    const value = isObject(body) ? read(key === null ? body : body[key]) : null;
     if (value === null) return { ok: false, reason: "server" };
     return { ok: true, value };
   }
@@ -740,6 +815,16 @@ export function createApi(deps: ApiDeps): Api {
       if (loan === null) return { ok: false, reason: "server" };
       const replayed = response.headers.get("Idempotent-Replayed") === "true";
       return { ok: true, loan, replayed };
+    },
+
+    listExpenses(filter) {
+      return call(`/expenses${expenseQuery(filter)}`, {}, 200, null, (value) => {
+        if (!isObject(value)) return null;
+        const expenses = listOf(expenseOf)(value["expenses"]);
+        const { total } = value;
+        if (expenses === null || typeof total !== "string" || !NAIRA.test(total)) return null;
+        return { expenses, total };
+      });
     },
   };
 }

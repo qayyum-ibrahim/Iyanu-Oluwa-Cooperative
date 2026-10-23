@@ -969,3 +969,88 @@ describe("createLoan", () => {
     expect(await wrong.api.createLoan(NEW_LOAN)).toEqual({ ok: false, reason: "server" });
   });
 });
+
+const EXPENSE = {
+  id: "e1",
+  category: "Others",
+  amount: "15000.50",
+  method: "CASH",
+  spentOn: "2026-10-21",
+  description: "Generator fuel",
+  narration: "For the office",
+  createdById: "u1",
+  createdAt: "2026-10-23T09:00:00.000Z",
+};
+
+describe("listExpenses", () => {
+  it("lists with no query when no filter is set", async () => {
+    const { api, calls } = signedIn(() => json(200, { expenses: [EXPENSE], total: "15000.50" }));
+    expect(await api.listExpenses({})).toEqual({
+      ok: true,
+      value: { expenses: [EXPENSE], total: "15000.50" },
+    });
+    expect(calls).toEqual([{ path: "/api/expenses", method: "GET", auth: "Bearer acc1", body: null }]);
+  });
+
+  it("sends each filter in a fixed order, each value made safe for the query", async () => {
+    const { api, calls } = signedIn(() => json(200, { expenses: [], total: "0.00" }));
+    await api.listExpenses({
+      toDay: "2026-10-31",
+      fromDay: "2026-10-01",
+      method: "BANK_TRANSFER",
+      category: "Payment to Union",
+    });
+    await api.listExpenses({ category: "a&b=c" });
+    await api.listExpenses({ toDay: "2026-10-31" });
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/expenses?category=Payment%20to%20Union&method=BANK_TRANSFER&fromDay=2026-10-01&toDay=2026-10-31",
+      "/api/expenses?category=a%26b%3Dc",
+      "/api/expenses?toDay=2026-10-31",
+    ]);
+  });
+
+  it("maps 403, 400, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(400, { error: "invalid_input", code: "invalid_range" }), "invalid_input"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.listExpenses({})).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.listExpenses({})).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a reply of the wrong shape or with amounts that are not naira strings", async () => {
+    const bad: unknown[] = [
+      null,
+      {},
+      { expenses: [EXPENSE] },
+      { expenses: [EXPENSE], total: 15000.5 },
+      { expenses: [EXPENSE], total: "15000.5" },
+      { expenses: "x", total: "0.00" },
+      { expenses: [EXPENSE, null], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, amount: "15,000.50" }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, amount: 15000.5 }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, method: "CHEQUE" }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, spentOn: undefined }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, spentOn: "21-10-2026" }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, spentOn: "2026-10-21T00:00:00.000Z" }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, narration: null }], total: "15000.50" },
+      { expenses: [{ ...EXPENSE, category: 3 }], total: "15000.50" },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.listExpenses({})).toEqual({ ok: false, reason: "server" });
+    }
+  });
+});

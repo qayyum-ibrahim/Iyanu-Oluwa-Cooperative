@@ -8,8 +8,9 @@ server/src/expenses.ts
 server/src/expenses-routes.ts
 server/src/expense-categories.ts
 web/src/api.ts
-web/src/App.tsx
+web/src/Expenses.tsx
 web/src/Members.tsx
+web/src/App.tsx
 web/src/styles.css
 web/test/api.test.ts
 web/test/app.test.tsx

@@ -17,6 +17,9 @@ import type {
   ChangePasswordResult,
   CreateLoanResult,
   CreatePaymentResult,
+  Expense,
+  ExpenseFilter,
+  ExpenseList,
   LoginResult,
   Loan,
   Me,
@@ -29,6 +32,13 @@ import type {
   SmsOutcome,
 } from "../src/api.ts";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
+import {
+  EXPENSE_CATEGORIES,
+  NO_FILTER,
+  checkExpenseFilter,
+  expenseCount,
+  expenseListMessage,
+} from "../src/Expenses.tsx";
 import {
   LOAN_TEXT_MAX,
   PAYMENT_CATEGORIES,
@@ -72,6 +82,7 @@ const idleApi: Api = {
   listLoans: async () => ({ ok: false, reason: "server" }),
   createPayment: async () => ({ ok: false, reason: "server" }),
   createLoan: async () => ({ ok: false, reason: "server" }),
+  listExpenses: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -152,6 +163,8 @@ interface FakeApi extends Api {
   paid: NewPayment[];
   /** Every loan the screen sent, in order. */
   lent: NewLoan[];
+  /** Every expense list query the screen sent, in order. */
+  expenseQueries: ExpenseFilter[];
   signOutFromServer(): void;
 }
 
@@ -194,16 +207,19 @@ function fakeApi(
     pay?: CreatePaymentResult[];
     /** Answers to createLoan in turn; the last one repeats. */
     lend?: CreateLoanResult[];
+    expenses?: CallResult<ExpenseList>;
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
     const calls: string[] = [];
     const paid: NewPayment[] = [];
     const lent: NewLoan[] = [];
+    const expenseQueries: ExpenseFilter[] = [];
     return {
       calls,
       paid,
       lent,
+      expenseQueries,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -256,6 +272,11 @@ function fakeApi(
         lent.push(input);
         const answers = opts.lend ?? [];
         return answers[Math.min(lent.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
+      listExpenses: async (filter) => {
+        calls.push("expenses");
+        expenseQueries.push(filter);
+        return opts.expenses ?? { ok: true, value: { expenses: [], total: "0.00" } };
       },
     };
   };
@@ -1764,5 +1785,178 @@ describe("loan form (jsdom)", () => {
     expect(container?.querySelector(".loan-form")).toBeNull();
     expect(button("Give loan")).toBeTruthy();
     expect(api.lent).toEqual([]);
+  });
+});
+
+describe("expense list helpers", () => {
+  it("offers the DR-11 categories in order, Loan and Membership Withdrawal too", () => {
+    expect(EXPENSE_CATEGORIES).toEqual([
+      "Loan",
+      "Expenses",
+      "Allowances",
+      "Members Credit",
+      "Membership Withdrawal",
+      "Asset Purchase",
+      "Office Maintenance",
+      "Payment to Union",
+      "Payment to Apexes",
+      "Others",
+    ]);
+  });
+
+  it("sends only the filters that are set", () => {
+    expect(checkExpenseFilter(NO_FILTER)).toEqual({ ok: true, value: {} });
+    expect(
+      checkExpenseFilter({ category: "Others", method: "CASH", fromDay: "2026-10-01", toDay: "2026-10-31" }),
+    ).toEqual({
+      ok: true,
+      value: { category: "Others", method: "CASH", fromDay: "2026-10-01", toDay: "2026-10-31" },
+    });
+    expect(checkExpenseFilter({ ...NO_FILTER, toDay: "2026-10-31" })).toEqual({
+      ok: true,
+      value: { toDay: "2026-10-31" },
+    });
+  });
+
+  it("allows the same day for both, and refuses each bad filter in the server's order", () => {
+    expect(checkExpenseFilter({ ...NO_FILTER, fromDay: "2026-10-05", toDay: "2026-10-05" })).toEqual({
+      ok: true,
+      value: { fromDay: "2026-10-05", toDay: "2026-10-05" },
+    });
+    const refused = (input: typeof NO_FILTER) => {
+      const result = checkExpenseFilter(input);
+      return result.ok ? null : result.message;
+    };
+    expect(refused({ ...NO_FILTER, category: "Food", fromDay: "x" })).toBe("Choose a category from the list.");
+    expect(refused({ ...NO_FILTER, fromDay: "2026-02-30", toDay: "x" })).toBe("Enter a real From day.");
+    expect(refused({ ...NO_FILTER, toDay: "2026-13-01" })).toBe("Enter a real To day.");
+    expect(refused({ ...NO_FILTER, fromDay: "2026-10-06", toDay: "2026-10-05" })).toBe(
+      "The From day cannot be after the To day.",
+    );
+  });
+
+  it("maps each list failure, and counts expenses", () => {
+    expect(expenseListMessage("forbidden")).toMatch(/permission/);
+    expect(expenseListMessage("invalid_input")).toMatch(/filters were refused/);
+    expect(expenseListMessage("signed_out")).toBeNull();
+    expect(expenseListMessage("network")).toMatch(/Cannot reach/);
+    expect(expenseListMessage("server")).toMatch(/went wrong/);
+    expect(expenseCount(0)).toBe("0 expenses");
+    expect(expenseCount(1)).toBe("1 expense");
+    expect(expenseCount(2)).toBe("2 expenses");
+  });
+});
+
+const EXPENSE_VIEWER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["expenses.view"] };
+
+function expense(id: string, spentOn: string, amount: string, extra: Partial<Expense> = {}): Expense {
+  return {
+    id,
+    category: "Expenses",
+    amount,
+    method: "CASH",
+    spentOn,
+    description: "",
+    narration: "",
+    createdById: "u1",
+    createdAt: `${spentOn}T09:00:00.000Z`,
+    ...extra,
+  };
+}
+
+async function openExpenses() {
+  await click(button("Expenses"));
+}
+
+function select(name: string): HTMLSelectElement {
+  return el(`select[name=${name}]`);
+}
+
+describe("expenses page (jsdom)", () => {
+  it("has no Expenses button without expenses.view", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    expect(() => button("Expenses")).toThrow();
+  });
+
+  it("lists with no filters, newest first, with the count and the server's total", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPENSE_VIEWER,
+        expenses: {
+          ok: true,
+          value: {
+            expenses: [
+              expense("e1", "2026-10-01", "1000.00", { description: "Stationery" }),
+              expense("e2", "2026-10-20", "250000.50", {
+                category: "Others",
+                method: "BANK_TRANSFER",
+                description: "Generator",
+                narration: "Repair",
+              }),
+            ],
+            total: "251000.50",
+          },
+        },
+      }),
+    );
+    await openExpenses();
+    expect(api.calls).toEqual(["expenses"]);
+    expect(api.expenseQueries).toEqual([{}]);
+    expect(el("h1").textContent).toBe("Expenses");
+    expect(rowTexts()).toHaveLength(2);
+    expect(rowTexts()[0]).toBe("20 Oct 2026OthersGenerator · Repair₦250,000.50Bank transfer");
+    expect(rowTexts()[1]).toBe("1 Oct 2026ExpensesStationery₦1,000.00Cash");
+    expect(el(".expense-total").textContent).toBe("2 expensesTotal ₦251,000.50");
+  });
+
+  it("shows a dash for an expense with no description or narration", async () => {
+    await mount(
+      fakeApi({
+        restore: EXPENSE_VIEWER,
+        expenses: { ok: true, value: { expenses: [expense("e1", "2026-10-01", "5.00")], total: "5.00" } },
+      }),
+    );
+    await openExpenses();
+    expect(rowTexts()[0]).toBe("1 Oct 2026Expenses—₦5.00Cash");
+  });
+
+  it("sends the filters on Apply, and Clear loads the full list again", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_VIEWER }));
+    await openExpenses();
+    await choose(select("category"), "Payment to Union");
+    await choose(select("method"), "BANK_TRANSFER");
+    await type(el("input[name=fromDay]"), "2026-10-01");
+    await type(el("input[name=toDay]"), "2026-10-31");
+    expect(api.expenseQueries).toHaveLength(1);
+    await click(button("Apply"));
+    expect(api.expenseQueries).toEqual([
+      {},
+      { category: "Payment to Union", method: "BANK_TRANSFER", fromDay: "2026-10-01", toDay: "2026-10-31" },
+    ]);
+    await click(button("Clear"));
+    expect(api.expenseQueries.at(-1)).toEqual({});
+    expect(select("category").value).toBe("");
+    expect(select("method").value).toBe("");
+    expect(el<HTMLInputElement>("input[name=fromDay]").value).toBe("");
+    expect(text()).toContain("No expenses found.");
+    expect(el(".expense-total").textContent).toBe("0 expensesTotal ₦0.00");
+  });
+
+  it("stops a From day after the To day, with no call", async () => {
+    const api = await mount(fakeApi({ restore: EXPENSE_VIEWER }));
+    await openExpenses();
+    await type(el("input[name=fromDay]"), "2026-10-06");
+    await type(el("input[name=toDay]"), "2026-10-05");
+    await click(button("Apply"));
+    expect(el("[role=alert]").textContent).toBe("The From day cannot be after the To day.");
+    expect(api.expenseQueries).toEqual([{}]);
+  });
+
+  it("shows the message when the list cannot be read", async () => {
+    await mount(fakeApi({ restore: EXPENSE_VIEWER, expenses: { ok: false, reason: "network" } }));
+    await openExpenses();
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(rowTexts()).toHaveLength(0);
+    expect(container?.querySelector(".expense-total")).toBeNull();
   });
 });

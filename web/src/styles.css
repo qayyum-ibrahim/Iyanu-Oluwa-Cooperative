@@ -489,3 +489,29 @@ td.amount {
     grid-template-columns: 1fr 100px 34px;
   }
 }
+
+/* Expenses page (U.6c) */
+.expense-filters {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 18px;
+}
+.expense-filters .error,
+.expense-filters .form-actions {
+  grid-column: 1 / -1;
+}
+.expense-total {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 14px 19px;
+  border-bottom: 1px solid #edf1ef;
+  font-size: 13px;
+  color: #53605a;
+}
+.expense-total b {
+  color: #065f46;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}

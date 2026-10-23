@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.6c (size M), 2026-10-23: Expenses page with the list, filters and total (A-219)
+
+The owner said "fix inconsistencies and go".
+**Changed:** `web/src/api.ts` (`Expense`, `ExpenseFilter`, `ExpenseList`, `listExpenses` with the query in a fixed order, reply shape checked; `call` may read the whole body), new `web/src/Expenses.tsx` (DR-11 categories copied, `checkExpenseFilter`, `expenseListMessage`, `expenseCount`, the page), `web/src/App.tsx` (Expenses in the menu with `expenses.view`; header comment), `web/src/styles.css` (filter grid, total row). Tests: `web/test/api.test.ts` (`listExpenses`, 4), `web/test/app.test.tsx` (helpers 4, page 6; the fake api has `listExpenses`). Docs: ASSUMPTIONS (A-219), PHASE_PLAN, TRACEABILITY (R-10 stale "Day filter on the list: U.6b2" fixed; R-10, R-11), STATUS.
+**Works (verified in this session):** first `npm run check` (web) stopped at the typecheck: my test file added a second `choose` helper (TS2393); I removed mine and used the existing one. Rerun `npm run check` (web): 4 files, 168 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Not verified:** not run in a browser; no live check; no break-on-purpose now (Phase U end run, D-90).
+
+---
+
 ## Step U.6b2 (size M), 2026-10-23: `GET /expenses` filters by days spent (D-94, A-218)
 
 The owner said "commit and go", accepting the A-217 item 6 defaults.

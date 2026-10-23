@@ -1,9 +1,11 @@
 // Sign-in, sign-out and change own password (U.2, D-81), members list and add member (U.3e),
 // member detail (U.3f), record a payment from member detail (U.4e2), the first payment after
-// adding a member (U.4f), give a loan from member detail (U.5b). Other screens come in U.6 to U.8.
+// adding a member (U.4f), give a loan from member detail (U.5b), the expense list (U.6c). Other
+// screens come in U.6d to U.8.
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import ChangePassword from "./ChangePassword.tsx";
+import Expenses from "./Expenses.tsx";
 import Members from "./Members.tsx";
 import { browserLocalStorage, createSessionKeeper } from "./session.ts";
 import SignIn from "./SignIn.tsx";
@@ -12,7 +14,7 @@ export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
 export const SESSION_ENDED = "Your session has ended. Please sign in again.";
 export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
 
-type Page = "home" | "password" | "members";
+type Page = "home" | "password" | "members" | "expenses";
 
 type View =
   | { kind: "loading" }
@@ -144,6 +146,15 @@ export default function App({ makeApi = browserApi }: AppProps) {
               Members
             </button>
           )}
+          {can("expenses.view") && (
+            <button
+              type="button"
+              className={view.page === "expenses" ? "active" : ""}
+              onClick={() => go("expenses")}
+            >
+              Expenses
+            </button>
+          )}
         </nav>
         <button type="button" className="secondary" onClick={() => go("password")}>
           Change password
@@ -164,6 +175,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
             canRecordPayment={can("payments.create")}
             canGiveLoan={can("loans.disburse")}
           />
+        ) : view.page === "expenses" && can("expenses.view") ? (
+          <Expenses api={api} />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

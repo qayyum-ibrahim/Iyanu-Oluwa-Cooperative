@@ -318,6 +318,7 @@ export function createMemoryStore(): Store {
             idempotencyKey: input.idempotencyKey ?? null,
             requestHash: input.requestHash ?? null,
             total: input.total,
+            paidOn: input.paidOn,
             lines: input.lines.map((l) => ({
               id: randomUUID(),
               category: l.category,

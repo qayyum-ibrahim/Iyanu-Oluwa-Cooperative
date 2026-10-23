@@ -35,6 +35,7 @@ export function runPaymentsKeyContract(makeStore: () => Promise<Store> | Store):
       memberId,
       createdById,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 1000n,
       lines: [{ category: "Shares", amount: 1000n }],
       ...over,

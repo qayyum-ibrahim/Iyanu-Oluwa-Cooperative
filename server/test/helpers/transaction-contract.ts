@@ -79,6 +79,7 @@ export function runTransactionContract(makeStore: () => Promise<Store> | Store):
           const p = await tx.payments.create({
             memberId: m.id,
             method: "CASH",
+            paidOn: "2026-10-20",
             total: 1000n,
             lines: [{ category: "Shares", amount: 1000n }],
             createdById: actor.id,

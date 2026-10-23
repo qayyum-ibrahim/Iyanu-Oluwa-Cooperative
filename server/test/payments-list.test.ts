@@ -31,6 +31,7 @@ async function build() {
     s.payments.create({
       memberId,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: totalKobo,
       lines: [{ category: "Savings", amount: totalKobo }],
       createdById,
@@ -197,6 +198,7 @@ describe("GET /payments", () => {
     await store.payments.create({
       memberId: m.id,
       method: "BANK_TRANSFER",
+      paidOn: "2026-10-20",
       total: 100n,
       lines: [{ category: "Shares", amount: 100n }],
       createdById: a.id,

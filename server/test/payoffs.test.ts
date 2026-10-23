@@ -44,6 +44,7 @@ async function build(store: Store = createMemoryStore()) {
     return store.payments.create({
       memberId,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: kobo.reduce((s, l) => s + l.amount, 0n),
       lines: kobo,
       createdById,
@@ -182,6 +183,7 @@ describe("processPayOff: success (DR-05)", () => {
     await store.payments.create({
       memberId: m.id,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 1n,
       lines: [{ category: "Shares", amount: 1n }],
       createdById: a.id,
@@ -518,6 +520,7 @@ describe("processPayOff: idempotency key (as D-48)", () => {
     await store.payments.create({
       memberId: m.id,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 100n,
       lines: [{ category: "Loan Repaid", amount: 100n, loanId: loan.id }],
       createdById: a.id,

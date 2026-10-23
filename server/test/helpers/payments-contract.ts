@@ -42,6 +42,7 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       memberId,
       createdById,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 2_000_000n,
       lines: [
         { category: "Shares", amount: 500_000n },
@@ -85,6 +86,16 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       expect(found?.method).toBe("BANK_TRANSFER");
       expect(found?.total).toBe(huge);
       expect(found?.lines.map((l) => l.amount)).toEqual([huge]);
+    });
+
+    it("saves the payment date as given and reads it back by id and in the list (U.4a)", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-paid-on");
+      const m = await newMember(store, u.id);
+      const p = await store.payments.create(payment(m.id, u.id, { paidOn: "2025-02-28" }));
+      expect(p.paidOn).toBe("2025-02-28");
+      expect((await store.payments.findById(p.id))?.paidOn).toBe("2025-02-28");
+      expect((await store.payments.listByMember(m.id)).map((x) => x.paidOn)).toEqual(["2025-02-28"]);
     });
 
     it("finds a payment by id, and returns null for an unknown id", async () => {

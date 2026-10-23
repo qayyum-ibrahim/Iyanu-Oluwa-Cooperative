@@ -114,7 +114,13 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("pay-member@example.test");
     await expect(
       db.payment.create({
-        data: { memberId: "no-such-member", createdById: u.id, method: "CASH", totalKobo: 100n },
+        data: {
+          memberId: "no-such-member",
+          createdById: u.id,
+          method: "CASH",
+          paidOn: "2026-10-20",
+          totalKobo: 100n,
+        },
       }),
     ).rejects.toMatchObject({ code: "P2003" });
   });
@@ -124,7 +130,13 @@ describe("database (real migration, temporary SQLite file)", () => {
     const m = await newMember(9001, u.id);
     await expect(
       db.payment.create({
-        data: { memberId: m.id, createdById: "no-such-user", method: "CASH", totalKobo: 100n },
+        data: {
+          memberId: m.id,
+          createdById: "no-such-user",
+          method: "CASH",
+          paidOn: "2026-10-20",
+          totalKobo: 100n,
+        },
       }),
     ).rejects.toMatchObject({ code: "P2003" });
   });
@@ -134,7 +146,13 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("line-loan@example.test");
     const m = await newMember(9003, u.id);
     const p = await db.payment.create({
-      data: { memberId: m.id, createdById: u.id, method: "CASH", totalKobo: 100n },
+      data: {
+        memberId: m.id,
+        createdById: u.id,
+        method: "CASH",
+        paidOn: "2026-10-20",
+        totalKobo: 100n,
+      },
     });
     await expect(
       db.paymentLine.create({
@@ -162,6 +180,7 @@ describe("database (real migration, temporary SQLite file)", () => {
         memberId: m.id,
         createdById: u.id,
         method: "CASH",
+        paidOn: "2026-10-20",
         totalKobo: 100n,
         lines: { create: [{ position: 0, category: "Loan Repaid", amountKobo: 100n, loanId: repaid.id }] },
       },
@@ -197,7 +216,13 @@ describe("database (real migration, temporary SQLite file)", () => {
     const u = await newUser("pay-lines@example.test");
     const m = await newMember(9002, u.id);
     const p = await db.payment.create({
-      data: { memberId: m.id, createdById: u.id, method: "CASH", totalKobo: 200n },
+      data: {
+        memberId: m.id,
+        createdById: u.id,
+        method: "CASH",
+        paidOn: "2026-10-20",
+        totalKobo: 200n,
+      },
     });
     await db.paymentLine.create({
       data: { paymentId: p.id, position: 0, category: "Savings", amountKobo: 100n },

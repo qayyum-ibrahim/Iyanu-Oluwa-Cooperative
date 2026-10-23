@@ -51,6 +51,7 @@ interface PaymentRow {
   memberId: string;
   method: PaymentMethod;
   totalKobo: bigint;
+  paidOn: string;
   idempotencyKey: string | null;
   requestHash: string | null;
   createdById: string;
@@ -63,6 +64,7 @@ const toPayment = (r: PaymentRow): PaymentRecord => ({
   memberId: r.memberId,
   method: r.method,
   total: r.totalKobo,
+  paidOn: r.paidOn,
   idempotencyKey: r.idempotencyKey,
   requestHash: r.requestHash,
   lines: [...r.lines]
@@ -428,6 +430,7 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
             memberId: input.memberId,
             method: input.method,
             totalKobo: input.total,
+            paidOn: input.paidOn,
             idempotencyKey: input.idempotencyKey ?? null,
             requestHash: input.requestHash ?? null,
             createdById: input.createdById,

@@ -326,6 +326,7 @@ describe("GET /members/:id/balances", () => {
     store.payments.create({
       memberId,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 2_800_000n,
       lines: [
         { category: "Shares", amount: 1_200_000n },

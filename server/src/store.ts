@@ -266,6 +266,8 @@ export interface PaymentRecord {
   method: PaymentMethod;
   /** Whole kobo. */
   total: bigint;
+  /** The day the member paid, "YYYY-MM-DD" in Lagos time (step U.4a). */
+  paidOn: string;
   /** In the order given when the payment was saved. */
   lines: PaymentLineRecord[];
   /** The caller's idempotency key, or null (step 4.5). Unique per user. */
@@ -281,6 +283,8 @@ export interface NewPayment {
   memberId: string;
   method: PaymentMethod;
   total: bigint;
+  /** "YYYY-MM-DD". The store saves it as given: checking it is the logic code's job. */
+  paidOn: string;
   lines: { category: string; amount: bigint; loanId?: string }[];
   idempotencyKey?: string;
   requestHash?: string;

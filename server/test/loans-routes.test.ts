@@ -323,6 +323,7 @@ describe("GET /loans (step 5.6)", () => {
     await store.payments.create({
       memberId: m.id,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 2_000_000n,
       lines: [{ category: "Loan Repaid", amount: 2_000_000n, loanId: given["id"] as string }],
       createdById: a.id,

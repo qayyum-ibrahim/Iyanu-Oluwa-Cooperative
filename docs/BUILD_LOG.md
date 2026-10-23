@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.4a (size M), 2026-10-23: payment date in the server store (D-87, A-204)
+
+The owner chose the prototype's Date field: "The prototype date field wins. add payment date to the server and go". U.4 split at its start into U.4a to U.4g (PHASE_PLAN).
+**Changed:** `server/prisma/schema.prisma` (`Payment.paidOn` TEXT NOT NULL); new migration `server/prisma/migrations/20261023090000_payment_paid_on/migration.sql` (from `prisma migrate diff` against a temporary database, copy of old rows edited by hand to fill `paidOn` with the day of `createdAt` in Lagos); `server/src/store.ts`, `memory-store.ts`, `prisma-store.ts` (`paidOn` saved and read); `server/src/payments.ts` (`lagosDay`; `createPayment` saves today's day in Lagos). Tests: 2 new contract cases (1 per adapter) in `test/helpers/payments-contract.ts`; 2 in `test/payments.test.ts`; new `test/migration-paid-on.test.ts` (4: builds a database with the older migrations, adds old rows by SQL, applies the new one, checks the fill, the other columns, the lines and the unique key). `paidOn` added to the test payments in `db.test.ts`, `payments-key-contract.ts`, `transaction-contract.ts`, `loans.test.ts`, `loans-routes.test.ts`, `members-routes.test.ts`, `payments-list.test.ts`, `payoffs.test.ts`, `payoffs-routes.test.ts`.
+**Works (verified in this session):** `npm run check` (server): 47 files, 1802 passed, 99.21 s. Probe on a temporary database: `createdAt` is stored as `2026-10-31T23:30:00.000+00:00` and `date("createdAt", '+1 hour')` gives `2026-11-01`.
+**Not verified:** the migration on the dev database (not run; needs the owner's yes); the IANA data for Lagos (A-204 item 1); break-on-purpose (owed at U.4c). Web not changed, web check not rerun.
+
+---
+
 ## Step U.3h (size S), 2026-10-23: tests for the U.3g gaps (A-203)
 
 **Works (verified in this session):** 3 new tests, 3 new bad-reply cases and a stricter loan list check in `web/test/api.test.ts` and `web/test/app.test.tsx` (tests commit `c47f47b`). `npm run check` (web): 4 files, 90 passed. `npm run check` (server): 46 files, 1794 passed. `node ~/Desktop/mutate-U.3g.mjs` (output in `~/Desktop/mutate-U.3h.out`): baseline 76; 70 mutations, 70 caught, 0 escaped, 0 errors, 0 not applied; files restored: yes; `git status --short` empty. A3, A4, A7, A14, A19, A26, A27, A31, V9, V13, V23 and V24 were each caught by the new test meant for it.

@@ -83,6 +83,19 @@ function failure(reason: PaymentFailure, code?: string, lineIndex?: number): Pay
   };
 }
 
+const LAGOS_DAY = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Lagos",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** The day in Lagos at this moment, as "YYYY-MM-DD" (step U.4a). */
+export function lagosDay(at: Date): string {
+  const part = (type: string) => LAGOS_DAY.formatToParts(at).find((p) => p.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 /** 2000050n gives "20000.50". Not for negative values. */
 export function koboToNairaString(kobo: Kobo): string {
   if (kobo < 0n) throw new RangeError("Amount must not be negative.");
@@ -207,6 +220,8 @@ export async function createPayment(
         memberId: member.id,
         method,
         total: checked.total,
+        // The day it is saved, until the request carries its own date (U.4b).
+        paidOn: lagosDay(new Date()),
         lines: checked.lines.map((l) =>
           l.category === LOAN_REPAID_CATEGORY && loanId !== undefined
             ? { category: l.category, amount: l.amount, loanId }

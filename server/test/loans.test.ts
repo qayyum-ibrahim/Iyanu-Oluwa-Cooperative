@@ -45,6 +45,7 @@ async function build(store: Store = createMemoryStore()) {
     store.payments.create({
       memberId,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: amount,
       lines: [{ category: "Loan Repaid", amount, loanId }],
       createdById,
@@ -235,6 +236,7 @@ describe("disburseLoan: one active loan (DR-08)", () => {
     await store.payments.create({
       memberId: m.id,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 30_000_000n,
       lines: [{ category: "Loan Repaid", amount: 30_000_000n }],
       createdById: a.id,
@@ -259,6 +261,7 @@ describe("loanOutstanding and isLoanActive", () => {
     id: "p",
     memberId: "m",
     method: "CASH",
+    paidOn: "2026-10-20",
     total: 0n,
     lines,
     idempotencyKey: null,
@@ -833,6 +836,7 @@ describe("listLoans (step 5.6)", () => {
     await store.payments.create({
       memberId: m.id,
       method: "CASH",
+      paidOn: "2026-10-20",
       total: 500_000n,
       lines: [{ category: "Loan Interest", amount: 500_000n }],
       createdById: a.id,

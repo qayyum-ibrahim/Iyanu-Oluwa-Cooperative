@@ -38,7 +38,14 @@ async function build() {
       { category: "Development Levy", amount: 100_000n },
       { category: "Entrance Fee", amount: 200_000n },
     ];
-    return store.payments.create({ memberId, method: "CASH", total: 2_800_000n, lines, createdById });
+    return store.payments.create({
+      memberId,
+      method: "CASH",
+      paidOn: "2026-10-20",
+      total: 2_800_000n,
+      lines,
+      createdById,
+    });
   };
   return { store, app, admin, a, b, noRight, bearer, addMember, payExample };
 }

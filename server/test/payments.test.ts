@@ -5,6 +5,7 @@ import { createMemoryStore } from "../src/memory-store.js";
 import {
   createPayment,
   koboToNairaString,
+  lagosDay,
   LOAN_REPAID_CATEGORY,
   type PaymentActor,
   type PaymentResult,
@@ -86,6 +87,16 @@ describe("createPayment: success", () => {
     expect(saved[0]?.lines.map((l) => l.amount)).toEqual([500_000n, 1_000_000n, 500_000n]);
   });
 
+  it("saves the day in Lagos as the payment date (U.4a)", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A Day");
+    const before = lagosDay(new Date());
+    const r = must(await createPayment(store, actorOf(a), pay(m.id)));
+    const after = lagosDay(new Date());
+    const saved = await store.payments.findById(r.id);
+    expect([before, after]).toContain(saved?.paidOn);
+  });
+
   it("keeps the largest allowed amount exact", async () => {
     const { store, a, addMember } = await build();
     const m = await addMember(a.id, "A One");
@@ -139,6 +150,15 @@ describe("createPayment: success", () => {
     const two = must(await createPayment(store, actorOf(a), pay(m.id)));
     expect(one.id).not.toBe(two.id);
     expect(await store.payments.listByMember(m.id)).toHaveLength(2);
+  });
+});
+
+describe("lagosDay (U.4a)", () => {
+  it("gives the day in Lagos (UTC+1) at each moment", () => {
+    expect(lagosDay(new Date("2026-10-31T22:59:59.999Z"))).toBe("2026-10-31");
+    expect(lagosDay(new Date("2026-10-31T23:00:00.000Z"))).toBe("2026-11-01");
+    expect(lagosDay(new Date("2026-01-05T00:00:00.000Z"))).toBe("2026-01-05");
+    expect(lagosDay(new Date("2026-06-30T23:30:00.000Z"))).toBe("2026-07-01");
   });
 });
 

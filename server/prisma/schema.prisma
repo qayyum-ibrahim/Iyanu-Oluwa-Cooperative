@@ -112,6 +112,9 @@ model Payment {
   method      PaymentMethod
   // Whole kobo (D-15). The lines add up to this; the logic code checks it (DR-02).
   totalKobo   BigInt
+  // The day the member paid, as "YYYY-MM-DD" in Lagos time (step U.4a). Rows saved before it
+  // got the day of createdAt in Lagos.
+  paidOn      String
   // Set when the caller sent an Idempotency-Key (step 4.5, D-47). Old rows have none.
   idempotencyKey String?
   requestHash    String?

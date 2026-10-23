@@ -354,6 +354,41 @@ describe("GET /members/:id/balances", () => {
     expect(res.body).toEqual({ error: "forbidden" });
   });
 
+  it("answers 200 to Staff with members.view but not members.create (A-198 G2, R2)", async () => {
+    const { app, store, viewOnly, bearer, addMember } = await build();
+    const m = await addMember(viewOnly.id, "V One");
+    await payExample(store, m.id, viewOnly.id);
+    const res = await request(app).get(`/members/${m.id}/balances`).set("Authorization", bearer(viewOnly));
+    expect(res.status).toBe(200);
+    expect(res.body.balances.refundableTotal).toBe("25000.05");
+  });
+
+  it("reads the member, payments and pay-offs in one store transaction (A-197 item 4, A-198 G12)", async () => {
+    const { store, a, addMember } = await build();
+    const m = await addMember(a.id, "A One");
+    await payExample(store, m.id, a.id);
+    // Reads outside a transaction throw; the transaction gets the real store.
+    const outside = () => Promise.reject(new Error("read outside a transaction"));
+    let transactions = 0;
+    const counted = {
+      ...store,
+      members: { ...store.members, findById: outside },
+      payments: { ...store.payments, listByMember: outside },
+      payOffs: { ...store.payOffs, listByMember: outside },
+      transaction: <T>(fn: (tx: typeof store) => Promise<T>): Promise<T> => {
+        transactions++;
+        return store.transaction(fn);
+      },
+    };
+    const app = createApp({ store: counted, tokenSecret: SECRET, now: () => T0 });
+    const res = await request(app)
+      .get(`/members/${m.id}/balances`)
+      .set("Authorization", `Bearer ${createAccessToken(SECRET, a.id, T0)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.balances.refundableTotal).toBe("25000.05");
+    expect(transactions).toBe(1);
+  });
+
   it("answers 200 to Staff for a member they recorded: no-store, exact fields, amounts as strings", async () => {
     const { app, store, a, bearer, addMember } = await build();
     const m = await addMember(a.id, "A One");

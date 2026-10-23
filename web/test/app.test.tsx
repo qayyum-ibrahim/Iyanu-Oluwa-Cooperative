@@ -2,7 +2,7 @@
 // Click tests use jsdom (U.2d): https://vitest.dev/guide/environment.html, https://react.dev/reference/react/act
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import App, {
   PASSWORD_CHANGED,
@@ -555,6 +555,21 @@ describe("member detail helpers", () => {
     expect(formatDate("2026-10-31T23:30:00.000Z")).toBe("1 Nov 2026");
     expect(formatDate("not a date")).toBe("not a date");
   });
+
+  it("shows the day in Lagos when the machine runs in another time zone", async () => {
+    // The date format is made when the module loads, so load it again under UTC (A-202, V9).
+    const before = process.env["TZ"];
+    process.env["TZ"] = "UTC";
+    try {
+      vi.resetModules();
+      const fresh = await import("../src/Members.tsx");
+      expect(fresh.formatDate("2026-10-31T23:30:00.000Z")).toBe("1 Nov 2026");
+    } finally {
+      if (before === undefined) delete process.env["TZ"];
+      else process.env["TZ"] = before;
+      vi.resetModules();
+    }
+  });
 });
 
 const FULL: Me = {
@@ -678,6 +693,37 @@ describe("member detail (jsdom)", () => {
     expect(sectionText("Loans")).toContain("No loans.");
     expect(sectionText("Payments")).toContain("No payments yet.");
     expect(container?.querySelector(".loan")).toBeNull();
+  });
+
+  it("shows loans newest first, and each payment's method, lines and own total", async () => {
+    const older: Loan = { ...ACTIVE_LOAN, id: "l0", createdAt: "2026-10-01T09:00:00.000Z", repaid: "20000.00", outstanding: "0.00", status: "FULLY_REPAID" };
+    const transfer: Payment = {
+      ...payment("p3", "2026-10-22T09:00:00.000Z", "7000.50"),
+      method: "BANK_TRANSFER",
+      lines: [
+        { category: "Savings", amount: "5000.50" },
+        { category: "Shares", amount: "2000.00" },
+      ],
+    };
+    await mount(
+      fakeApi({
+        restore: FULL,
+        members: [ACTIVE_ONE],
+        loans: { ok: true, value: [older, ACTIVE_LOAN] },
+        payments: { ok: true, value: [transfer] },
+      }),
+    );
+    await openDetail("Test Member One");
+    const loanRows = Array.from(container?.querySelectorAll("table.loans tbody tr") ?? []).map(
+      (r) => r.textContent,
+    );
+    expect(loanRows).toEqual([
+      "20 Oct 2026₦50,000.00₦10,000.00₦40,000.00Active",
+      "1 Oct 2026₦50,000.00₦20,000.00₦0.00Fully repaid",
+    ]);
+    expect(el("table.payments tbody tr").textContent).toBe(
+      "22 Oct 2026Bank transferSavings ₦5,000.50, Shares ₦2,000.00₦7,000.50",
+    );
   });
 
   it("shows a fully repaid loan without the On loan badge", async () => {

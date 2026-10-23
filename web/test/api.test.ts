@@ -534,11 +534,18 @@ describe("member calls", () => {
     expect(await api.listMembers("active")).toEqual({ ok: true, value: [] });
   });
 
+  it("keeps each member field as sent, an Inactive status too", async () => {
+    const inactive = { ...MEMBER, status: "INACTIVE", phone: "08000000001", address: "1 Test Road" };
+    const { api } = signedIn(() => json(200, { members: [inactive] }));
+    expect(await api.listMembers("inactive")).toEqual({ ok: true, value: [inactive] });
+  });
+
   it("refuses balances whose amounts are not naira strings with two decimals", async () => {
     const row = BALANCES.categories[0];
     const bad: unknown[] = [
       { ...BALANCES, refundableTotal: 25000.05 },
       { ...BALANCES, refundableTotal: "25000.5" },
+      { ...BALANCES, refundableTotal: "12.345" },
       { ...BALANCES, nonRefundableTotal: "-1.00" },
       { ...BALANCES, categories: [{ ...row, balance: "1,000.00" }] },
       { ...BALANCES, categories: [{ ...row, balance: "" }] },
@@ -546,6 +553,7 @@ describe("member calls", () => {
       { ...BALANCES, categories: [{ ...row, category: 3 }] },
       { ...BALANCES, categories: [null] },
       { ...BALANCES, categories: "none" },
+      { ...BALANCES, categories: "" },
       { ...BALANCES, memberId: undefined },
     ];
     for (const balances of bad) {
@@ -592,11 +600,13 @@ describe("payment and loan lists", () => {
         : json(200, { loans: [LOAN, { ...LOAN, id: "l0", outstanding: "0.00", status: "FULLY_REPAID" }] }),
     );
     expect(await api.listPayments("a&b=c")).toEqual({ ok: true, value: [PAYMENT] });
-    const loans = await api.listLoans("m1");
-    expect(loans.ok && loans.value.map((l) => l.status)).toEqual(["ACTIVE", "FULLY_REPAID"]);
+    expect(await api.listLoans("a&b=c")).toEqual({
+      ok: true,
+      value: [LOAN, { ...LOAN, id: "l0", outstanding: "0.00", status: "FULLY_REPAID" }],
+    });
     expect(calls).toEqual([
       { path: "/api/payments?memberId=a%26b%3Dc", method: "GET", auth: "Bearer acc1", body: null },
-      { path: "/api/loans?memberId=m1", method: "GET", auth: "Bearer acc1", body: null },
+      { path: "/api/loans?memberId=a%26b%3Dc", method: "GET", auth: "Bearer acc1", body: null },
     ]);
   });
 
@@ -620,6 +630,7 @@ describe("payment and loan lists", () => {
       { payments: [{ ...PAYMENT, total: "7000.5" }] },
       { payments: [{ ...PAYMENT, createdAt: 1 }] },
       { payments: [{ ...PAYMENT, lines: "none" }] },
+      { payments: [{ ...PAYMENT, lines: "" }] },
       { payments: [{ ...PAYMENT, lines: [null] }] },
       { payments: [{ ...PAYMENT, lines: [{ ...line, amount: "-1.00" }] }] },
       { payments: [{ ...PAYMENT, lines: [{ ...line, category: 2 }] }] },

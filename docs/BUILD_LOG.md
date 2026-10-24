@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 7.3b (size M), 2026-10-24: `GET /dashboard` route (A-237)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** STATUS promised a read-only live check; PHASE_PLAN named none, and the live check script adds fictional rows on every run. The dashboard part was added to `scripts/live-check-auth.sh`: its own calls only read, the rest of the script adds its usual rows (A-237 item 4). DEV_SETUP now lists `/dashboard`.
+**Changed:** `server/src/dashboard-routes.ts` (new: `createDashboardRouter`), `server/src/app.ts` (mounts `/dashboard`), `server/test/dashboard-routes.test.ts` (new: 15 tests), `scripts/live-check-auth.sh` (dashboard part). Docs: ASSUMPTIONS (A-237), PHASE_PLAN (7.3b done), TRACEABILITY (R-15, R-16), DEV_SETUP, STATUS.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint clean; 51 files, 1996 passed. `sh -n scripts/live-check-auth.sh`: syntax-ok. Server started from `server/`: `GET /health` 200, `GET /dashboard` without a token 401.
+**Works (verified on owner's machine):** `sh scripts/live-check-auth.sh`: 176 passed, 0 failed (the owner reset the owner password first with `npm run reset:owner`; the owner pasted the last line only).
+**Not verified:** no break-on-purpose yet (7.7, D-90). No dashboard screen yet (7.5).
+
 ## Step 7.3 (size M), 2026-10-24: dashboard logic; OQ-11 closed, DR-10 reworded (D-102, A-236)
 
 The owner said "Loan expenses do not count in Total Expenditures, fix Inconsistencies and go". That conflicted with DR-10; the owner chose the new wording (D-102).

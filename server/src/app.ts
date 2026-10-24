@@ -1,6 +1,7 @@
 import express from "express";
 import { createAuditRouter } from "./audit-routes.js";
 import { createAuthRouter } from "./auth-routes.js";
+import { createDashboardRouter } from "./dashboard-routes.js";
 import { createExpensesRouter } from "./expenses-routes.js";
 import { createLoansRouter } from "./loans-routes.js";
 import { createMembersRouter } from "./members-routes.js";
@@ -72,6 +73,7 @@ export function createApp(deps?: AppDeps): express.Express {
     app.use("/loans", createLoansRouter({ store: deps.store, tokenSecret, now }));
     app.use("/expenses", createExpensesRouter({ store: deps.store, tokenSecret, now }));
     app.use("/payoffs", createPayOffsRouter({ store: deps.store, tokenSecret, now }));
+    app.use("/dashboard", createDashboardRouter({ store: deps.store, tokenSecret, now }));
   }
   app.use(errorHandler);
   return app;

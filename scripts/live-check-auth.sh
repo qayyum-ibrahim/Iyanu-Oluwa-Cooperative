@@ -1,5 +1,5 @@
 #!/bin/sh
-# Live check of /auth, /staff, /audit, /members, /payments, /loans and /payoffs against a running server. Run from anywhere: sh scripts/live-check-auth.sh
+# Live check of /auth, /staff, /audit, /members, /payments, /loans, /payoffs and /dashboard against a running server. Run from anywhere: sh scripts/live-check-auth.sh
 # You type the owner email and password. The password is hidden, never printed, never in a command line.
 # Tokens are never printed and never put in a command line (the access token goes to curl on stdin).
 # The one wrong-password try counts as 1 failure and the next correct sign-in resets it (limit is 5).
@@ -409,6 +409,40 @@ code=$(authed_get "/audit?action=payoff.processed&limit=1" "$AT")
 expect "audit log has payoff.processed" "$(pick entries.0.action)" payoff.processed
 code=$(curl -s -o "$BODY" -w "%{http_code}" -X POST "$BASE/payoffs" -H "Content-Type: application/json" --data '{}')
 expect "pay-off without a token refused" "$code" 401
+
+# --- dashboard (step 7.3b) ---
+# Read only. The staff account is new on each run, so its figures are this run's rows only:
+# two payments of 20,000 and one loan of 300,000 with its Loan expense, all in this Lagos month.
+# The Loan expense is not in expenditure (D-102); the pay-off was recorded by the owner (D-99).
+# A run that crosses midnight at a Lagos month end can fail the month figures (no data is harmed).
+code=$(authed_get /dashboard "$SAT")
+expect "dashboard without dashboard permission refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view","loans.disburse","payoff.process","dashboard"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given dashboard" "$code" 200
+code=$(authed_get /dashboard "$SAT")
+expect "staff reads the dashboard" "$code" 200
+expect "dashboard body fields" "$(keys)" "activeMembers,expenditure,fromDay,income,membershipWithdrawal,month,outstandingLoans,recentExpenses,toDay"
+DMONTH=$(pick month)
+expect "staff income this month" "$(pick income.month)" "40000.00"
+expect "staff income all time" "$(pick income.allTime)" "40000.00"
+expect "staff expenditure leaves out the Loan expense" "$(pick expenditure.month)" "0.00"
+expect "staff membership withdrawal" "$(pick membershipWithdrawal.month)" "0.00"
+expect "staff outstanding loans" "$(pick outstandingLoans)" "300000.00"
+expect "staff active members" "$(pick activeMembers)" 1
+expect "staff recent expenses" "$(pick recentExpenses.length)" 1
+expect "staff recent expense is the Loan" "$(pick recentExpenses.0.category)" Loan
+code=$(authed_get "/dashboard?month=$DMONTH&createdById=$SID" "$AT")
+expect "owner reads one staff member's dashboard" "$code" 200
+expect "owner sees the staff income" "$(pick income.month)" "40000.00"
+expect "owner sees the staff outstanding loans" "$(pick outstandingLoans)" "300000.00"
+code=$(authed_get /dashboard "$AT")
+expect "owner reads the whole dashboard" "$code" 200
+code=$(authed_get "/dashboard?month=2026-13" "$AT")
+expect "bad month refused" "$code" 400
+expect "bad month code" "$(pick code)" invalid_month
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/dashboard")
+expect "dashboard without a token refused" "$code" 401
 
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200

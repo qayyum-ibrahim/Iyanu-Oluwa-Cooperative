@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.0 (size S), 2026-10-24: Phase 7 plan; fixes for the TRACEABILITY browser notes and STATUS item 11 (D-99, A-233)
+
+The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."
+**Changed:** docs only: PHASE_PLAN (Phase 7 steps 7.0 to 7.8), DECISIONS (D-99), ASSUMPTIONS (A-233), TRACEABILITY (rows R-01, R-02, R-03, R-04, R-06, R-08, R-10, R-11, R-12, R-13, R-19, R-22, R-34, R-35, R-36 said "not run in a browser" and now say "before U.9" and note the U.9 walk-through; R-14 no longer says "Screen: Phase U."; R-15 to R-17 name their Phase 7 steps), STATUS (item 11 names D-55 to D-99; Phase 7 brief), NEXT_FILES (for 7.1).
+**Read for the plan:** `server/src/permissions.ts` (`dashboard`, `reports.view`, `reports.export` exist), `server/src/store.ts` (payments, loans and pay-offs are listed only by member), `server/prisma/schema.prisma` (no index on `Payment.paidOn`), `docs/OPEN_QUESTIONS.md` (OQ-11 needed by Phase 7).
+**Works:** see the STATUS line for `npm run check` (no code changed).
+**Not verified:** the plan is a first look; sizes are checked when each step starts.
+
 ## Steps U.9 and U.9a (size S each), 2026-10-24: walk-through of every screen; the `/auth` path fix (A-232)
 
 The owner said "fix Inconsistencies and go", then "yes" to U.9a.

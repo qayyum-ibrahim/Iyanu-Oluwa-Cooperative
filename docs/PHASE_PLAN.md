@@ -145,3 +145,15 @@ Sizes stay a first look; an M step may split when it starts.
 | Audit | `GET /audit?actorId=&action=&limit=&offset=` | `users.manage` | none |
 
 Categories lists (payment DR-04, expense DR-11) are copied into the web code for now: there is no category route (A-191). Dashboard, Categories and Exports screens of the prototype wait for Phases 7 and 8.
+
+## Phase 7 steps (planned at 7.0, D-99; first look, sizes checked when each starts)
+Goal: the dashboard (R-15, R-16) and the category totals report, with totals that match the lists (R-17). Business months are Lagos months of the day fields `paidOn`, `spentOn` and `givenOn` (D-16, D-87, D-91, D-92); a month is its first to its last day, both included, as the expense day filter (D-94). Scope is DR-13 (A-233 item 3). OQ-11 decides what income and expenditure count; its default is used until the owner answers (A-233 item 4). One break-on-purpose run at the end of the phase for its money and security code (D-90). Steps with a migration need the owner's word before `migrate`.
+- 7.0 (S) Phase 7 plan, docs only (D-99, A-233). Also fixed: TRACEABILITY rows said "not run in a browser" after the U.9 walk-through; STATUS item 11 named "D-55 to D-89". Done.
+- 7.1 (M) Server: `payments.list(query)` in the store, both adapters and the contract: filters `memberCreatedById` (the member's recorder, A-133), `paidFrom` and `paidTo` (days, both included), ordered by `paidOn`, then `createdAt`. An index on `Payment.paidOn` needs a migration (owner's word).
+- 7.2 (M) Server: `loans.list(query)` in the store, both adapters and the contract (A-167): filter `memberCreatedById`, oldest first. No migration expected.
+- 7.3 (M) Server: dashboard logic and `GET /dashboard?month=YYYY-MM&createdById=` (permission `dashboard`): income, expenditure and Membership Withdrawal for the month and all time, outstanding loans, Active members, the 10 newest expenses; amounts as strings (A-18). Lagos month-end tests (a payment at 23:30 UTC on the last day counts in the next Lagos month). May split into logic and route when it starts.
+- 7.4 (M) Server: `GET /reports/categories?fromDay=&toDay=&createdById=` (permission `reports.view`): the total of payment lines per DR-04 category in the range, and the pay-offs per refundable category beside them (A-233 item 5).
+- 7.5 (M) Web: Dashboard page in the menu with `dashboard` (month picker, the Super Admin's staff filter as the members list, the cards and recent expenses). The Home page opens it when the user holds `dashboard`.
+- 7.6 (M) Web: Categories report page in the menu with `reports.view` (day range, staff filter for the Super Admin).
+- 7.7 (M) Break-on-purpose for the Phase 7 money and security code: the two store lists, the sums, the month bounds, the scope and permission checks (CLAUDE.md rule 10). The gaps get one test step and a rerun (7.7b).
+- 7.8 (S) Walk-through on the owner's machine: for one month, the dashboard expenditure equals the Expenses page total with the same days, and the income equals the category report total for those days (exit "Totals match lists"). Exports are Phase 8; R-17's export part is checked there.

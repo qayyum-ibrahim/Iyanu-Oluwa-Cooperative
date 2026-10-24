@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step U.8e3 (size M), 2026-10-24: break-on-purpose for the web security code (D-98, A-230)
+
+The owner said "fix inconsistencies and go".
+**Inconsistency fixed:** D-98 said "the five staff calls" while `web/src/api.ts` has six; read as the five that change data, `listStaff` (a read) left out (A-230); a note added to D-98 and PHASE_PLAN.
+**Changed:** no source file kept. New throwaway script `~/Desktop/mutate-U.8e3.mjs` (not in git), output `~/Desktop/mutate-U.8e3.out`. Docs: ASSUMPTIONS (A-230), DECISIONS (note in D-98), PHASE_PLAN (U.8e3 done; U.8f gains M10), STATUS.
+**Works (verified in this session):** `node ~/Desktop/mutate-U.8e3.mjs --dry`: "dry run done: 93 mutations" (after K4 was matched to the 4-space indent of `call` and M9 was anchored to `reactivateMessage`). Full run: baseline `test/api.test.ts` and `test/app.test.tsx`, 294 passed; 93 mutations, 86 caught, 7 escaped (M3, M10, F15, F20, F25, F32, G1), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` "(empty)". `npm run check` (web): 4 files, 308 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Escapes (A-230):** M10 is a test gap (a successful member reactivation would also show "Something went wrong. Try again."; no test checks that no alert shows); fix at U.8f. M3, F15, F20, F25, F32 are busy guards, equivalent as tested. G1 (Staff page gate) cannot be reached: the page opens only from the menu, whose gate G2 is caught.
+**Not verified:** not run in a browser; no live check (not part of this step); the run time (about 12 minutes) is an estimate, not measured.
+
 ## Step U.8e2 (size M), 2026-10-23: break-on-purpose for the web money code (D-98, A-229)
 
 The owner said "fix inconsistencies and go. let me know if you need me to decide anything".

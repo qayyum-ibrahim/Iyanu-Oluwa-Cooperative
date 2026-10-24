@@ -2160,7 +2160,7 @@ describe("downloadExport", () => {
   });
 
   it("accepts the content type with parameters or in another case", async () => {
-    for (const type of [`${XLSX}; charset=utf-8`, XLSX.toUpperCase()]) {
+    for (const type of [`${XLSX}; charset=utf-8`, `${XLSX} ; charset=utf-8`, XLSX.toUpperCase()]) {
       const { api } = signedIn(() => xlsx("PK", null, type));
       expect((await api.downloadExport("members", {})).ok).toBe(true);
     }
@@ -2174,6 +2174,8 @@ describe("downloadExport", () => {
       'attachment; filename="../members.xlsx"',
       'attachment; filename="a/b.xlsx"',
       'attachment; filename="members.exe"',
+      'attachment; filename="members.xlsx.exe"',
+      'attachment; filename=".members.xlsx"',
       'attachment; filename=".xlsx"',
       'attachment; filename="members 2026.xlsx"',
       "attachment; filename=members.xlsx",
@@ -2218,6 +2220,16 @@ describe("downloadExport", () => {
     const gone = setup(() => json(401, { error: "invalid_token" }));
     expect(await gone.api.downloadExport("members", {})).toEqual({ ok: false, reason: "signed_out" });
     expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers network when the body of a 200 .xlsx reply cannot be read (A-257)", async () => {
+    const broken = new ReadableStream({
+      start(controller) {
+        controller.error(new TypeError("connection lost"));
+      },
+    });
+    const { api } = signedIn(() => new Response(broken, { status: 200, headers: { "Content-Type": XLSX } }));
+    expect(await api.downloadExport("members", {})).toEqual({ ok: false, reason: "network" });
   });
 
   it("answers server for a 200 that is not an .xlsx file, an empty file, and a 201", async () => {

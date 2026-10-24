@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.7c (size M), 2026-10-25: tests for the 8.7 gaps and a rerun (A-258)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** D-105 named 8.7c S; PHASE_PLAN and A-257 say M (six gaps in two test files). D-105 now says M.
+**Changed:** `server/test/exports-routes.test.ts` (`build` takes a clock; 1 test for E10, 3 cases for R18), `web/test/api.test.ts` (2 unsafe names for F3 and F4, 1 type for D11, 1 new test for D12). No source file changed. Docs: DECISIONS (D-105 size), ASSUMPTIONS (A-258), PHASE_PLAN (8.7c done), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint clean, 56 files, 2186 passed. `npm run check` (web): typecheck and lint clean, 4 files, 365 passed. Hand rerun (scratchpad script, each change applied, one test file run, file restored): "E10 caught Tests 1 failed | 31 passed (32)", "R18 caught Tests 2 failed | 30 passed (32)", "F3 caught", "F4 caught", "D11 caught", "D12 caught" (each "Tests 1 failed | 129 passed (130)"). `git status --short` after: only the two test files.
+**Not verified:** the full 8.7a and 8.7b scripts were not rerun (85 and 65 caught is an inference). The live check export part is still not run. No file was saved in a browser (8.8).
+
 ## Step 8.7b (size S), 2026-10-25: break-on-purpose for the Phase 8 web code (A-257)
 
 The owner said "go".

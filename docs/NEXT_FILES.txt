@@ -4,8 +4,6 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
+scripts/live-check-auth.sh
+web/src/Exports.tsx
 server/src/exports.ts
-server/src/exports-routes.ts
-server/test/exports-routes.test.ts
-web/src/api.ts
-web/test/api.test.ts

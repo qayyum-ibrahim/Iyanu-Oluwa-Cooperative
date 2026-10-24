@@ -13,8 +13,8 @@ const T0 = new Date("2026-10-21T10:00:00.000Z");
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const KINDS = ["members", "transactions", "expenses", "cashflow", "category"] as const;
 
-/** Staff a and b each record one member, payments and one expense. */
-async function build() {
+/** Staff a and b each record one member, payments and one expense. The clock is T0 unless given. */
+async function build(now: Date = T0) {
   const store = createMemoryStore();
   const make = (name: string, role: Role, permissions: string[]) =>
     store.users.create({
@@ -28,8 +28,8 @@ async function build() {
   const a = await make("staff-a", "STAFF", ["reports.export"]);
   const b = await make("staff-b", "STAFF", ["reports.export"]);
   const noExport = await make("no-export", "STAFF", ["dashboard", "reports.view", "members.view"]);
-  const app = createApp({ store, tokenSecret: SECRET, now: () => T0 });
-  const bearer = (u: { id: string }) => `Bearer ${createAccessToken(SECRET, u.id, T0)}`;
+  const app = createApp({ store, tokenSecret: SECRET, now: () => now });
+  const bearer = (u: { id: string }) => `Bearer ${createAccessToken(SECRET, u.id, now)}`;
 
   const addMember = (createdById: string, fullName: string) =>
     store.members.create({ fullName, phone: "08000000000", address: "", occupation: "Trader", createdById });
@@ -202,6 +202,35 @@ describe("GET /exports/:kind (8.4)", () => {
       const res = await download(app, `/exports/${kind}?category=nope`, bearer(admin));
       expect(res.status).toBe(200);
     }
+  });
+
+  it("does not filter by, or write in the audit detail, a real category sent to the four other kinds (A-256)", async () => {
+    const { app, store, admin, bearer } = await build();
+    const rows = await download(app, "/exports/transactions?category=Shares", bearer(admin));
+    expect(await totalRow(rows.body as Buffer)).toEqual(["Total", null, null, null, 12005.5, null, null]);
+    const spent = await download(app, "/exports/expenses?category=Shares", bearer(admin));
+    expect(await totalRow(spent.body as Buffer)).toEqual(["Total", null, null, null, 1000, null, null]);
+    const flow = await download(app, "/exports/cashflow?category=Shares", bearer(admin));
+    const last = await totalRow(flow.body as Buffer);
+    expect([last?.[0], last?.[7], last?.[8]]).toEqual(["Total", 12005.5, 1000]);
+    await download(app, "/exports/members?category=Shares", bearer(admin));
+    expect((await store.audit.listByActor(admin.id)).map((e) => e.detail)).toEqual([
+      "kind=transactions scope=all from_day=none to_day=none",
+      "kind=expenses scope=all from_day=none to_day=none",
+      "kind=cashflow scope=all from_day=none to_day=none",
+      "kind=members scope=all",
+    ]);
+  });
+
+  it.each([
+    ["2026-10-21T22:59:59.999Z", "2026-10-21"],
+    ["2026-10-21T23:00:00.000Z", "2026-10-22"],
+    ["2026-10-21T23:59:59.999Z", "2026-10-22"],
+  ])("names the file after the Lagos day, not the UTC day, at %s (A-256)", async (at, day) => {
+    const { app, admin, bearer } = await build(new Date(at));
+    const res = await download(app, "/exports/members", bearer(admin));
+    expect(res.status).toBe(200);
+    expect(res.headers["content-disposition"]).toBe(`attachment; filename="members-${day}.xlsx"`);
   });
 
   it.each([

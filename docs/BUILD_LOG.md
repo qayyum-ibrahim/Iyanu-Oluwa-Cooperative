@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.7b (size S), 2026-10-24: break-on-purpose for the Phase 7 web reply checks (D-103, A-246)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** STATUS named six functions for 7.7b but left out `monthAndAllTimeOf`, which checks the dashboard amounts; it is in the run (A-246 item 1) and PHASE_PLAN says so. NEXT_FILES named `server/src/dashboard.ts` and `server/src/reports.ts`; they were read only for the reply shapes, and 7.7b changed no server code. `web/test/api.test.ts` and `web/test/app.test.tsx` were read only in their dashboard and report parts, not in full.
+**Changed:** no source or test file. `~/Desktop/mutate-7.7b.mjs` (new, not in git), `~/Desktop/mutate-7.7b.out` (output). Docs: ASSUMPTIONS (A-246), PHASE_PLAN (7.7b done, 7.7c names WD8), TRACEABILITY (R-15, R-17), STATUS.
+**Works (verified in this session):** `npm run check` (server): 53 files, 2050 passed. `node ~/Desktop/mutate-7.7b.mjs --dry`: 80 mutations, every find text found. The run: baseline 329 passed; 80 mutations, 77 caught, 3 escaped (WD1, WD8, RO1), 0 errors, 0 not applied; files restored: yes; `git status --short` empty.
+**Not verified:** WD8 is a test gap (7.7c). WD1 and RO1 are judged equivalent (A-246), not proved. The run time was not measured.
+
 ## Step 7.7a (size M), 2026-10-24: break-on-purpose for the Phase 7 server code (D-103, A-245)
 
 The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."

@@ -1982,6 +1982,7 @@ describe("getDashboard", () => {
       { ...DASHBOARD, month: 202610 },
       { ...DASHBOARD, fromDay: "01-10-2026" },
       { ...DASHBOARD, toDay: undefined },
+      { ...DASHBOARD, toDay: "31-10-2026" },
       { ...DASHBOARD, income: null },
       { ...DASHBOARD, income: { month: "40000.00" } },
       { ...DASHBOARD, income: { month: 40000, allTime: "125000.50" } },

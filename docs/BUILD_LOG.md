@@ -1,5 +1,12 @@
 # Build log (newest first)
 
+## Step 7.7c (size S), 2026-10-24: tests for the 7.7a and 7.7b gaps (A-247)
+
+The owner said "go".
+**Changed:** `server/test/dashboard.test.ts` (one test: a dashboard `createdById` of 100 characters is accepted, D9), `web/test/api.test.ts` (one bad reply: a dashboard `toDay` of the wrong shape answers server, WD8). Docs: ASSUMPTIONS (A-247), PHASE_PLAN (7.7c done), TRACEABILITY (R-15), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): 53 files, 2051 passed. `npm run check` (web): 4 files, 343 passed. Hand rerun (scratchpad script, not in git): D9 caught (1 failed, 46 passed); WD8 caught (1 failed, 121 passed); both files restored; `git status --short` showed only the two test files.
+**Not verified:** full reruns of `mutate-7.7a.mjs` and `mutate-7.7b.mjs` (expected 121 of 126 and 78 of 80; inference, not run).
+
 ## Step 7.7b (size S), 2026-10-24: break-on-purpose for the Phase 7 web reply checks (D-103, A-246)
 
 The owner said "fix Inconsistencies and go".

@@ -123,6 +123,11 @@ describe("getDashboard: refusals", () => {
     }
   });
 
+  it("accepts a createdById of 100 characters", async () => {
+    const { store, admin } = await build();
+    expect((await getDashboard(store, actorOf(admin), { month: "2026-10", createdById: "x".repeat(100) })).ok).toBe(true);
+  });
+
   it("checks the month before createdById", async () => {
     const { store, a } = await build();
     expect(await getDashboard(store, actorOf(a), { month: "x", createdById: "" })).toMatchObject({ code: "invalid_month" });

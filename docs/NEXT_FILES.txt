@@ -1,11 +1,12 @@
 docs/STATUS.md
 docs/BUILD_LOG.md
 docs/PHASE_PLAN.md
-docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
+docs/DEV_SETUP.md
 server/src/dashboard.ts
-server/test/dashboard.test.ts
-server/test/reports.test.ts
-web/src/api.ts
-web/test/api.test.ts
+server/src/reports.ts
+server/src/expenses.ts
+web/src/Dashboard.tsx
+web/src/Reports.tsx
+web/src/Expenses.tsx

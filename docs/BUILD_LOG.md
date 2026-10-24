@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.4 (size M), 2026-10-24: `payOffs.list` across members (A-238)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** the plan called 7.4 M, but the pay-offs store had only `listByMember`; 7.4 is split into the store list (7.4) and the report logic and route (7.4b) (A-238 item 1). A pay-off has no day field; its day at 7.4b is the Lagos day of `createdAt` (A-238 item 2). The files I had not read at the start were read before the change where the change needed them.
+**Changed:** `server/src/store.ts` (`PayOffListQuery`, `PayOffStore.list`), `server/src/memory-store.ts` and `server/src/prisma-store.ts` (`payOffs.list`), `server/test/helpers/payoffs-contract.ts` (4 new cases). Docs: ASSUMPTIONS (A-238), PHASE_PLAN (7.4 done, 7.4b added), TRACEABILITY (R-12, R-17), STATUS.
+**Works (verified in this session):** `npm run check` (server): db:generate, typecheck and lint clean; 51 files, 2004 passed.
+**Not verified:** no live check (store only, no route). No break-on-purpose yet (7.7, D-90).
+
 ## Step 7.3b (size M), 2026-10-24: `GET /dashboard` route (A-237)
 
 The owner said "fix Inconsistencies and go".

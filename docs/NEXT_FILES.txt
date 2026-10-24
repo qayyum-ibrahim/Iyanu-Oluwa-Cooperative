@@ -10,9 +10,9 @@ server/src/dashboard.ts
 server/src/dashboard-routes.ts
 server/src/app.ts
 server/src/categories.ts
-server/src/payoffs.ts
+server/src/payments.ts
+server/src/permissions.ts
 server/src/store.ts
-server/src/memory-store.ts
-server/src/prisma-store.ts
+server/test/dashboard.test.ts
 server/test/dashboard-routes.test.ts
 scripts/live-check-auth.sh

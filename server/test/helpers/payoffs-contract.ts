@@ -156,6 +156,65 @@ export function runPayOffsContract(makeStore: () => Promise<Store> | Store): voi
       expect(await store.payOffs.listByMember(m3.id)).toEqual([]);
     });
 
+    // List across members (step 7.4). Each test filters by a new member recorder, so data kept from
+    // other tests cannot match.
+    it("lists the pay-offs of members the asked user recorded, whoever processed them, oldest first", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "po-all-a");
+      const b = await newUser(store, "po-all-b");
+      const ma = await newMember(store, a.id);
+      const mb = await newMember(store, b.id);
+      const p1 = await store.payOffs.create(payOff(ma.id, a.id));
+      await pause();
+      const p2 = await store.payOffs.create(payOff(mb.id, b.id));
+      await pause();
+      // Processed by b for a's member: still a's (A-133).
+      const p3 = await store.payOffs.create(payOff(ma.id, b.id));
+      const ids = async (memberCreatedById: string) =>
+        (await store.payOffs.list({ memberCreatedById })).map((p) => p.id);
+      expect(await ids(a.id)).toEqual([p1.id, p3.id]);
+      expect(await ids(b.id)).toEqual([p2.id]);
+      const all = (await store.payOffs.list({})).map((p) => p.id);
+      expect(all.filter((id) => [p1.id, p2.id, p3.id].includes(id))).toEqual([p1.id, p2.id, p3.id]);
+      expect(await store.payOffs.list({ memberCreatedById: "no-such-user" })).toEqual([]);
+    });
+
+    it("returns whole pay-offs with their lines in order, as findById does", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "po-all-whole");
+      const m = await newMember(store, u.id);
+      const p = await store.payOffs.create(
+        payOff(m.id, u.id, { method: "BANK_TRANSFER", idempotencyKey: uniqueKey(), requestHash: "h" }),
+      );
+      const listed = await store.payOffs.list({ memberCreatedById: u.id });
+      expect(listed).toEqual([p]);
+      expect(listed[0]?.lines.map((l) => l.category)).toEqual(["Shares", "Savings", "Special Savings"]);
+    });
+
+    it("lists nothing for a recorder whose members have no pay-offs", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "po-all-none");
+      await newMember(store, u.id);
+      expect(await store.payOffs.list({ memberCreatedById: u.id })).toEqual([]);
+    });
+
+    it("does not let a caller change stored data through a listed record", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "po-all-copy");
+      const m = await newMember(store, u.id);
+      const p = await store.payOffs.create(payOff(m.id, u.id));
+      for (const listed of await store.payOffs.list({ memberCreatedById: u.id })) {
+        listed.total = 1n;
+        listed.memberId = "other";
+        const line = listed.lines[0];
+        if (line === undefined) throw new Error("no line");
+        line.amount = 1n;
+        listed.lines.pop();
+        listed.createdAt.setFullYear(2000);
+      }
+      expect(await store.payOffs.list({ memberCreatedById: u.id })).toEqual([p]);
+    });
+
     it("does not let a caller change stored data through input or returned records", async () => {
       const store = await makeStore();
       const u = await newUser(store, "po-copy");

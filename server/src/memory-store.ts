@@ -549,6 +549,17 @@ export function createMemoryStore(): Store {
         async listByMember(memberId) {
           return rows.filter((p) => p.memberId === memberId).map(copyPayOff);
         },
+        async list(query) {
+          const { memberCreatedById } = query;
+          // Rows are kept in the order saved, so they are already oldest first.
+          return rows
+            .filter(
+              (p) =>
+                memberCreatedById === undefined ||
+                memberRows.some((m) => m.id === p.memberId && m.createdById === memberCreatedById),
+            )
+            .map(copyPayOff);
+        },
         async findByKey(createdById, idempotencyKey) {
           const found = rows.find(
             (p) => p.createdById === createdById && p.idempotencyKey === idempotencyKey,

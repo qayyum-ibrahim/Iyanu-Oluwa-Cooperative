@@ -712,6 +712,17 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
         });
         return rows.map(toPayOff);
       },
+      async list(query) {
+        const rows = await prisma.payOff.findMany({
+          where:
+            query.memberCreatedById !== undefined
+              ? { member: { createdById: query.memberCreatedById } }
+              : {},
+          include: { lines: true },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toPayOff);
+      },
       async findByKey(createdById, idempotencyKey) {
         const row = await prisma.payOff.findFirst({
           where: { createdById, idempotencyKey },

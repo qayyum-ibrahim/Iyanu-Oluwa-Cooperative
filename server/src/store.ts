@@ -592,6 +592,14 @@ export class DuplicatePayOffKeyError extends Error {
   }
 }
 
+/**
+ * What to list across members (step 7.4). memberCreatedById is the user who recorded the member,
+ * not the pay-off (A-133, D-99). No filter means all pay-offs.
+ */
+export interface PayOffListQuery {
+  memberCreatedById?: string;
+}
+
 export interface PayOffStore {
   /**
    * Saves a pay-off and all its lines together, or nothing. Throws UnknownMemberError if the
@@ -604,6 +612,8 @@ export interface PayOffStore {
   findById(id: string): Promise<PayOffRecord | null>;
   /** Pay-offs of one member, oldest first. Equal times are in no fixed order. Returns copies. */
   listByMember(memberId: string): Promise<PayOffRecord[]>;
+  /** Pay-offs that match the query, oldest first, each with its lines. Returns copies. */
+  list(query: PayOffListQuery): Promise<PayOffRecord[]>;
   /** The pay-off this user saved with this key, or null. Returns a copy. */
   findByKey(createdById: string, idempotencyKey: string): Promise<PayOffRecord | null>;
 }

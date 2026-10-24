@@ -6,10 +6,8 @@ docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 docs/DOMAIN_RULES.md
 server/src/exports.ts
-server/test/exports.test.ts
-server/src/workbook.ts
-server/src/categories.ts
-server/src/expense-categories.ts
-server/src/expenses.ts
-server/src/payments.ts
-server/src/store.ts
+server/src/app.ts
+server/src/reports-routes.ts
+server/test/reports-routes.test.ts
+server/src/guards.ts
+scripts/live-check-auth.sh

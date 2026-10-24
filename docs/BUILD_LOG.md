@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.3 (size M), 2026-10-24: cashflow and single category exports (A-252)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN 8.8 said a category file's Total equals the Expenses page with that filter; that holds only for a DR-11 category, so a DR-04 category file is now checked against its Paid in the Categories report (A-252 item 7). A-249 item 9 named the category in the audit detail but the 8.2 format had no place for it; 8.3 adds `category=` at the end (A-252 item 4). A-249 item 7 said the two lists share no name, but DR-04 names Membership Withdrawal as system-only; it is treated as an expense category (A-252 item 3).
+**Changed:** `server/src/exports.ts` (new `exportCashflow`, `exportCategory`, `CategoryExportInput`; kinds `cashflow` and `category`; the payment line and expense reads shared by the files as `linesOf` and `expensesOf`; `invalid_category`), `server/test/exports.test.ts` (29 new tests: the shared refusals for the new exports, category checks and order, cashflow order and both totals against the Categories report and the Expenses page, scope, category files for a payment and an expense category, Membership Withdrawal and Loan, audit details, the Prisma store). Docs: ASSUMPTIONS (A-249 items 7 and 9 point to A-252; A-252), PHASE_PLAN (8.3 done, 8.8 reworded), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npx vitest run test/exports.test.ts`: first run 2 failed, 59 passed (two test mistakes: a wrong column index and a report call as Staff without `reports.view`; tests fixed, code unchanged); second run 61 passed. `npm run check` (server): 55 files, 2154 passed.
+**Not verified:** no route yet (8.4), so no file was downloaded or opened in a spreadsheet program (8.8). Web `npm run check` not rerun (no web change). Break-on-purpose for `exports.ts` waits for 8.7 (D-90).
+
 ## Step 8.2 (size M), 2026-10-24: export logic for members, transactions and expenses (A-251)
 
 The owner said "fix Inconsistencies and go".

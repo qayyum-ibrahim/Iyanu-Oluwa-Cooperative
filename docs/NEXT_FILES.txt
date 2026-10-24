@@ -5,6 +5,6 @@ docs/ASSUMPTIONS.md
 docs/DECISIONS.md
 web/src/api.ts
 web/src/Members.tsx
-web/src/Expenses.tsx
+web/src/Staff.tsx
 web/test/api.test.ts
 web/test/app.test.tsx

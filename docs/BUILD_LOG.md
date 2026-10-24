@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step U.8e2 (size M), 2026-10-23: break-on-purpose for the web money code (D-98, A-229)
+
+The owner said "fix inconsistencies and go. let me know if you need me to decide anything".
+**Changed:** `web/src/Members.tsx` (two comments rewrapped, inconsistency 1; no code change). New throwaway script `~/Desktop/mutate-U.8e2.mjs` (not in git), output `~/Desktop/mutate-U.8e2.out`. Docs: ASSUMPTIONS (A-229), PHASE_PLAN (U.8e2 done), STATUS ("Roadmap" comma fixed, inconsistency 2).
+**Works (verified in this session):** `node ~/Desktop/mutate-U.8e2.mjs --dry`: "dry run done: 122 mutations" (after four find texts were anchored to the loan and pay-off code). Full run: baseline `test/api.test.ts` and `test/app.test.tsx`, 294 passed; 122 mutations, 118 caught, 4 escaped (L14, O11, X16, X25), 0 errors, 0 timeouts, 0 not applied; "files restored: yes"; `git status --short` "(empty)". `npm run check` (web): 4 files, 308 passed. `npm run check` (server, not changed): 49 files, 1912 passed.
+**Escapes (A-229):** all four are busy guards, equivalent as tested (as F5 and G11, A-212). No test gap for U.8f.
+**Not verified:** not run in a browser; no live check (not part of this step).
+
 ## Step U.8e1 (size M), 2026-10-23: break-on-purpose for the server code of U.5a to U.6b2 (D-98, A-228)
 
 The owner said "go", then chose "Three parts" for the U.8e split (D-98).

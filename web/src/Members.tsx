@@ -2,8 +2,8 @@
 // from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
 // R-03), give a loan from member detail (U.5b, R-08, D-91), the pay-off confirmation at the
 // bottom of member detail (U.7a, R-12, R-13, DR-05), reactivating an Inactive member (U.7b, R-35,
-// D-80). Search by name or Membership ID runs in the
-// browser over the list the server sent (A-191 item 2). The server checks every field again.
+// D-80). Search by name or Membership ID runs in the browser over the list the server sent
+// (A-191 item 2). The server checks every field again.
 // Amounts stay the naira strings the server sent (A-18); the browser only adds the naira sign and
 // thousands commas. The one sum is the payment form's breakdown check, in whole kobo as BigInt
 // (U.4e, A-209); the server checks again. The pay-off sends back the payout the server sent.
@@ -1321,8 +1321,8 @@ interface MemberDetailProps {
  * Active member with payments.create (U.4e2, D-89), the loan form for an Active member with
  * loans.disburse and no active loan seen (U.5b), and at the bottom the pay-off for an Active
  * member with payoff.process, a payout above ₦0.00 and no active loan seen (U.7a, R-13), and
- * the Reactivate button for an Inactive member with members.edit (U.7b, D-80). One form shows at a time. The payments and loans sections show only with payments.view and
- * loans.view (A-201). Pay-offs are not listed: there is no pay-off read (A-186); the balances
+ * the Reactivate button for an Inactive member with members.edit (U.7b, D-80). One form shows
+ * at a time. The payments and loans sections show only with payments.view and loans.view (A-201). Pay-offs are not listed: there is no pay-off read (A-186); the balances
  * already take them off.
  */
 function MemberDetail({

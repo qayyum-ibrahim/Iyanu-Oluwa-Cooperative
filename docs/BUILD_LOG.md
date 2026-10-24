@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Steps U.9 and U.9a (size S each), 2026-10-24: walk-through of every screen; the `/auth` path fix (A-232)
+
+The owner said "fix Inconsistencies and go", then "yes" to U.9a.
+**Changed:** U.9: `docs/DEV_SETUP.md` (web commands, the dev proxy, every route read from the route files; "web/ has no setup yet" removed), `web/src/App.tsx` (Home text "Choose a page from the menu."). U.9a: `web/src/api.ts` (the five sign-in calls get the `/auth` prefix), `web/test/api.test.ts` (45 expected paths now `/api/auth/...`). Docs: ASSUMPTIONS (A-232), PHASE_PLAN (U.9, U.9a done), TRACEABILITY (R-18, R-29), STATUS.
+**Found:** sign-in in the browser answered 404 for `POST /api/login`; the server serves `/auth/login` (`server/src/app.ts`). The tests pinned the wrong paths, so no check caught it; no earlier step ran sign-in in a browser (A-192 item 8).
+**Works:** `npm run check` (web): 4 files, 308 passed (verified in this session, after U.9a). `npm run check` (server): 49 files, 1913 passed (verified in this session, after U.9; no server file changed in U.9a). Sign-in and every screen walked through against the dev server (verified on owner's machine; owner's report, no output pasted).
+**Not verified:** no break-on-purpose for the path change (end-of-phase run already done; the paths are pinned by the tests). The Desktop scripts `mutate-4.11.mjs` and `mutate-U.2c.mjs` hold old path texts and were not rerun or changed.
+
 ## Step U.8f (size S), 2026-10-24: tests for the U.8e gaps X6 and M10 (A-231)
 
 The owner said "go".

@@ -95,8 +95,8 @@ function setup(
 describe("login", () => {
   it("saves the tokens, then reads /me with the new access token", async () => {
     const { api, keeper, calls } = setup((call) => {
-      if (call.path === "/api/login") return json(200, { ...tokens(1), user: ME.user });
-      if (call.path === "/api/me") return json(200, ME);
+      if (call.path === "/api/auth/login") return json(200, { ...tokens(1), user: ME.user });
+      if (call.path === "/api/auth/me") return json(200, ME);
       return json(404, {});
     });
     const result = await api.login("owner@example.test", "correct horse battery");
@@ -104,12 +104,12 @@ describe("login", () => {
     expect(keeper.accessToken()).toBe("acc1");
     expect(keeper.refreshToken()).toBe("ref1");
     expect(calls[0]).toEqual({
-      path: "/api/login",
+      path: "/api/auth/login",
       method: "POST",
       auth: null,
       body: { email: "owner@example.test", password: "correct horse battery" },
     });
-    expect(calls[1]).toMatchObject({ path: "/api/me", auth: "Bearer acc1" });
+    expect(calls[1]).toMatchObject({ path: "/api/auth/me", auth: "Bearer acc1" });
   });
 
   it("answers invalid_credentials on 401 and keeps nothing", async () => {
@@ -133,7 +133,7 @@ describe("login", () => {
 
   it("clears the tokens when /me fails after a good login", async () => {
     const { api, keeper } = setup((call) =>
-      call.path === "/api/login" ? json(200, { ...tokens(1), user: ME.user }) : json(500, {}),
+      call.path === "/api/auth/login" ? json(200, { ...tokens(1), user: ME.user }) : json(500, {}),
     );
     expect(await api.login("a@b.test", "x")).toEqual({ ok: false, reason: "server" });
     expect(keeper.refreshToken()).toBeNull();
@@ -150,13 +150,13 @@ describe("restore", () => {
 
   it("refreshes with the stored token, saves the rotated pair, then reads /me", async () => {
     const { api, keeper, calls } = setup((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
-      if (call.path === "/api/me") return json(200, ME);
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/me") return json(200, ME);
       return json(404, {});
     }, "ref1");
     expect(await api.restore()).toEqual(ME);
-    expect(calls[0]).toMatchObject({ path: "/api/refresh", body: { refreshToken: "ref1" } });
-    expect(calls[1]).toMatchObject({ path: "/api/me", auth: "Bearer acc2" });
+    expect(calls[0]).toMatchObject({ path: "/api/auth/refresh", body: { refreshToken: "ref1" } });
+    expect(calls[1]).toMatchObject({ path: "/api/auth/me", auth: "Bearer acc2" });
     expect(keeper.refreshToken()).toBe("ref2");
   });
 
@@ -167,7 +167,7 @@ describe("restore", () => {
     );
     expect(await api.restore()).toBeNull();
     expect(keeper.refreshToken()).toBeNull();
-    expect(calls.map((c) => c.path)).toEqual(["/api/refresh"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/auth/refresh"]);
     expect(signedOutCount()).toBe(0);
   });
 
@@ -177,7 +177,7 @@ describe("restore", () => {
     }, "ref1");
     expect(await api.restore()).toBeNull();
     expect(keeper.refreshToken()).toBe("ref1");
-    expect(calls.map((c) => c.path)).toEqual(["/api/refresh"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/auth/refresh"]);
     expect(signedOutCount()).toBe(0);
   });
 });
@@ -185,21 +185,21 @@ describe("restore", () => {
 describe("signed-in calls", () => {
   it("on a 401 refreshes once and retries with the new access token", async () => {
     const { api, keeper, calls } = setup((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
-      if (call.path === "/api/me") {
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/me") {
         return call.auth === "Bearer acc2" ? json(200, ME) : json(401, { error: "unauthorized" });
       }
       return json(404, {});
     });
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     expect(await api.me()).toEqual(ME);
-    expect(calls.map((c) => c.path)).toEqual(["/api/me", "/api/refresh", "/api/me"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/auth/me", "/api/auth/refresh", "/api/auth/me"]);
     expect(calls[1]?.body).toEqual({ refreshToken: "ref1" });
   });
 
   it("signs out when the refresh is refused", async () => {
     const { api, keeper, signedOutCount } = setup((call) =>
-      call.path === "/api/refresh" ? json(401, { error: "invalid_token" }) : json(401, {}),
+      call.path === "/api/auth/refresh" ? json(401, { error: "invalid_token" }) : json(401, {}),
     );
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     expect(await api.me()).toBeNull();
@@ -210,7 +210,7 @@ describe("signed-in calls", () => {
 
   it("signs out when the retry after a good refresh still answers 401", async () => {
     const { api, keeper, calls, signedOutCount } = setup((call) =>
-      call.path === "/api/refresh" ? json(200, { ...tokens(2), userId: "u1" }) : json(401, {}),
+      call.path === "/api/auth/refresh" ? json(200, { ...tokens(2), userId: "u1" }) : json(401, {}),
     );
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     expect(await api.me()).toBeNull();
@@ -222,7 +222,7 @@ describe("signed-in calls", () => {
   it("sends one refresh for two calls that both get 401", async () => {
     let refreshes = 0;
     const { api, keeper } = setup(async (call) => {
-      if (call.path === "/api/refresh") {
+      if (call.path === "/api/auth/refresh") {
         refreshes++;
         await Promise.resolve();
         return call.body && (call.body as { refreshToken: string }).refreshToken === "ref1"
@@ -240,7 +240,7 @@ describe("signed-in calls", () => {
 
   it("keeps the session when the refresh cannot reach the server", async () => {
     const { api, keeper, signedOutCount } = setup((call) => {
-      if (call.path === "/api/refresh") throw new TypeError("Failed to fetch");
+      if (call.path === "/api/auth/refresh") throw new TypeError("Failed to fetch");
       return json(401, {});
     });
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
@@ -254,7 +254,7 @@ describe("signed-in calls", () => {
     let issued = 1;
     let live: string | null = null;
     const { api, keeper, calls, signedOutCount } = setup((call) => {
-      if (call.path === "/api/refresh") {
+      if (call.path === "/api/auth/refresh") {
         if ((call.body as { refreshToken: string }).refreshToken !== `ref${issued}`) {
           return json(401, { error: "invalid_token" });
         }
@@ -268,7 +268,7 @@ describe("signed-in calls", () => {
     expect(await api.me()).toEqual(ME);
     live = null; // acc2 expires
     expect(await api.me()).toEqual(ME);
-    const refreshes = calls.filter((c) => c.path === "/api/refresh").map((c) => c.body);
+    const refreshes = calls.filter((c) => c.path === "/api/auth/refresh").map((c) => c.body);
     expect(refreshes).toEqual([{ refreshToken: "ref1" }, { refreshToken: "ref2" }]);
     expect(signedOutCount()).toBe(0);
     expect(keeper.refreshToken()).toBe("ref3");
@@ -291,7 +291,7 @@ describe("refresh lock", () => {
     const seen: boolean[] = [];
     const { api } = setup(
       (call) => {
-        if (call.path === "/api/refresh") {
+        if (call.path === "/api/auth/refresh") {
           seen.push(inside);
           return json(200, { ...tokens(2), userId: "u1" });
         }
@@ -311,7 +311,7 @@ describe("refresh lock", () => {
     let issued = 1;
     let reused = false;
     const server: Handler = async (call) => {
-      if (call.path === "/api/refresh") {
+      if (call.path === "/api/auth/refresh") {
         await Promise.resolve();
         const sent = (call.body as { refreshToken: string }).refreshToken;
         if (sent !== current || reused) {
@@ -353,7 +353,7 @@ describe("refresh lock", () => {
     });
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     await expect(api.me()).rejects.toThrow("refresh_failed");
-    expect(calls.map((c) => c.path)).toEqual(["/api/me"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/auth/me"]);
     expect(signedOutCount()).toBe(0);
     expect(keeper.refreshToken()).toBe("ref1");
   });
@@ -378,7 +378,7 @@ describe("logout", () => {
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     await api.logout();
     expect(calls).toEqual([
-      { path: "/api/logout", method: "POST", auth: null, body: { refreshToken: "ref1" } },
+      { path: "/api/auth/logout", method: "POST", auth: null, body: { refreshToken: "ref1" } },
     ]);
     expect(keeper.accessToken()).toBeNull();
     expect(keeper.refreshToken()).toBeNull();
@@ -400,7 +400,7 @@ describe("changePassword", () => {
     keeper.save({ accessToken: "acc1", refreshToken: "ref1" });
     expect(await api.changePassword("old password 1", "new password 12")).toEqual({ ok: true });
     expect(calls[0]).toEqual({
-      path: "/api/password",
+      path: "/api/auth/password",
       method: "POST",
       auth: "Bearer acc1",
       body: { currentPassword: "old password 1", newPassword: "new password 12" },
@@ -740,13 +740,13 @@ describe("createPayment", () => {
 
   it("on a 401 refreshes once and sends the same key and body again", async () => {
     const { api, calls, keys } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2"
         ? json(201, { payment: PAYMENT, sms: { status: "sent" } })
         : json(401, {});
     });
     expect(await api.createPayment(NEW_PAYMENT)).toMatchObject({ ok: true, replayed: false });
-    expect(calls.map((c) => c.path)).toEqual(["/api/payments", "/api/refresh", "/api/payments"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/payments", "/api/auth/refresh", "/api/payments"]);
     expect(calls[2]?.body).toEqual(SENT_BODY);
     expect(keys[2]).toBe("key-0000000000000001");
   });
@@ -895,11 +895,11 @@ describe("createLoan", () => {
 
   it("on a 401 refreshes once and sends the same key and body again", async () => {
     const { api, calls, keys } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(201, { loan: GIVEN_LOAN }) : json(401, {});
     });
     expect(await api.createLoan(NEW_LOAN)).toMatchObject({ ok: true, replayed: false });
-    expect(calls.map((c) => c.path)).toEqual(["/api/loans", "/api/refresh", "/api/loans"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/loans", "/api/auth/refresh", "/api/loans"]);
     expect(calls[2]?.body).toEqual(SENT_LOAN);
     expect(keys[2]).toBe("key-0000000000000002");
   });
@@ -1089,11 +1089,11 @@ describe("createExpense", () => {
 
   it("on a 401 refreshes once and sends the same key and body again", async () => {
     const { api, calls, keys } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(201, { expense: EXPENSE }) : json(401, {});
     });
     expect(await api.createExpense(NEW_EXPENSE)).toMatchObject({ ok: true, replayed: false });
-    expect(calls.map((c) => c.path)).toEqual(["/api/expenses", "/api/refresh", "/api/expenses"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/expenses", "/api/auth/refresh", "/api/expenses"]);
     expect(calls[2]?.body).toEqual(SENT_EXPENSE);
     expect(keys[2]).toBe("key-0000000000000003");
   });
@@ -1316,11 +1316,11 @@ describe("createPayOff", () => {
 
   it("on a 401 refreshes once and sends the same key and body again", async () => {
     const { api, calls, keys } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(201, { payOff: PAY_OFF }) : json(401, {});
     });
     expect(await api.createPayOff(NEW_PAY_OFF)).toMatchObject({ ok: true, replayed: false });
-    expect(calls.map((c) => c.path)).toEqual(["/api/payoffs", "/api/refresh", "/api/payoffs"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/payoffs", "/api/auth/refresh", "/api/payoffs"]);
     expect(calls[2]?.body).toEqual(SENT_PAY_OFF);
     expect(keys[2]).toBe("key-0000000000000004");
   });
@@ -1416,13 +1416,13 @@ describe("reactivateMember", () => {
 
   it("on a 401 refreshes once and posts again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(200, { member: REACTIVATED }) : json(401, {});
     });
     expect(await api.reactivateMember("m1")).toEqual({ ok: true, member: REACTIVATED });
     expect(calls.map((c) => c.path)).toEqual([
       "/api/members/m1/reactivate",
-      "/api/refresh",
+      "/api/auth/refresh",
       "/api/members/m1/reactivate",
     ]);
   });
@@ -1554,11 +1554,11 @@ describe("createStaff", () => {
 
   it("on a 401 refreshes once and posts again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(201, { staff: STAFF }) : json(401, {});
     });
     expect(await api.createStaff(NEW_STAFF)).toEqual({ ok: true, staff: STAFF });
-    expect(calls.map((c) => c.path)).toEqual(["/api/staff", "/api/refresh", "/api/staff"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff", "/api/auth/refresh", "/api/staff"]);
   });
 
   it("passes email_taken on, and answers server for a 409 it does not know", async () => {
@@ -1632,13 +1632,13 @@ describe("setStaffPermissions", () => {
 
   it("on a 401 refreshes once and puts again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(200, { staff: STAFF }) : json(401, {});
     });
     expect(await api.setStaffPermissions("s1", LIST)).toEqual({ ok: true, value: STAFF });
     expect(calls.map((c) => c.path)).toEqual([
       "/api/staff/s1/permissions",
-      "/api/refresh",
+      "/api/auth/refresh",
       "/api/staff/s1/permissions",
     ]);
   });
@@ -1710,11 +1710,11 @@ describe("deactivateStaff and reactivateStaff", () => {
 
   it("on a 401 refreshes once and posts again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(200, { staff: OFF }) : json(401, {});
     });
     expect(await api.deactivateStaff("s1")).toEqual({ ok: true, value: OFF });
-    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/deactivate", "/api/refresh", "/api/staff/s1/deactivate"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/deactivate", "/api/auth/refresh", "/api/staff/s1/deactivate"]);
   });
 
   it("maps 400, 403, 404, 409, 500, a network failure and a lost session", async () => {
@@ -1774,11 +1774,11 @@ describe("resetStaffPassword", () => {
 
   it("on a 401 refreshes once and puts again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(200, { staff: STAFF }) : json(401, {});
     });
     expect(await api.resetStaffPassword("s1", PASSWORD)).toEqual({ ok: true, value: STAFF });
-    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/password", "/api/refresh", "/api/staff/s1/password"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/staff/s1/password", "/api/auth/refresh", "/api/staff/s1/password"]);
   });
 
   it("maps 400, 403, 404, 409, 500, a network failure and a lost session", async () => {
@@ -1845,11 +1845,11 @@ describe("listAudit", () => {
 
   it("on a 401 refreshes once and reads again", async () => {
     const { api, calls } = signedIn((call) => {
-      if (call.path === "/api/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
       return call.auth === "Bearer acc2" ? json(200, PAGE) : json(401, {});
     });
     expect(await api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: true, value: PAGE });
-    expect(calls.map((c) => c.path)).toEqual(["/api/audit?limit=50&offset=0", "/api/refresh", "/api/audit?limit=50&offset=0"]);
+    expect(calls.map((c) => c.path)).toEqual(["/api/audit?limit=50&offset=0", "/api/auth/refresh", "/api/audit?limit=50&offset=0"]);
   });
 
   it("maps 400, 403, 500, a network failure and a lost session", async () => {

@@ -124,7 +124,8 @@ Runs after Phase 6, before Phase 7. Phases 7 and 8 then add their own screens (d
   - U.8e2 (M) Web money code: `createLoan`, `createExpense`, `updateExpense`, `deleteExpense`, `createPayOff` and their forms in `Members.tsx` and `Expenses.tsx`. Done (A-229): 122 mutations, 118 caught; 4 busy guards equivalent as tested, no test gap.
   - U.8e3 (M) Web security code: `reactivateMember` and its button, the five staff calls that change data (not `listStaff`, A-230) and the `Staff.tsx` forms. Done (A-230): 93 mutations, 86 caught; M10 a test gap; 5 busy guards and G1 equivalent as tested.
   - U.8f (S, proposed at U.8e1) Tests for the U.8e1 to U.8e3 gaps: X6 (server, an edit with tomorrow's day, A-228) and M10 (web, no alert after a successful member reactivation, A-230), then a rerun of those two mutations. Done (A-231): 2 tests changed, X6 and M10 rerun by hand, both caught; 1913 server tests, 308 web tests.
-- U.9 (S) Walk-through of every screen on the owner's machine against the dev server.
+- U.9 (S) Walk-through of every screen on the owner's machine against the dev server. Done (A-232): DEV_SETUP and the Home text brought up to date; the walk-through found the sign-in 404, fixed at U.9a; then every screen walked through (owner's report). Phase U exit met.
+  - U.9a (S, found at U.9) Web: the five sign-in calls in `web/src/api.ts` get the server's `/auth` prefix; `web/test/api.test.ts` expects `/api/auth/...`. Done (A-232): 308 web tests.
 Sizes stay a first look; an M step may split when it starts.
 
 ### Screens and the routes they call (U.0, read from the route files and `legacy-prototype/src/App.jsx`)

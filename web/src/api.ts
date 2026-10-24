@@ -867,7 +867,7 @@ export function createApi(deps: ApiDeps): Api {
     if (refreshToken === null) return "rejected";
     let response: Response;
     try {
-      response = await post("/refresh", { refreshToken });
+      response = await post("/auth/refresh", { refreshToken });
     } catch {
       return "failed";
     }
@@ -935,7 +935,7 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   async function me(): Promise<Me | null> {
-    const response = await authed("/me");
+    const response = await authed("/auth/me");
     if (response === null || response.status !== 200) return null;
     return meOf(await readJson(response));
   }
@@ -974,7 +974,7 @@ export function createApi(deps: ApiDeps): Api {
     async login(email, password) {
       let response: Response;
       try {
-        response = await post("/login", { email, password });
+        response = await post("/auth/login", { email, password });
       } catch {
         return { ok: false, reason: "network" };
       }
@@ -1011,7 +1011,7 @@ export function createApi(deps: ApiDeps): Api {
       keeper.clear();
       if (refreshToken === null) return;
       try {
-        await post("/logout", { refreshToken });
+        await post("/auth/logout", { refreshToken });
       } catch {
         // Signed out here anyway; the server token expires on its own.
       }
@@ -1020,7 +1020,7 @@ export function createApi(deps: ApiDeps): Api {
     async changePassword(currentPassword, newPassword) {
       let response: Response | null;
       try {
-        response = await authed("/password", {
+        response = await authed("/auth/password", {
           method: "POST",
           body: JSON.stringify({ currentPassword, newPassword }),
         });

@@ -213,7 +213,7 @@ export default function App({ makeApi = browserApi }: AppProps) {
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>
-            <p>Signed in as {me.user.displayName}. The screens come in the next steps.</p>
+            <p>Signed in as {me.user.displayName}. Choose a page from the menu.</p>
           </>
         )}
       </main>

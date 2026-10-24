@@ -1,5 +1,9 @@
 docs/STATUS.md
 docs/BUILD_LOG.md
 docs/PHASE_PLAN.md
-docs/DEV_SETUP.md
-web/src/App.tsx
+docs/TRACEABILITY.md
+docs/DOMAIN_RULES.md
+docs/DECISIONS.md
+legacy-prototype/src/App.jsx
+server/src/balances.ts
+server/src/app.ts

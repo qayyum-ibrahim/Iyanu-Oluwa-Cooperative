@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.7a (size M), 2026-10-24: break-on-purpose for the Phase 7 server code (D-103, A-245)
+
+The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."
+**Inconsistencies fixed:** PHASE_PLAN 7.7 named two store lists; there are three. The web reply checks were in STATUS but not in PHASE_PLAN. Together the run was L, so 7.7 is split into 7.7a (server, M), 7.7b (web, S) and 7.7c (gap tests and reruns, S) (D-103). The Desktop had no 7.x script; `~/Desktop/mutate-7.7a.mjs` is new. Not every NEXT_FILES file was read in full at the start (the four-line reply said which); the code the mutations change was read before writing them.
+**Changed:** no source or test file. `~/Desktop/mutate-7.7a.mjs` (new, not in git), `~/Desktop/mutate-7.7a.out` (output). Docs: DECISIONS (D-103), ASSUMPTIONS (A-245), PHASE_PLAN (7.7 split), TRACEABILITY (R-15, R-17), STATUS.
+**Works (verified in this session):** `npm run check` (server): 53 files, 2050 passed. `node ~/Desktop/mutate-7.7a.mjs --dry`: 126 mutations, every find text found. The run: baseline 533 passed; 126 mutations, 120 caught, 6 escaped (D9, D33, RD1, RD3, RC1, RC3), 0 errors, 0 not applied; files restored: yes; `git status --short` empty. About 33 minutes.
+**Not verified:** the web reply checks (7.7b). D9 is a test gap (7.7c). D33, RD1, RD3, RC1, RC3 are judged equivalent or unreachable (A-245), not proved.
+
 ## Step 7.6b (size M), 2026-10-24: web Categories report page (A-244)
 
 The owner said "go".

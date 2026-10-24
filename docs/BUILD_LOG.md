@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.1 (size M), 2026-10-24: `exceljs` and the workbook helper (A-250)
+
+The owner said "yes install exceljs, fix Inconsistencies and go".
+**Inconsistencies fixed:** A-249 item 8 said a naira number is exact in Excel up to 2^53 kobo. Excel keeps 15 significant digits, and a naira value such as 0.10 is not exact as a binary number; only the two shown decimals are. The cap is now under 10^15 kobo (A-250 item 2). `server/src/workbook.ts` and `server/test/workbook.test.ts` were in NEXT_FILES but did not exist; 8.1 made them.
+**Changed:** `server/package.json` and `server/package-lock.json` (`exceljs` 4.4.0, exact), `server/src/workbook.ts` (new: `buildWorkbook`, `koboToNairaNumber`, `WorkbookError`), `server/test/workbook.test.ts` (new, 42 tests). Docs: ASSUMPTIONS (A-249 item 8 points to A-250; A-250), PHASE_PLAN (8.1 done), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm install --save-exact exceljs@4.4.0`; installed 4.4.0, license MIT, `index.d.ts` shipped. `npx vitest run test/workbook.test.ts`: 42 passed. `npm run check` (server): 54 files, 2093 passed. README read (https://raw.githubusercontent.com/exceljs/exceljs/master/README.md, through a fetch agent; parts of the long file only as a summary).
+**Not verified:** the file has not been opened in a spreadsheet program (8.8). `npm audit`: 8 findings (3 moderate, 5 high), not fixed (A-250 item 6). The README shows no ESM import; `import ExcelJS from "exceljs"` was checked only by the tests passing. Web `npm run check` not rerun (no web change).
+
 ## Step 8.0 (size S), 2026-10-24: Phase 8 plan, Excel exports (D-104, A-249)
 
 The owner said "fix Inconsistencies and go".

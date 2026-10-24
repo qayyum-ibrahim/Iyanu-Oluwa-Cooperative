@@ -5,13 +5,22 @@
 // reactivate a member on member detail (U.7b), the staff list and add staff (U.8a), staff
 // permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d),
 // the dashboard on Home for the holder of `dashboard` (7.5b, A-242), the categories report for the
-// holder of `reports.view` (7.6b, A-244).
+// holder of `reports.view` (7.6b, A-244), the exports page for the holder of `reports.export` (8.6, A-255).
 import { useEffect, useState } from "react";
-import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
+import {
+  browserRefreshLock,
+  createApi,
+  type Api,
+  type ChangePasswordResult,
+  type ExportFile,
+  type LoginResult,
+  type Me,
+} from "./api.ts";
 import Audit from "./Audit.tsx";
 import ChangePassword from "./ChangePassword.tsx";
 import Dashboard from "./Dashboard.tsx";
 import Expenses from "./Expenses.tsx";
+import Exports, { browserSaveFile } from "./Exports.tsx";
 import Members from "./Members.tsx";
 import Reports from "./Reports.tsx";
 import { browserLocalStorage, createSessionKeeper } from "./session.ts";
@@ -22,7 +31,7 @@ export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
 export const SESSION_ENDED = "Your session has ended. Please sign in again.";
 export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
 
-type Page = "home" | "password" | "members" | "expenses" | "reports" | "staff" | "audit";
+type Page = "home" | "password" | "members" | "expenses" | "reports" | "exports" | "staff" | "audit";
 
 type View =
   | { kind: "loading" }
@@ -67,9 +76,11 @@ function browserApi(onSignedOut: () => void): Api {
 
 export interface AppProps {
   makeApi?: (onSignedOut: () => void) => Api;
+  /** Saves an export file; the tests pass their own, because jsdom cannot save one (A-255). */
+  saveFile?: (file: ExportFile) => void;
 }
 
-export default function App({ makeApi = browserApi }: AppProps) {
+export default function App({ makeApi = browserApi, saveFile = browserSaveFile }: AppProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [api] = useState(() =>
     makeApi(() => setView({ kind: "signed-out", notice: SESSION_ENDED })),
@@ -172,6 +183,15 @@ export default function App({ makeApi = browserApi }: AppProps) {
               Categories
             </button>
           )}
+          {can("reports.export") && (
+            <button
+              type="button"
+              className={view.page === "exports" ? "active" : ""}
+              onClick={() => go("exports")}
+            >
+              Exports
+            </button>
+          )}
           {can("users.manage") && (
             <button
               type="button"
@@ -221,6 +241,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
           />
         ) : view.page === "reports" && can("reports.view") ? (
           <Reports api={api} me={me.user} canFilterStaff={can("users.manage")} />
+        ) : view.page === "exports" && can("reports.export") ? (
+          <Exports api={api} me={me.user} canFilterStaff={can("users.manage")} saveFile={saveFile} />
         ) : view.page === "staff" && can("users.manage") ? (
           <Staff api={api} />
         ) : view.page === "audit" && can("users.manage") ? (

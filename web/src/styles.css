@@ -629,7 +629,8 @@ td.amount {
 
 /* Dashboard page (7.5b); the cards in the colours of the balance summary (U.3f) */
 .dashboard-filters,
-.report-filters {
+.report-filters,
+.export-filters {
   max-width: none;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   margin-bottom: 18px;
@@ -637,8 +638,17 @@ td.amount {
 .dashboard-filters .error,
 .dashboard-filters .form-actions,
 .report-filters .error,
-.report-filters .form-actions {
+.report-filters .form-actions,
+.export-filters .form-actions {
   grid-column: 1 / -1;
+}
+
+/* Exports page (8.6): the five buttons as in the prototype's export grid */
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
 }
 .cards {
   display: grid;

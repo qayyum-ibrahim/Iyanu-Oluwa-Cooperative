@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.6 (size M), 2026-10-24: the Exports page (A-255)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN 8.6 named only `web/src/Exports.tsx`; it now names `web/src/App.tsx`, `web/src/styles.css` and `web/test/app.test.tsx` too. NEXT_FILES did not list `web/src/Expenses.tsx` and `web/src/Members.tsx`, which hold the category lists and `isCalendarDay`; they were read and imported, not changed. How the page saves the file and how that is tested was not written down; it is now (A-255 item 7).
+**Changed:** `web/src/Exports.tsx` (new: `EXPORT_CATEGORIES`, `EXPORT_BUTTONS`, `checkExport`, `exportMessage`, `browserSaveFile`, the page), `web/src/App.tsx` (page `exports`, menu button Exports for `reports.export`, prop `saveFile`), `web/src/styles.css` (`.export-filters`, `.export-grid`), `web/test/app.test.tsx` (the fake `downloadExport` answers in turn and records each call; `mount` takes a `saveFile`; 14 new tests: 5 helper tests and 9 page tests). Docs: ASSUMPTIONS (A-255), PHASE_PLAN (8.6), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean, 4 files, 364 passed.
+**Not verified:** `browserSaveFile` has no test and no file was saved in a browser (A-255 item 7; 8.8). Server `npm run check` not rerun (no server change). Break-on-purpose for the page waits for 8.7 (D-90).
+
 ## Step 8.5 (size S), 2026-10-24: `downloadExport` in the web API client (A-254)
 
 The owner said "fix Inconsistencies and go".

@@ -22,6 +22,8 @@ import type {
   CreatePaymentResult,
   CreatePayOffResult,
   CreateStaffResult,
+  Dashboard as DashboardView,
+  DashboardQuery,
   DeleteExpenseResult,
   Expense,
   ExpenseEdit,
@@ -54,6 +56,13 @@ import {
   pageRange,
 } from "../src/Audit.tsx";
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
+import {
+  checkDashboardFilter,
+  dashboardCards,
+  dashboardMessage,
+  formatMonth,
+  lagosMonth,
+} from "../src/Dashboard.tsx";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_TEXT_MAX,
@@ -256,6 +265,8 @@ interface FakeApi extends Api {
   resets: { id: string; password: string }[];
   /** Every audit query the screen sent, in order. */
   auditQueries: AuditFilter[];
+  /** Every dashboard query the screen sent, in order. */
+  dashboardQueries: DashboardQuery[];
   signOutFromServer(): void;
 }
 
@@ -322,6 +333,8 @@ function fakeApi(
     reset?: CallResult<StaffAccount>[];
     /** Answers to listAudit in turn; the last one repeats. */
     audit?: CallResult<AuditPage>[];
+    /** Answers to getDashboard in turn; the last one repeats. */
+    dashboard?: CallResult<DashboardView>[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -339,6 +352,7 @@ function fakeApi(
     const switched: string[] = [];
     const resets: { id: string; password: string }[] = [];
     const auditQueries: AuditFilter[] = [];
+    const dashboardQueries: DashboardQuery[] = [];
     const switchTo = (verb: string) => async (id: string) => {
       calls.push(`${verb} ${id}`);
       switched.push(`${verb} ${id}`);
@@ -362,6 +376,7 @@ function fakeApi(
       switched,
       resets,
       auditQueries,
+      dashboardQueries,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -491,8 +506,12 @@ function fakeApi(
           }
         );
       },
-      // No screen reads the dashboard yet (7.5b).
-      getDashboard: async () => ({ ok: false, reason: "server" }),
+      getDashboard: async (query) => {
+        calls.push("dashboard");
+        dashboardQueries.push(query);
+        const answers = opts.dashboard ?? [];
+        return answers[Math.min(dashboardQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
     };
   };
 }
@@ -3800,6 +3819,185 @@ describe("audit log (jsdom)", () => {
     await mount(fakeApi({ restore: STAFF_MANAGER, audit: [{ ok: false, reason: "invalid_input" }] }));
     await openAudit();
     expect(el("[role=alert]").textContent).toBe("The filters were refused. Press Clear and try again.");
+    expect(rowTexts()).toHaveLength(0);
+  });
+});
+
+const DASHBOARD: DashboardView = {
+  month: "2026-10",
+  fromDay: "2026-10-01",
+  toDay: "2026-10-31",
+  income: { month: "125000.00", allTime: "3400000.50" },
+  expenditure: { month: "15000.00", allTime: "220000.00" },
+  membershipWithdrawal: { month: "0.00", allTime: "48000.00" },
+  outstandingLoans: "90000.00",
+  activeMembers: 12,
+  recentExpenses: [
+    expense("e2", "2026-10-03", "15000.00", { category: "Office Maintenance", description: "Plumber" }),
+    expense("e1", "2026-10-01", "5000.00", { category: "Others", narration: "Fuel", method: "BANK_TRANSFER" }),
+  ],
+};
+
+const DASHBOARD_VIEWER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["dashboard"] };
+const DASHBOARD_OWNER: Me = { ...ME, permissions: ["dashboard", "users.manage"] };
+
+function cardTexts(): string[] {
+  return Array.from(container?.querySelectorAll(".card") ?? []).map((c) => c.textContent ?? "");
+}
+
+describe("dashboard helpers", () => {
+  it("gives this month in Lagos, an hour ahead of UTC", () => {
+    expect(lagosMonth(new Date("2026-10-31T22:59:00.000Z"))).toBe("2026-10");
+    expect(lagosMonth(new Date("2026-10-31T23:30:00.000Z"))).toBe("2026-11");
+  });
+
+  it("writes a month as Oct 2026, and other text as it came", () => {
+    expect(formatMonth("2026-10")).toBe("Oct 2026");
+    expect(formatMonth("2026-01")).toBe("Jan 2026");
+    expect(formatMonth("2026-12")).toBe("Dec 2026");
+    expect(formatMonth("2026-13")).toBe("2026-13");
+    expect(formatMonth("")).toBe("");
+  });
+
+  it("checks the month and adds the staff filter only when chosen", () => {
+    expect(checkDashboardFilter({ month: "", staffId: "" })).toEqual({ ok: false, message: "Choose a month." });
+    expect(checkDashboardFilter({ month: "2026-13", staffId: "" })).toEqual({ ok: false, message: "Enter a real month." });
+    expect(checkDashboardFilter({ month: "2026-00", staffId: "" })).toEqual({ ok: false, message: "Enter a real month." });
+    expect(checkDashboardFilter({ month: "2026-1", staffId: "" })).toEqual({ ok: false, message: "Enter a real month." });
+    expect(checkDashboardFilter({ month: "2026-09", staffId: "" })).toEqual({ ok: true, value: { month: "2026-09" } });
+    expect(checkDashboardFilter({ month: "2026-09", staffId: "s1" })).toEqual({
+      ok: true,
+      value: { month: "2026-09", createdById: "s1" },
+    });
+  });
+
+  it("has a message for every failure, none for signed_out", () => {
+    expect(dashboardMessage("invalid_input")).toBe("The month or staff filter was refused. Press Clear and try again.");
+    expect(dashboardMessage("forbidden")).toBe("You do not have permission to do this.");
+    expect(dashboardMessage("signed_out")).toBeNull();
+    expect(dashboardMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(dashboardMessage("server")).toBe("Something went wrong. Try again.");
+    expect(dashboardMessage("not_found")).toBe("Something went wrong. Try again.");
+  });
+
+  it("lists the cards in order with the amounts as sent", () => {
+    expect(dashboardCards(DASHBOARD)).toEqual([
+      { label: "Active Members", value: "12" },
+      { label: "Income · Oct 2026", value: "₦125,000.00" },
+      { label: "Income · All Time", value: "₦3,400,000.50" },
+      { label: "Total Expenditures · Oct 2026", value: "₦15,000.00" },
+      { label: "Total Expenditures · All Time", value: "₦220,000.00" },
+      { label: "Outstanding Loans", value: "₦90,000.00" },
+      { label: "Withdrawals · Oct 2026", value: "₦0.00" },
+      { label: "Withdrawals · All Time", value: "₦48,000.00" },
+    ]);
+  });
+});
+
+describe("dashboard (jsdom)", () => {
+  it("keeps the plain Home page without dashboard and never reads it", async () => {
+    const api = await mount(fakeApi({ restore: { ...ME, permissions: ["members.view"] } }));
+    expect(button("Home")).toBeDefined();
+    expect(() => button("Dashboard")).toThrow();
+    expect(text()).toContain("Signed in as Ada Test");
+    expect(api.calls).toEqual([]);
+  });
+
+  it("shows the dashboard on Home for a Staff holder, with no staff filter", async () => {
+    const api = await mount(fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: true, value: DASHBOARD }] }));
+    expect(() => button("Home")).toThrow();
+    expect(button("Dashboard").className).toBe("active");
+    expect(el("h1").textContent).toBe("Dashboard");
+    expect(api.calls).toEqual(["dashboard"]);
+    expect(api.dashboardQueries).toEqual([{}]);
+    expect(cardTexts()).toEqual([
+      "Active Members12",
+      "Income · Oct 2026₦125,000.00",
+      "Income · All Time₦3,400,000.50",
+      "Total Expenditures · Oct 2026₦15,000.00",
+      "Total Expenditures · All Time₦220,000.00",
+      "Outstanding Loans₦90,000.00",
+      "Withdrawals · Oct 2026₦0.00",
+      "Withdrawals · All Time₦48,000.00",
+    ]);
+    expect(text()).toContain("1 Oct 2026 to 31 Oct 2026");
+    expect(rowTexts()).toEqual([
+      "3 Oct 2026Office MaintenancePlumber₦15,000.00Cash",
+      "1 Oct 2026OthersFuel₦5,000.00Bank transfer",
+    ]);
+    expect(container?.querySelector("select[name=staffId]")).toBeNull();
+    expect(text()).not.toContain("Signed in as");
+  });
+
+  it("goes back to the dashboard from another page", async () => {
+    const api = await mount(
+      fakeApi({ restore: { ...DASHBOARD_VIEWER, permissions: ["dashboard", "expenses.view"] }, dashboard: [{ ok: true, value: DASHBOARD }] }),
+    );
+    await click(button("Expenses"));
+    expect(el("h1").textContent).toBe("Expenses");
+    await click(button("Dashboard"));
+    expect(el("h1").textContent).toBe("Dashboard");
+    expect(api.dashboardQueries).toEqual([{}, {}]);
+  });
+
+  it("sends the month on Apply and shows the reply", async () => {
+    const september = { ...DASHBOARD, month: "2026-09", fromDay: "2026-09-01", toDay: "2026-09-30", recentExpenses: [] };
+    const api = await mount(
+      fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: true, value: DASHBOARD }, { ok: true, value: september }] }),
+    );
+    await type(el("input[name=month]"), "2026-09");
+    await click(button("Apply"));
+    expect(api.dashboardQueries).toEqual([{}, { month: "2026-09" }]);
+    expect(cardTexts()[1]).toBe("Income · Sep 2026₦125,000.00");
+    expect(text()).toContain("No expenses this month.");
+    expect(rowTexts()).toHaveLength(0);
+  });
+
+  it("stops an empty month in the browser", async () => {
+    const api = await mount(fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: true, value: DASHBOARD }] }));
+    await type(el("input[name=month]"), "");
+    await click(button("Apply"));
+    expect(el("[role=alert]").textContent).toBe("Choose a month.");
+    expect(api.dashboardQueries).toEqual([{}]);
+    expect(cardTexts()).toHaveLength(8);
+  });
+
+  it("offers the staff filter to the Super Admin and sends createdById; Clear goes back", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: DASHBOARD_OWNER,
+        staff: [staffAccount("s1", "Staff One")],
+        dashboard: [{ ok: true, value: DASHBOARD }],
+      }),
+    );
+    expect(api.calls).toContain("staff");
+    const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
+    expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
+    await type(el("input[name=month]"), "2026-09");
+    await choose(select("staffId"), "s1");
+    await click(button("Apply"));
+    await click(button("Clear"));
+    expect(api.dashboardQueries).toEqual([{}, { month: "2026-09", createdById: "s1" }, {}]);
+    expect(select("staffId").value).toBe("");
+    expect(el<HTMLInputElement>("input[name=month]").value).toBe(lagosMonth());
+  });
+
+  it("shows no staff filter when the staff list cannot be read", async () => {
+    await mount(
+      fakeApi({
+        restore: DASHBOARD_OWNER,
+        staffList: { ok: false, reason: "server" },
+        dashboard: [{ ok: true, value: DASHBOARD }],
+      }),
+    );
+    expect(container?.querySelector("select[name=staffId]")).toBeNull();
+    expect(cardTexts()).toHaveLength(8);
+  });
+
+  it("shows the message and no cards when the dashboard cannot be read", async () => {
+    await mount(fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: false, reason: "network" }] }));
+    expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
+    expect(cardTexts()).toHaveLength(0);
     expect(rowTexts()).toHaveLength(0);
   });
 });

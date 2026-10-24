@@ -626,3 +626,37 @@ td.amount {
   display: flex;
   gap: 8px;
 }
+
+/* Dashboard page (7.5b); the cards in the colours of the balance summary (U.3f) */
+.dashboard-filters {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-bottom: 18px;
+}
+.dashboard-filters .error,
+.dashboard-filters .form-actions {
+  grid-column: 1 / -1;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+.card {
+  background: #ecfdf5;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.card span {
+  display: block;
+  color: #53605a;
+  font-size: 12px;
+}
+.card b {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  color: #065f46;
+  font-variant-numeric: tabular-nums;
+}

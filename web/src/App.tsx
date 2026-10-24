@@ -3,11 +3,13 @@
 // adding a member (U.4f), give a loan from member detail (U.5b), the expense list (U.6c), record
 // an expense (U.6d), edit and delete an expense (U.6e), the pay-off on member detail (U.7a),
 // reactivate a member on member detail (U.7b), the staff list and add staff (U.8a), staff
-// permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d).
+// permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d),
+// the dashboard on Home for the holder of `dashboard` (7.5b, A-242).
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import Audit from "./Audit.tsx";
 import ChangePassword from "./ChangePassword.tsx";
+import Dashboard from "./Dashboard.tsx";
 import Expenses from "./Expenses.tsx";
 import Members from "./Members.tsx";
 import { browserLocalStorage, createSessionKeeper } from "./session.ts";
@@ -139,7 +141,7 @@ export default function App({ makeApi = browserApi }: AppProps) {
             className={view.page === "home" ? "active" : ""}
             onClick={() => go("home")}
           >
-            Home
+            {can("dashboard") ? "Dashboard" : "Home"}
           </button>
           {can("members.view") && (
             <button
@@ -210,6 +212,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
           <Staff api={api} />
         ) : view.page === "audit" && can("users.manage") ? (
           <Audit api={api} me={me.user} />
+        ) : can("dashboard") ? (
+          <Dashboard api={api} me={me.user} canFilterStaff={can("users.manage")} />
         ) : (
           <>
             <h1>{SYSTEM_NAME}</h1>

@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.5b (size M), 2026-10-24: Dashboard page (A-242)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** `web/src/Dashboard.tsx` is new and was named in the step header. `web/src/Members.tsx` (format helpers) and `web/src/Audit.tsx` (`actorNames`) were read for imports only and not changed. Card labels follow the prototype with the server's figures, and the panel is "Recent expenses" because the server sends expenses, not payments (A-242 items 2 and 3). `listStaff` is called only with `users.manage` (A-242 item 4). The fake Api in `web/test/app.test.tsx` gained a `dashboard` option. "In the menu" and "Home shows the Dashboard" are one button that reads "Dashboard" (A-242 item 1).
+**Changed:** `web/src/Dashboard.tsx` (new: the page, `lagosMonth`, `formatMonth`, `checkDashboardFilter`, `dashboardMessage`, `dashboardCards`), `web/src/App.tsx` (Home shows the Dashboard with `dashboard`; the button label), `web/src/styles.css` (filters and cards), `web/test/app.test.tsx` (fake `getDashboard` with answers and `dashboardQueries`; 13 tests). Docs: ASSUMPTIONS (A-242), PHASE_PLAN (7.5b done; 7.6 note), TRACEABILITY (R-15, R-16), STATUS.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean; 4 files, 327 passed (314 plus 13). `npm run check` (server): 53 files, 2050 passed (no server change).
+**Not verified:** not run in a browser. No live check (no server change). No break-on-purpose (display code, D-90; the server's dashboard code runs at 7.7).
+
 ## Step 7.5 (size S), 2026-10-24: web `getDashboard` call (A-241)
 
 The owner said "fix Inconsistencies and go".

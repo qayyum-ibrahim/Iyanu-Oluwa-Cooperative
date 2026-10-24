@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.0 (size S), 2026-10-24: Phase 8 plan, Excel exports (D-104, A-249)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** D-13 names `exceljs`, but it was never installed (STATUS listed it under "Not yet installed"); the install is now part of 8.1 and needs the owner's word. The prototype builds its files in the browser with SheetJS; Phase 8 builds them on the server (D-104). At the start, BUILD_LOG, DECISIONS, ASSUMPTIONS and TRACEABILITY were read only in part, and `legacy-prototype/src/App.jsx` only in its Exports part.
+**Changed:** no source or test file. Docs: PHASE_PLAN (Phase 8 steps 8.0 to 8.8), DECISIONS (D-104), ASSUMPTIONS (A-249), TRACEABILITY (R-17, R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): 53 files, 2051 passed. `npm view exceljs`: latest 4.4.0 (2023-10-19), prerelease 4.4.1-prerelease.0, engines node >=8.3.0.
+**Not verified:** the `exceljs` README and its `npm audit` result (read at 8.1). Web `npm run check` not rerun (no web change). PDF §11 is not in the repo; R-23's wording in TRACEABILITY was used.
+
 ## Step 7.8 (size S), 2026-10-24: walk-through, totals match lists (A-248)
 
 The owner said "fix Inconsistencies and go".

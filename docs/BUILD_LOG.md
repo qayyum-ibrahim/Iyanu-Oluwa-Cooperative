@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.8 (size S), 2026-10-24: walk-through, totals match lists (A-248)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN 7.8 said the dashboard expenditure equals the Expenses page total. It leaves out Loan and Membership Withdrawal (D-100, D-102), so the check is now Expenses total = Total Expenditures + Withdrawals + Loan filter total (A-248 item 1). The Expenses page has no staff filter, so the walk-through used everyone on every page (A-248 item 2).
+**Changed:** no source or test file. Docs: PHASE_PLAN (7.8 reworded and done), TRACEABILITY (R-17), ASSUMPTIONS (A-248), STATUS, NEXT_FILES.
+**Works:** `npm run check` (server): 53 files, 2051 passed (verified in this session). Walk-through for October 2026 (verified on owner's machine, owner's report): income ₦780,000.00 = report Total ₦780,000.00; Withdrawals ₦145,000.00 = Membership Withdrawal filter ₦145,000.00; Expenses total ₦2,045,000.00 = ₦0.00 + ₦145,000.00 + ₦1,900,000.00. Phase 7 exit "Totals match lists" met.
+**Not verified:** Total Expenditures was ₦0.00 in October, so the walk-through had no counted expense (A-248 item 3). Web `npm run check` not rerun (no web change).
+
 ## Step 7.7c (size S), 2026-10-24: tests for the 7.7a and 7.7b gaps (A-247)
 
 The owner said "go".

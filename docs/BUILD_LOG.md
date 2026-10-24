@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 8.7b (size S), 2026-10-25: break-on-purpose for the Phase 8 web code (A-257)
+
+The owner said "go".
+**Inconsistencies:** none found. `web/test/api.test.ts` and `web/test/app.test.tsx` were read only in their export parts, not in full.
+**Changed:** no source or test file. `~/Desktop/mutate-8.7b.mjs` (new, not in git; Q `exportQuery`, F `exportFileNameOf`, E `exportFailureOf`, D `downloadExport`, C `checkExport`), `~/Desktop/mutate-8.7b.out` (output). Docs: ASSUMPTIONS (A-257), PHASE_PLAN (8.7b done; 8.7c now M with the 8.7b gaps and its files), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `node ~/Desktop/mutate-8.7b.mjs --dry`: "dry run done: 68 mutations". `node ~/Desktop/mutate-8.7b.mjs` (about 00:14 to 00:22, from the output file times): baseline 350 passed; "mutations: 68 {"caught":61,"escaped":7,"error":0,"timeout":0,"notApplied":0}"; "escaped: F3, F4, F11, E3, D1, D11, D12"; "files restored: yes"; `git status --short` empty. `npm run check` (server): 56 files, 2182 passed.
+**Escapes:** F3, F4, D11 and D12 test gaps (for 8.7c); F11 and E3 equivalent; D1 equivalent as typed (A-257).
+**Not verified:** whether a browser keeps a space before `;` in a content type (D11). The live check export part is still not run. Web `npm run check` not rerun (no web change).
+
 ## Step 8.7a (size M), 2026-10-24: break-on-purpose for the Phase 8 server code (A-256)
 
 The owner said "fix Inconsistencies and go".

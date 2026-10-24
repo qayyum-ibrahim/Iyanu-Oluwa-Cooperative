@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.6 (size S), 2026-10-24: web `getCategoryReport` call (A-243)
+
+The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."
+**Inconsistencies fixed:** `web/src/api.ts` had no category report call, so 7.6 is split into the call (7.6, S) and the page (7.6b, M), as 7.5 (A-243 item 1). `reports.view` can be granted to Staff, so the 7.6b staff filter follows `users.manage`, as the Dashboard (A-243 item 3). The NEXT_FILES docs that were read in part at the start (BUILD_LOG, DECISIONS, ASSUMPTIONS, TRACEABILITY, PHASE_PLAN) were read in the parts this step relies on; `Members.tsx` and `styles.css` were not needed for the call and were not changed.
+**Changed:** `web/src/api.ts` (`CategoryReportRow`, `CategoryReport`, `CategoryReportQuery`, `categoryReportRowOf`, `reportDayOf`, `categoryReportOf`, `categoryReportQuery`, `Api.getCategoryReport`), `web/test/api.test.ts` (6 tests), `web/test/app.test.tsx` (`getCategoryReport` in both fake Api objects). Docs: ASSUMPTIONS (A-243), PHASE_PLAN (7.6 done, 7.6b added), TRACEABILITY (R-17), STATUS.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean; 4 files, 333 passed (327 plus 6). `npm run check` (server): 53 files, 2050 passed (no server change).
+**Not verified:** no screen uses the call yet (7.6b). No live check (no page; the route's live check ran at 7.4c). No break-on-purpose yet (7.7, D-90).
+
 ## Step 7.5b (size M), 2026-10-24: Dashboard page (A-242)
 
 The owner said "fix Inconsistencies and go".

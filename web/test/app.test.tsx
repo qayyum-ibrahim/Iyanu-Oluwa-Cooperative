@@ -163,6 +163,7 @@ const idleApi: Api = {
   resetStaffPassword: async () => ({ ok: false, reason: "server" }),
   listAudit: async () => ({ ok: false, reason: "server" }),
   getDashboard: async () => ({ ok: false, reason: "server" }),
+  getCategoryReport: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -512,6 +513,7 @@ function fakeApi(
         const answers = opts.dashboard ?? [];
         return answers[Math.min(dashboardQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
+      getCategoryReport: async () => ({ ok: false, reason: "server" }),
     };
   };
 }

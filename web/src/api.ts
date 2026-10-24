@@ -5,7 +5,8 @@
 // paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
 // staff list and add staff (server/src/staff-routes.ts, U.8a), a staff account's permissions
 // (U.8b), deactivate, reactivate and reset a staff password (U.8c), and the audit log
-// (server/src/audit-routes.ts, U.8d), and the dashboard (server/src/dashboard-routes.ts, 7.5).
+// (server/src/audit-routes.ts, U.8d), the dashboard (server/src/dashboard-routes.ts, 7.5) and the
+// category report (server/src/reports-routes.ts, 7.6).
 // Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
@@ -297,6 +298,34 @@ export interface DashboardQuery {
   createdById?: string;
 }
 
+/** One category of GET /reports/categories (CategoryRow in server/src/reports.ts). Naira strings. */
+export interface CategoryReportRow {
+  category: string;
+  /** Paid out at pay-off (DR-03). */
+  refundable: boolean;
+  /** Sum of the payment lines of this category in the range. */
+  paid: string;
+  /** Sum of the pay-off lines of this category in the range. */
+  paidOut: string;
+}
+
+/** GET /reports/categories (CategoryReportView in server/src/reports.ts). */
+export interface CategoryReport {
+  /** "YYYY-MM-DD", both included; null when not sent (no bound). */
+  fromDay: string | null;
+  toDay: string | null;
+  categories: CategoryReportRow[];
+  totalPaid: string;
+  totalPaidOut: string;
+}
+
+/** The query of GET /reports/categories. A day left out is no bound. createdById: Super Admin only (D-99). */
+export interface CategoryReportQuery {
+  fromDay?: string;
+  toDay?: string;
+  createdById?: string;
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -416,6 +445,7 @@ export interface Api {
   resetStaffPassword(id: string, password: string): Promise<CallResult<StaffAccount>>;
   listAudit(filter: AuditFilter): Promise<CallResult<AuditPage>>;
   getDashboard(query: DashboardQuery): Promise<CallResult<Dashboard>>;
+  getCategoryReport(query: CategoryReportQuery): Promise<CallResult<CategoryReport>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -778,6 +808,44 @@ function dashboardOf(value: unknown): Dashboard | null {
 function dashboardQuery(query: DashboardQuery): string {
   const parts: string[] = [];
   for (const name of ["month", "createdById"] as const) {
+    const value = query[name];
+    if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
+  }
+  return parts.length === 0 ? "" : `?${parts.join("&")}`;
+}
+
+function categoryReportRowOf(value: unknown): CategoryReportRow | null {
+  if (!isObject(value)) return null;
+  const { category, refundable, paid, paidOut } = value;
+  if (typeof category !== "string" || typeof refundable !== "boolean") return null;
+  if (typeof paid !== "string" || !NAIRA.test(paid)) return null;
+  if (typeof paidOut !== "string" || !NAIRA.test(paidOut)) return null;
+  return { category, refundable, paid, paidOut };
+}
+
+/** A day of the report, or null for no bound; undefined if neither. */
+function reportDayOf(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === "string" && DAY.test(value) ? value : undefined;
+}
+
+function categoryReportOf(value: unknown): CategoryReport | null {
+  if (!isObject(value)) return null;
+  const fromDay = reportDayOf(value["fromDay"]);
+  const toDay = reportDayOf(value["toDay"]);
+  if (fromDay === undefined || toDay === undefined) return null;
+  const { totalPaid, totalPaidOut } = value;
+  if (typeof totalPaid !== "string" || !NAIRA.test(totalPaid)) return null;
+  if (typeof totalPaidOut !== "string" || !NAIRA.test(totalPaidOut)) return null;
+  const categories = listOf(categoryReportRowOf)(value["categories"]);
+  if (categories === null) return null;
+  return { fromDay, toDay, categories, totalPaid, totalPaidOut };
+}
+
+/** The query string for GET /reports/categories, fields in a fixed order, each value made safe. */
+function categoryReportQuery(query: CategoryReportQuery): string {
+  const parts: string[] = [];
+  for (const name of ["fromDay", "toDay", "createdById"] as const) {
     const value = query[name];
     if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
   }
@@ -1357,6 +1425,11 @@ export function createApi(deps: ApiDeps): Api {
     // The reply is the dashboard itself, not wrapped (A-237 item 1).
     getDashboard(query) {
       return call(`/dashboard${dashboardQuery(query)}`, {}, 200, null, dashboardOf);
+    },
+
+    // The reply is the report itself, not wrapped (as GET /dashboard). The 400 code is not passed on.
+    getCategoryReport(query) {
+      return call(`/reports/categories${categoryReportQuery(query)}`, {}, 200, null, categoryReportOf);
     },
   };
 }

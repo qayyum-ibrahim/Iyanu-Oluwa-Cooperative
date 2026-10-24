@@ -2008,3 +2008,112 @@ describe("getDashboard", () => {
     expect(await wrong.api.getDashboard({})).toEqual({ ok: false, reason: "server" });
   });
 });
+
+const REPORT = {
+  fromDay: "2026-10-01",
+  toDay: "2026-10-31",
+  categories: [
+    { category: "Shares", refundable: true, paid: "12000.00", paidOut: "5000.00" },
+    { category: "Development Levy", refundable: false, paid: "1000.50", paidOut: "0.00" },
+  ],
+  totalPaid: "13000.50",
+  totalPaidOut: "5000.00",
+};
+
+describe("getCategoryReport", () => {
+  it("reads GET /reports/categories with no query when days and staff are left out", async () => {
+    const { api, calls } = signedIn(() => json(200, REPORT));
+    expect(await api.getCategoryReport({})).toEqual({ ok: true, value: REPORT });
+    expect(calls).toEqual([{ path: "/api/reports/categories", method: "GET", auth: "Bearer acc1", body: null }]);
+  });
+
+  it("sends fromDay, toDay and createdById in a fixed order, each value made safe", async () => {
+    const { api, calls } = signedIn(() => json(200, REPORT));
+    await api.getCategoryReport({ createdById: "a/b?c&d", toDay: "2026-10-31", fromDay: "2026-10-01" });
+    await api.getCategoryReport({ toDay: "2026-10-31" });
+    await api.getCategoryReport({ fromDay: "2026-10-01" });
+    await api.getCategoryReport({ createdById: "s1" });
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/reports/categories?fromDay=2026-10-01&toDay=2026-10-31&createdById=a%2Fb%3Fc%26d",
+      "/api/reports/categories?toDay=2026-10-31",
+      "/api/reports/categories?fromDay=2026-10-01",
+      "/api/reports/categories?createdById=s1",
+    ]);
+  });
+
+  it("keeps null days (no bound) and an empty category list", async () => {
+    const open = { ...REPORT, fromDay: null, toDay: null };
+    const empty = { ...REPORT, categories: [], totalPaid: "0.00", totalPaidOut: "0.00" };
+    const first = signedIn(() => json(200, open));
+    expect(await first.api.getCategoryReport({})).toEqual({ ok: true, value: open });
+    const second = signedIn(() => json(200, empty));
+    expect(await second.api.getCategoryReport({})).toEqual({ ok: true, value: empty });
+  });
+
+  it("on a 401 refreshes once and reads again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, REPORT) : json(401, {});
+    });
+    expect(await api.getCategoryReport({})).toEqual({ ok: true, value: REPORT });
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/reports/categories",
+      "/api/auth/refresh",
+      "/api/reports/categories",
+    ]);
+  });
+
+  it("maps 400, 403, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input", code: "invalid_range" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.getCategoryReport({})).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.getCategoryReport({})).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a reply of the wrong shape, amounts that are not naira strings, and a 201", async () => {
+    const ROW = REPORT.categories[0];
+    const bad: unknown[] = [
+      null,
+      [],
+      {},
+      { report: REPORT },
+      { ...REPORT, fromDay: undefined },
+      { ...REPORT, fromDay: "01-10-2026" },
+      { ...REPORT, toDay: 20261031 },
+      { ...REPORT, toDay: "" },
+      { ...REPORT, totalPaid: "13000.5" },
+      { ...REPORT, totalPaid: undefined },
+      { ...REPORT, totalPaidOut: "-5000.00" },
+      { ...REPORT, totalPaidOut: 5000 },
+      { ...REPORT, categories: null },
+      { ...REPORT, categories: {} },
+      { ...REPORT, categories: [ROW, null] },
+      { ...REPORT, categories: [{ ...ROW, category: 1 }] },
+      { ...REPORT, categories: [{ ...ROW, refundable: "true" }] },
+      { ...REPORT, categories: [{ ...ROW, paid: "12,000.00" }] },
+      { ...REPORT, categories: [{ ...ROW, paid: undefined }] },
+      { ...REPORT, categories: [{ ...ROW, paidOut: 5000 }] },
+      { ...REPORT, categories: [{ ...ROW, paidOut: "5000" }] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.getCategoryReport({})).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, REPORT));
+    expect(await wrong.api.getCategoryReport({})).toEqual({ ok: false, reason: "server" });
+  });
+});

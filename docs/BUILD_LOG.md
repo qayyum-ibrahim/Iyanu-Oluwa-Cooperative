@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.2 (size M), 2026-10-24: export logic for members, transactions and expenses (A-251)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** `server/src/exports.ts` and `server/test/exports.test.ts` were in NEXT_FILES but did not exist; 8.2 made them. Not split (A-251 item 1).
+**Changed:** `server/src/exports.ts` (new: `exportMembers`, `exportTransactions`, `exportExpenses`; permission `reports.export`; scope as `listExpenses`, D-67; days on `paidOn` and `spentOn`, both included; one audit entry `export.created` per export, in one transaction with the reads and the file), `server/test/exports.test.ts` (new, 32 tests: refusals, columns, day range, scope, Totals equal the Categories report Total (Paid) and the `listExpenses` total, audit detail, no entry when the file cannot be built, no file when the audit write fails, one test on real SQLite). Docs: ASSUMPTIONS (A-251), PHASE_PLAN (8.2 done), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npx vitest run test/exports.test.ts`: 32 passed. `npm run check` (server): 55 files, 2125 passed.
+**Not verified:** no route yet (8.4), so no file was downloaded or opened in a spreadsheet program (8.8). How an empty text cell reads back is not pinned (A-251 item 8). Web `npm run check` not rerun (no web change). Break-on-purpose for `exports.ts` waits for 8.7 (D-90).
+
 ## Step 8.1 (size M), 2026-10-24: `exceljs` and the workbook helper (A-250)
 
 The owner said "yes install exceljs, fix Inconsistencies and go".

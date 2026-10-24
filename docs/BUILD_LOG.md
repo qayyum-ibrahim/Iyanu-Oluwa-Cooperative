@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.4 (size M), 2026-10-24: the export route (A-253)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN 8.4 and NEXT_FILES did not name the two new files; PHASE_PLAN 8.4 now names them. A-251 item 3 left open whether the members kind refuses days; it ignores them (A-253 item 3). PHASE_PLAN 8.4 listed `category` for every kind; it now says only the category kind reads it.
+**Changed:** `server/src/exports-routes.ts` (new: `createExportsRouter`, `GET /:kind`, 404 `not_found` for an unknown kind after the guards, .xlsx content type, attachment name `<kind>-<Lagos day>.xlsx`), `server/src/app.ts` (mounted at `/exports`), `server/test/exports-routes.test.ts` (new, 28 tests: 401, 403 before the kind and the query, 404, a file for each kind opened with `exceljs`, Staff scope, the Super Admin with and without `createdById`, days, an expense category, ignored fields, the 400 codes, one audit entry per file, 500 with no audit entry), `scripts/live-check-auth.sh` (export part, 17 checks; helper `authed_file`). Docs: ASSUMPTIONS (A-251 item 3 points to A-253; A-253), PHASE_PLAN (8.4), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npx vitest run test/exports-routes.test.ts`: first run 1 failed, 27 passed (the test expected the log name "WorkbookError"; the class does not set its name, so it is "Error"; test fixed, code unchanged); second run 28 passed. First `npm run check`: typecheck failed with 2 errors (`req.params["kind"]` typed `string | string[]`; the test's body parser type); both fixed; second `npm run check` (server): 56 files, 2182 passed. `sh -n scripts/live-check-auth.sh`: no syntax error.
+**Not verified:** the live check export part was not run (needs the owner's word). No file was opened in a spreadsheet program (8.8). The xlsx content type is from my knowledge, not an official page. Web `npm run check` not rerun (no web change). Break-on-purpose for the route waits for 8.7 (D-90).
+
 ## Step 8.3 (size M), 2026-10-24: cashflow and single category exports (A-252)
 
 The owner said "fix Inconsistencies and go".

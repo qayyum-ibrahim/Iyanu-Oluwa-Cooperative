@@ -1,5 +1,5 @@
 #!/bin/sh
-# Live check of /auth, /staff, /audit, /members, /payments, /loans, /payoffs, /dashboard and /reports against a running server. Run from anywhere: sh scripts/live-check-auth.sh
+# Live check of /auth, /staff, /audit, /members, /payments, /loans, /payoffs, /dashboard, /reports and /exports against a running server. Run from anywhere: sh scripts/live-check-auth.sh
 # You type the owner email and password. The password is hidden, never printed, never in a command line.
 # Tokens are never printed and never put in a command line (the access token goes to curl on stdin).
 # The one wrong-password try counts as 1 failure and the next correct sign-in resets it (limit is 5).
@@ -30,6 +30,9 @@ get_me() { # access token; prints the status code; body goes to $BODY. The token
 
 authed_get() { # path, access token; prints the status code; body goes to $BODY
   printf 'header = "Authorization: Bearer %s"\n' "$2" | curl -s -o "$BODY" -w "%{http_code}" -K - "$BASE$1"
+}
+authed_file() { # path, access token; prints the status code and the content type; the file goes to $BODY
+  printf 'header = "Authorization: Bearer %s"\n' "$2" | curl -s -o "$BODY" -w "%{http_code} %{content_type}" -K - "$BASE$1"
 }
 authed_send() { # method, path, access token, optional idempotency key; the JSON body is in $REQ; prints the status code
   EXTRA=""
@@ -473,6 +476,28 @@ expect "reversed range refused" "$code" 400
 expect "reversed range code" "$(pick code)" invalid_range
 code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/reports/categories")
 expect "report without a token refused" "$code" 401
+
+# --- exports (step 8.4) ---
+# Read only, except one export.created audit entry per file. The file is kept in $BODY and deleted at the end.
+code=$(authed_get /exports/transactions "$SAT")
+expect "export without reports.export refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view","loans.disburse","payoff.process","dashboard","reports.view","reports.export"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given reports.export" "$code" 200
+for kind in members transactions expenses cashflow "category?category=Shares"; do
+  got=$(authed_file "/exports/$kind" "$SAT")
+  expect "staff export $kind" "$got" "200 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  expect "staff export $kind is a zip file" "$(head -c 2 "$BODY")" PK
+done
+got=$(authed_file "/exports/expenses?createdById=$SID" "$AT")
+expect "owner exports one staff member's expenses" "$got" "200 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+code=$(authed_get "/exports/category?category=Nope" "$AT")
+expect "unknown export category refused" "$code" 400
+expect "unknown export category code" "$(pick code)" invalid_category
+code=$(authed_get /exports/nope "$AT")
+expect "unknown export kind" "$code" 404
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/exports/members")
+expect "export without a token refused" "$code" 401
 
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200

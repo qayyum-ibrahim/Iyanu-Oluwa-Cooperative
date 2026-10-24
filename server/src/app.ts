@@ -3,6 +3,7 @@ import { createAuditRouter } from "./audit-routes.js";
 import { createAuthRouter } from "./auth-routes.js";
 import { createDashboardRouter } from "./dashboard-routes.js";
 import { createExpensesRouter } from "./expenses-routes.js";
+import { createExportsRouter } from "./exports-routes.js";
 import { createLoansRouter } from "./loans-routes.js";
 import { createMembersRouter } from "./members-routes.js";
 import { createPaymentsRouter } from "./payments-routes.js";
@@ -76,6 +77,7 @@ export function createApp(deps?: AppDeps): express.Express {
     app.use("/payoffs", createPayOffsRouter({ store: deps.store, tokenSecret, now }));
     app.use("/dashboard", createDashboardRouter({ store: deps.store, tokenSecret, now }));
     app.use("/reports", createReportsRouter({ store: deps.store, tokenSecret, now }));
+    app.use("/exports", createExportsRouter({ store: deps.store, tokenSecret, now }));
   }
   app.use(errorHandler);
   return app;

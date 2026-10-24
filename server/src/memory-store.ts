@@ -491,6 +491,18 @@ export function createMemoryStore(): Store {
         async listByMember(memberId) {
           return rows.filter((l) => l.memberId === memberId).map(copyLoan);
         },
+        async list(query) {
+          const { memberCreatedById } = query;
+          return rows
+            .filter(
+              (l) =>
+                memberCreatedById === undefined ||
+                memberRows.some((m) => m.id === l.memberId && m.createdById === memberCreatedById),
+            )
+            // Rows are kept in the order saved, and sort is stable, so equal days stay oldest first.
+            .sort((x, y) => (x.givenOn < y.givenOn ? -1 : x.givenOn > y.givenOn ? 1 : 0))
+            .map(copyLoan);
+        },
         async findByKey(createdById, idempotencyKey) {
           const found = rows.find(
             (l) => l.createdById === createdById && l.idempotencyKey === idempotencyKey,

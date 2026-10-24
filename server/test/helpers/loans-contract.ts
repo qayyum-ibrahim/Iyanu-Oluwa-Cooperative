@@ -139,6 +139,68 @@ export function runLoansContract(makeStore: () => Promise<Store> | Store): void 
       expect(await store.loans.listByMember(m3.id)).toEqual([]);
     });
 
+    // List across members (step 7.2). Each test filters by a new member recorder, so data kept from
+    // other tests cannot match.
+    it("lists the loans of members the asked user recorded, whoever gave the loan", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "l-all-a");
+      const b = await newUser(store, "l-all-b");
+      const ma = await newMember(store, a.id);
+      const mb = await newMember(store, b.id);
+      const l1 = await store.loans.create(loan(ma.id, a.id));
+      await pause();
+      const l2 = await store.loans.create(loan(mb.id, b.id));
+      await pause();
+      // Given by b to a's member: still a's (A-133).
+      const l3 = await store.loans.create(loan(ma.id, b.id));
+      const ids = async (memberCreatedById: string) =>
+        (await store.loans.list({ memberCreatedById })).map((l) => l.id);
+      expect(await ids(a.id)).toEqual([l1.id, l3.id]);
+      expect(await ids(b.id)).toEqual([l2.id]);
+      const all = (await store.loans.list({})).map((l) => l.id);
+      expect(all.filter((id) => [l1.id, l2.id, l3.id].includes(id))).toEqual([l1.id, l2.id, l3.id]);
+      expect(await store.loans.list({ memberCreatedById: "no-such-user" })).toEqual([]);
+    });
+
+    it("returns whole loans, as findById does", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "l-all-whole");
+      const m = await newMember(store, u.id);
+      const l = await store.loans.create(
+        loan(m.id, u.id, { interestNote: "5% flat", notes: "Shop", idempotencyKey: uniqueKey(), requestHash: "h" }),
+      );
+      expect(await store.loans.list({ memberCreatedById: u.id })).toEqual([l]);
+    });
+
+    it("lists by day given first, then by time recorded", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "l-all-order");
+      const m = await newMember(store, u.id);
+      const late = await store.loans.create(loan(m.id, u.id, { givenOn: "2026-10-20" }));
+      await pause();
+      const early = await store.loans.create(loan(m.id, u.id, { givenOn: "2026-10-01" }));
+      await pause();
+      const lateAgain = await store.loans.create(loan(m.id, u.id, { givenOn: "2026-10-20" }));
+      expect((await store.loans.list({ memberCreatedById: u.id })).map((l) => l.id)).toEqual([
+        early.id,
+        late.id,
+        lateAgain.id,
+      ]);
+    });
+
+    it("does not let a caller change stored data through a listed record", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "l-all-copy");
+      const m = await newMember(store, u.id);
+      const l = await store.loans.create(loan(m.id, u.id));
+      for (const listed of await store.loans.list({ memberCreatedById: u.id })) {
+        listed.principal = 1n;
+        listed.givenOn = "2000-01-01";
+        listed.createdAt.setFullYear(2000);
+      }
+      expect(await store.loans.list({ memberCreatedById: u.id })).toEqual([l]);
+    });
+
     it("does not let a caller change stored data through input or returned records", async () => {
       const store = await makeStore();
       const u = await newUser(store, "l-copy");

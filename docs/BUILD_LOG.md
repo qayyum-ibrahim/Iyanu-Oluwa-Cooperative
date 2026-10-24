@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.2 (size M), 2026-10-24: `loans.list` across members; OQ-11 second part answered (D-101, A-235)
+
+The owner said "Income includes Loan Repaid and Loan Interest, fix Inconsistencies and go".
+**Inconsistencies fixed:** the plan said only "oldest first"; the list is ordered by `givenOn`, then `createdAt`, to match `payments.list` (A-235 item 3). `server/src/loans.ts` was in NEXT_FILES but not in the step's files; it was not read or changed.
+**Changed:** `server/src/store.ts` (`LoanListQuery`, `LoanStore.list`), `server/src/memory-store.ts` and `server/src/prisma-store.ts` (`loans.list`: the member's recorder; by `givenOn`, then `createdAt`), `server/test/helpers/loans-contract.ts` (4 cases). Docs: DECISIONS (D-101), OPEN_QUESTIONS (OQ-11 second part), ASSUMPTIONS (A-235), PHASE_PLAN (7.2 done; 7.3 names D-101), TRACEABILITY (R-08, R-15), STATUS.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint clean; 49 files, 1935 passed (1927 plus 4 cases on each adapter).
+**Not verified:** no break-on-purpose yet (7.7, D-90). No route uses `loans.list` yet (7.3). No migration, so the dev database was not touched.
+
 ## Step 7.1 (size M), 2026-10-24: `payments.list` across members; OQ-11 first part answered (D-100, A-234)
 
 The owner said "Total Expenditures should not include Membership Withdrawal outflows. go".

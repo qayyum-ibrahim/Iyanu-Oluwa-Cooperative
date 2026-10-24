@@ -522,6 +522,14 @@ export class DuplicateLoanKeyError extends Error {
   }
 }
 
+/**
+ * What to list across members (step 7.2). memberCreatedById is the user who recorded the member,
+ * not the loan (A-133, D-99). No filter means all loans.
+ */
+export interface LoanListQuery {
+  memberCreatedById?: string;
+}
+
 export interface LoanStore {
   /**
    * Saves a new loan. Throws UnknownMemberError if the member does not exist, then
@@ -533,6 +541,8 @@ export interface LoanStore {
   findById(id: string): Promise<LoanRecord | null>;
   /** Loans of one member, oldest first. Equal times are in no fixed order. Returns copies. */
   listByMember(memberId: string): Promise<LoanRecord[]>;
+  /** Loans that match the query, by givenOn, then oldest first. Returns copies. */
+  list(query: LoanListQuery): Promise<LoanRecord[]>;
   /** The loan this user saved with this key, or null. Returns a copy. */
   findByKey(createdById: string, idempotencyKey: string): Promise<LoanRecord | null>;
 }

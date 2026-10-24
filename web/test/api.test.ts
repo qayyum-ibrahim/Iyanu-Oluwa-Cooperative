@@ -1903,3 +1903,108 @@ describe("listAudit", () => {
     expect(await wrong.api.listAudit({ limit: 50, offset: 0 })).toEqual({ ok: false, reason: "server" });
   });
 });
+
+const DASHBOARD = {
+  month: "2026-10",
+  fromDay: "2026-10-01",
+  toDay: "2026-10-31",
+  income: { month: "40000.00", allTime: "125000.50" },
+  expenditure: { month: "15000.50", allTime: "15000.50" },
+  membershipWithdrawal: { month: "0.00", allTime: "20000.00" },
+  outstandingLoans: "300000.00",
+  activeMembers: 3,
+  recentExpenses: [EXPENSE],
+};
+
+describe("getDashboard", () => {
+  it("reads GET /dashboard with no query when month and staff are left out", async () => {
+    const { api, calls } = signedIn(() => json(200, DASHBOARD));
+    expect(await api.getDashboard({})).toEqual({ ok: true, value: DASHBOARD });
+    expect(calls).toEqual([{ path: "/api/dashboard", method: "GET", auth: "Bearer acc1", body: null }]);
+  });
+
+  it("sends month and createdById in a fixed order, each value made safe", async () => {
+    const { api, calls } = signedIn(() => json(200, DASHBOARD));
+    await api.getDashboard({ createdById: "a/b?c&d", month: "2026-10" });
+    await api.getDashboard({ month: "2026-02" });
+    await api.getDashboard({ createdById: "s1" });
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/dashboard?month=2026-10&createdById=a%2Fb%3Fc%26d",
+      "/api/dashboard?month=2026-02",
+      "/api/dashboard?createdById=s1",
+    ]);
+  });
+
+  it("keeps an empty month of recent expenses and zero members", async () => {
+    const empty = { ...DASHBOARD, activeMembers: 0, recentExpenses: [] };
+    const { api } = signedIn(() => json(200, empty));
+    expect(await api.getDashboard({})).toEqual({ ok: true, value: empty });
+  });
+
+  it("on a 401 refreshes once and reads again", async () => {
+    const { api, calls } = signedIn((call) => {
+      if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
+      return call.auth === "Bearer acc2" ? json(200, DASHBOARD) : json(401, {});
+    });
+    expect(await api.getDashboard({})).toEqual({ ok: true, value: DASHBOARD });
+    expect(calls.map((c) => c.path)).toEqual(["/api/dashboard", "/api/auth/refresh", "/api/dashboard"]);
+  });
+
+  it("maps 400, 403, 500, a network failure and a lost session", async () => {
+    const cases: [Handler, string][] = [
+      [() => json(400, { error: "invalid_input", code: "invalid_month" }), "invalid_input"],
+      [() => json(403, { error: "forbidden" }), "forbidden"],
+      [() => json(500, { error: "server_error" }), "server"],
+      [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+        "network",
+      ],
+    ];
+    for (const [handler, reason] of cases) {
+      const { api } = signedIn(handler);
+      expect(await api.getDashboard({})).toEqual({ ok: false, reason });
+    }
+    const gone = setup(() => json(401, { error: "invalid_token" }));
+    expect(await gone.api.getDashboard({})).toEqual({ ok: false, reason: "signed_out" });
+    expect(gone.signedOutCount()).toBe(1);
+  });
+
+  it("answers server for a reply of the wrong shape, amounts that are not naira strings, and a 201", async () => {
+    const bad: unknown[] = [
+      null,
+      [],
+      {},
+      { dashboard: DASHBOARD },
+      { ...DASHBOARD, month: undefined },
+      { ...DASHBOARD, month: "2026-10-01" },
+      { ...DASHBOARD, month: 202610 },
+      { ...DASHBOARD, fromDay: "01-10-2026" },
+      { ...DASHBOARD, toDay: undefined },
+      { ...DASHBOARD, income: null },
+      { ...DASHBOARD, income: { month: "40000.00" } },
+      { ...DASHBOARD, income: { month: 40000, allTime: "125000.50" } },
+      { ...DASHBOARD, expenditure: { month: "15000.5", allTime: "15000.50" } },
+      { ...DASHBOARD, expenditure: undefined },
+      { ...DASHBOARD, membershipWithdrawal: { month: "0.00", allTime: "-20000.00" } },
+      { ...DASHBOARD, membershipWithdrawal: "0.00" },
+      { ...DASHBOARD, outstandingLoans: "300,000.00" },
+      { ...DASHBOARD, outstandingLoans: 300000 },
+      { ...DASHBOARD, activeMembers: "3" },
+      { ...DASHBOARD, activeMembers: -1 },
+      { ...DASHBOARD, activeMembers: 1.5 },
+      { ...DASHBOARD, activeMembers: undefined },
+      { ...DASHBOARD, recentExpenses: null },
+      { ...DASHBOARD, recentExpenses: [EXPENSE, null] },
+      { ...DASHBOARD, recentExpenses: [{ ...EXPENSE, amount: "15000.5" }] },
+      { ...DASHBOARD, recentExpenses: [{ ...EXPENSE, method: "CHEQUE" }] },
+    ];
+    for (const body of bad) {
+      const { api } = signedIn(() => json(200, body));
+      expect(await api.getDashboard({})).toEqual({ ok: false, reason: "server" });
+    }
+    const wrong = signedIn(() => json(201, DASHBOARD));
+    expect(await wrong.api.getDashboard({})).toEqual({ ok: false, reason: "server" });
+  });
+});

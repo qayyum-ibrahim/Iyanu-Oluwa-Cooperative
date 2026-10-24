@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 7.5 (size S), 2026-10-24: web `getDashboard` call (A-241)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** 7.5 was close to L (call, page, a new staff filter, the Home change); it is split into the call (7.5) and the page (7.5b) (A-241 item 1). The plan's "staff filter as the members list" named nothing that exists: no screen has a staff filter; 7.5b builds one from `listStaff` (A-241 item 3). "The Home page opens it" now reads: Home shows the Dashboard (A-241 item 4). `web/src/Dashboard.tsx` is new at 7.5b, so it was not in NEXT_FILES.
+**Changed:** `web/src/api.ts` (`Dashboard`, `MonthAndAllTime`, `DashboardQuery`, `dashboardOf`, `dashboardQuery`, `Api.getDashboard`), `web/test/api.test.ts` (6 tests), `web/test/app.test.tsx` (`getDashboard` in both fake Api objects). Docs: ASSUMPTIONS (A-241), PHASE_PLAN (7.5 done, 7.5b added), TRACEABILITY (R-15, R-16), STATUS.
+**A check failed first:** the first `npm run check` (web) stopped at the typecheck: `test/app.test.tsx(327,3): error TS2322 ... Property 'getDashboard' is missing in type ... but required in type 'FakeApi'`. Cause: a second full fake Api in that file. Fixed in the same file (one line).
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean; 4 files, 314 passed (308 plus 6). `npm run check` (server): 53 files, 2050 passed (no server change).
+**Not verified:** no screen uses the call yet (7.5b). No live check (no page; the route's live check ran at 7.3b). No break-on-purpose yet (7.7, D-90).
+
 ## Step 7.4c (size M), 2026-10-24: `GET /reports/categories` route (A-240)
 
 The owner said "fix Inconsistencies and go".

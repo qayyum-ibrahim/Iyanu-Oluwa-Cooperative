@@ -153,6 +153,7 @@ const idleApi: Api = {
   reactivateStaff: async () => ({ ok: false, reason: "server" }),
   resetStaffPassword: async () => ({ ok: false, reason: "server" }),
   listAudit: async () => ({ ok: false, reason: "server" }),
+  getDashboard: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -490,6 +491,8 @@ function fakeApi(
           }
         );
       },
+      // No screen reads the dashboard yet (7.5b).
+      getDashboard: async () => ({ ok: false, reason: "server" }),
     };
   };
 }

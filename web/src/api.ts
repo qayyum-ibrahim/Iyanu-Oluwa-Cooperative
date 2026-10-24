@@ -5,7 +5,8 @@
 // paying a member out (server/src/payoffs-routes.ts, U.7a), reactivating a member (U.7b) and the
 // staff list and add staff (server/src/staff-routes.ts, U.8a), a staff account's permissions
 // (U.8b), deactivate, reactivate and reset a staff password (U.8c), and the audit log
-// (server/src/audit-routes.ts, U.8d). Tokens travel in the JSON body
+// (server/src/audit-routes.ts, U.8d), and the dashboard (server/src/dashboard-routes.ts, 7.5).
+// Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
 // Amounts arrive as naira strings (A-18) and are kept as strings; this file does no money sums.
@@ -268,6 +269,34 @@ export interface AuditFilter {
   offset: number;
 }
 
+/** One dashboard figure for the month and for all time, naira strings (MonthAndAllTime in server/src/dashboard.ts). */
+export interface MonthAndAllTime {
+  month: string;
+  allTime: string;
+}
+
+/** GET /dashboard (DashboardView in server/src/dashboard.ts). Amounts are naira strings. */
+export interface Dashboard {
+  /** "YYYY-MM". */
+  month: string;
+  /** First and last day of the month, "YYYY-MM-DD", both included. */
+  fromDay: string;
+  toDay: string;
+  income: MonthAndAllTime;
+  expenditure: MonthAndAllTime;
+  membershipWithdrawal: MonthAndAllTime;
+  outstandingLoans: string;
+  activeMembers: number;
+  /** The month's newest expenses, newest first. */
+  recentExpenses: Expense[];
+}
+
+/** The query of GET /dashboard. Month left out: this Lagos month. createdById: Super Admin only (D-99). */
+export interface DashboardQuery {
+  month?: string;
+  createdById?: string;
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -386,6 +415,7 @@ export interface Api {
   reactivateStaff(id: string): Promise<CallResult<StaffAccount>>;
   resetStaffPassword(id: string, password: string): Promise<CallResult<StaffAccount>>;
   listAudit(filter: AuditFilter): Promise<CallResult<AuditPage>>;
+  getDashboard(query: DashboardQuery): Promise<CallResult<Dashboard>>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -703,6 +733,55 @@ function auditQuery(filter: AuditFilter): string {
   if (filter.action !== undefined) parts.push(`action=${encodeURIComponent(filter.action)}`);
   parts.push(`limit=${filter.limit}`, `offset=${filter.offset}`);
   return `?${parts.join("&")}`;
+}
+
+/** The shape of a month as the server writes it. */
+const MONTH = /^\d{4}-\d{2}$/;
+
+function monthAndAllTimeOf(value: unknown): MonthAndAllTime | null {
+  if (!isObject(value)) return null;
+  const { month, allTime } = value;
+  if (typeof month !== "string" || !NAIRA.test(month)) return null;
+  if (typeof allTime !== "string" || !NAIRA.test(allTime)) return null;
+  return { month, allTime };
+}
+
+function dashboardOf(value: unknown): Dashboard | null {
+  if (!isObject(value)) return null;
+  const { month, fromDay, toDay, outstandingLoans, activeMembers } = value;
+  if (typeof month !== "string" || !MONTH.test(month)) return null;
+  if (typeof fromDay !== "string" || !DAY.test(fromDay)) return null;
+  if (typeof toDay !== "string" || !DAY.test(toDay)) return null;
+  if (typeof outstandingLoans !== "string" || !NAIRA.test(outstandingLoans)) return null;
+  if (!Number.isSafeInteger(activeMembers) || (activeMembers as number) < 0) return null;
+  const income = monthAndAllTimeOf(value["income"]);
+  const expenditure = monthAndAllTimeOf(value["expenditure"]);
+  const membershipWithdrawal = monthAndAllTimeOf(value["membershipWithdrawal"]);
+  const recentExpenses = listOf(expenseOf)(value["recentExpenses"]);
+  if (income === null || expenditure === null || membershipWithdrawal === null || recentExpenses === null) {
+    return null;
+  }
+  return {
+    month,
+    fromDay,
+    toDay,
+    income,
+    expenditure,
+    membershipWithdrawal,
+    outstandingLoans,
+    activeMembers: activeMembers as number,
+    recentExpenses,
+  };
+}
+
+/** The query string for GET /dashboard, fields in a fixed order, each value made safe. */
+function dashboardQuery(query: DashboardQuery): string {
+  const parts: string[] = [];
+  for (const name of ["month", "createdById"] as const) {
+    const value = query[name];
+    if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
+  }
+  return parts.length === 0 ? "" : `?${parts.join("&")}`;
 }
 
 /** The query string for GET /expenses, fields in a fixed order, each value made safe. */
@@ -1273,6 +1352,11 @@ export function createApi(deps: ApiDeps): Api {
 
     listAudit(filter) {
       return call(`/audit${auditQuery(filter)}`, {}, 200, null, auditPageOf);
+    },
+
+    // The reply is the dashboard itself, not wrapped (A-237 item 1).
+    getDashboard(query) {
+      return call(`/dashboard${dashboardQuery(query)}`, {}, 200, null, dashboardOf);
     },
   };
 }

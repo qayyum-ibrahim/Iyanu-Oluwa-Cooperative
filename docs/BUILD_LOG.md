@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 8.7a (size M), 2026-10-24: break-on-purpose for the Phase 8 server code (A-256)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** 8.7 (server and web in one run) was L; it splits into 8.7a server, 8.7b web and 8.7c gap tests and rerun (D-105). PHASE_PLAN 8.7 now names the three parts.
+**Changed:** no source or test file. Script `~/Desktop/mutate-8.7a.mjs` (new, not in git; W `workbook.ts`, E `exports.ts`, R `exports-routes.ts`, A the mount in `app.ts`). Docs: DECISIONS (D-105), ASSUMPTIONS (A-256), PHASE_PLAN (8.7), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `node ~/Desktop/mutate-8.7a.mjs --dry`: "dry run done: 89 mutations". `node ~/Desktop/mutate-8.7a.mjs` (23:45 to 23:56): baseline 131 passed; "mutations: 89 {"caught":83,"escaped":6,"error":0,"timeout":0,"notApplied":0}"; "escaped: E10, E19, E27, R4, R7, R18"; "files restored: yes"; `git status --short` empty. `npm run check` (server): 56 files, 2182 passed.
+**Escapes:** E10 and R18 test gaps (for 8.7c); E19 and E27 equivalent; R4 and R7 unreachable (A-256).
+**Not verified:** the web part (8.7b). The live check export part is still not run. Web `npm run check` not rerun (no web change).
+
 ## Step 8.6 (size M), 2026-10-24: the Exports page (A-255)
 
 The owner said "fix Inconsistencies and go".

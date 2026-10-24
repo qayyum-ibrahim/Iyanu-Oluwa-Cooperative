@@ -1,5 +1,12 @@
 # Build log (newest first)
 
+## Step U.8f (size S), 2026-10-24: tests for the U.8e gaps X6 and M10 (A-231)
+
+The owner said "go".
+**Changed:** `server/test/expenses.test.ts` (an edit with tomorrow's day in Lagos is refused with `future_spent_on`), `web/test/app.test.tsx` (no alert after a successful member reactivation; that test now gives the member's balances). Docs: ASSUMPTIONS (A-231), PHASE_PLAN (U.8f done), TRACEABILITY (R-11, R-35), STATUS.
+**Works (verified in this session):** first `npm run check` (web) failed, 1 of 308: the new check found the balances section alert, because the fake API fails the balances read by default; fixed in the same test by giving balances. `npm run check` (server): 49 files, 1913 passed; (web): 4 files, 308 passed. Reruns by hand (scratchpad script, file restored): X6 caught (1 failed, 251 passed), M10 caught (1 failed, 293 passed); `git status --short` showed only the two test files.
+**Not verified:** the full Desktop scripts `mutate-U.8e1.mjs` and `mutate-U.8e3.mjs` were not rerun; not run in a browser.
+
 ## Step U.8e3 (size M), 2026-10-24: break-on-purpose for the web security code (D-98, A-230)
 
 The owner said "fix inconsistencies and go".

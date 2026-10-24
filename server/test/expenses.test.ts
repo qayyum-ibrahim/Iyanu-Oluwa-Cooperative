@@ -1650,6 +1650,7 @@ describe("updateExpense: day spent (U.6b, D-92)", () => {
     { label: "not a real day", value: "2026-02-30", code: "invalid_spent_on" },
     { label: "null", value: null, code: "invalid_spent_on" },
     { label: "a time", value: "2026-10-01T00:00:00.000Z", code: "invalid_spent_on" },
+    { label: "tomorrow in Lagos", value: lagosDay(new Date(Date.now() + 24 * 60 * 60 * 1000)), code: "future_spent_on" },
     { label: "after today in Lagos", value: "2999-01-01", code: "future_spent_on" },
   ])("refuses a day spent that is $label with $code, and changes nothing", async ({ value, code }) => {
     const { store, f, f1 } = await buildEdit();

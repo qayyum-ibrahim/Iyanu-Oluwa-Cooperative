@@ -1,8 +1,5 @@
 docs/STATUS.md
 docs/BUILD_LOG.md
 docs/PHASE_PLAN.md
-docs/ASSUMPTIONS.md
-server/src/expenses.ts
-server/test/expenses.test.ts
-web/src/Members.tsx
-web/test/app.test.tsx
+docs/DEV_SETUP.md
+web/src/App.tsx

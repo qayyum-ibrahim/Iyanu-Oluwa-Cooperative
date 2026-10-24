@@ -3056,6 +3056,7 @@ describe("reactivate (jsdom)", () => {
       fakeApi({
         restore: REACTIVATOR,
         members: [INACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
         reactivate: [{ ok: true, member: { ...INACTIVE_ONE, status: "ACTIVE" } }],
       }),
     );
@@ -3065,6 +3066,7 @@ describe("reactivate (jsdom)", () => {
     await click(button(REACTIVATE_BUTTON));
     expect(api.reactivated).toEqual(["m3"]);
     expect(el("[role=status]").textContent).toBe("Example Inactive is Active again.");
+    expect(container?.querySelector("[role=alert]")).toBeNull();
     expect(el(".badges .pill").textContent).toBe("Active");
     expect(() => button(REACTIVATE_BUTTON)).toThrow();
     expect(button("Record payment")).toBeTruthy();

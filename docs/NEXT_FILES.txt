@@ -6,13 +6,10 @@ docs/ASSUMPTIONS.md
 docs/DOMAIN_RULES.md
 docs/DEV_SETUP.md
 docs/TRACEABILITY.md
-server/src/dashboard.ts
+server/src/reports.ts
 server/src/dashboard-routes.ts
+server/src/guards.ts
 server/src/app.ts
-server/src/categories.ts
-server/src/payments.ts
-server/src/permissions.ts
-server/src/store.ts
-server/test/dashboard.test.ts
+server/test/reports.test.ts
 server/test/dashboard-routes.test.ts
 scripts/live-check-auth.sh

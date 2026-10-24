@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 7.4b (size M), 2026-10-24: category report logic (A-239)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** 7.4b held the logic and the route, close to L; it is split into the logic (7.4b) and the route with a live check part (7.4c), as 7.3 and 7.3b (A-239 item 1). The new files are named in the step header.
+**Changed:** `server/src/reports.ts` (new: `getCategoryReport`), `server/test/reports.test.ts` (new, 28 tests). Docs: ASSUMPTIONS (A-239), PHASE_PLAN (7.4b done, 7.4c added), TRACEABILITY (R-17), STATUS.
+**A check failed first:** the first `npm run check` gave 1 failed, 2031 passed. Cause: my new SQLite test saved a pay-off with the real clock (2026-10-24 in Lagos) and expected it outside an October range. The logic was right. Only that test's range was changed (to end on 2026-10-02).
+**Works (verified in this session):** `npm run check` (server): db:generate, typecheck and lint clean; 52 files, 2032 passed.
+**Not verified:** no route and no live check yet (7.4c). No break-on-purpose yet (7.7, D-90).
+
 ## Step 7.4 (size M), 2026-10-24: `payOffs.list` across members (A-238)
 
 The owner said "fix Inconsistencies and go".

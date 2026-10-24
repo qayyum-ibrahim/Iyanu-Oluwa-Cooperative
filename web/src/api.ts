@@ -6,7 +6,8 @@
 // staff list and add staff (server/src/staff-routes.ts, U.8a), a staff account's permissions
 // (U.8b), deactivate, reactivate and reset a staff password (U.8c), and the audit log
 // (server/src/audit-routes.ts, U.8d), the dashboard (server/src/dashboard-routes.ts, 7.5) and the
-// category report (server/src/reports-routes.ts, 7.6).
+// category report (server/src/reports-routes.ts, 7.6) and the export files
+// (server/src/exports-routes.ts, 8.5).
 // Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
@@ -326,6 +327,26 @@ export interface CategoryReportQuery {
   createdById?: string;
 }
 
+/** The kinds of GET /exports/:kind (D-104). */
+export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category";
+
+/**
+ * The query of GET /exports/:kind. A day left out is no bound. The server reads category only for
+ * the category kind and no days for members (A-253 item 3). createdById: Super Admin only.
+ */
+export interface ExportQuery {
+  fromDay?: string;
+  toDay?: string;
+  category?: string;
+  createdById?: string;
+}
+
+/** An export file: the .xlsx body and the name to save it under. */
+export interface ExportFile {
+  blob: Blob;
+  fileName: string;
+}
+
 export type MemberStatusFilter = "active" | "inactive" | "all";
 
 /** "signed_out": the session is gone (onSignedOut was called). "server": any other answer. */
@@ -338,6 +359,11 @@ export type CallFailure =
   | "server";
 
 export type CallResult<T> = { ok: true; value: T } | { ok: false; reason: CallFailure };
+
+/** code comes with invalid_input when the server names the check that failed (A-254). */
+export type DownloadExportResult =
+  | { ok: true; value: ExportFile }
+  | { ok: false; reason: CallFailure; code?: string };
 
 /**
  * replayed: the key had been used and the server sent back the first payment.
@@ -446,6 +472,7 @@ export interface Api {
   listAudit(filter: AuditFilter): Promise<CallResult<AuditPage>>;
   getDashboard(query: DashboardQuery): Promise<CallResult<Dashboard>>;
   getCategoryReport(query: CategoryReportQuery): Promise<CallResult<CategoryReport>>;
+  downloadExport(kind: ExportKind, query: ExportQuery): Promise<DownloadExportResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -850,6 +877,36 @@ function categoryReportQuery(query: CategoryReportQuery): string {
     if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
   }
   return parts.length === 0 ? "" : `?${parts.join("&")}`;
+}
+
+/** The query string for GET /exports/:kind, fields in a fixed order, each value made safe. */
+function exportQuery(query: ExportQuery): string {
+  const parts: string[] = [];
+  for (const name of ["fromDay", "toDay", "category", "createdById"] as const) {
+    const value = query[name];
+    if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
+  }
+  return parts.length === 0 ? "" : `?${parts.join("&")}`;
+}
+
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/**
+ * The name from Content-Disposition (`attachment; filename="<kind>-<day>.xlsx"`, A-253 item 4).
+ * A missing name, or one with anything but letters, digits, dot, dash and underscore, gives
+ * `<kind>.xlsx`, so a reply cannot pick a path or a file type.
+ */
+function exportFileNameOf(header: string | null, kind: ExportKind): string {
+  const match = /filename="([^"]*)"/.exec(header ?? "");
+  const name = match?.[1];
+  return name !== undefined && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.xlsx$/.test(name) ? name : `${kind}.xlsx`;
+}
+
+/** A refused GET /exports/:kind. The 400 code is passed on (A-254). */
+function exportFailureOf(status: number, body: unknown): Extract<DownloadExportResult, { ok: false }> {
+  if (status !== 400) return { ok: false, reason: failureOf(status) };
+  const code = isObject(body) ? body["code"] : undefined;
+  return { ok: false, reason: "invalid_input", ...(typeof code === "string" ? { code } : {}) };
 }
 
 /** The query string for GET /expenses, fields in a fixed order, each value made safe. */
@@ -1430,6 +1487,31 @@ export function createApi(deps: ApiDeps): Api {
     // The reply is the report itself, not wrapped (as GET /dashboard). The 400 code is not passed on.
     getCategoryReport(query) {
       return call(`/reports/categories${categoryReportQuery(query)}`, {}, 200, null, categoryReportOf);
+    },
+
+    // The reply is a file; a refusal is JSON. Saving the file is the page's job (8.6, A-254).
+    async downloadExport(kind, query) {
+      let response: Response | null;
+      try {
+        response = await authed(`/exports/${encodeURIComponent(kind)}${exportQuery(query)}`);
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (response === null) return { ok: false, reason: "signed_out" };
+      if (response.status !== 200) return exportFailureOf(response.status, await readJson(response));
+      const type = response.headers.get("Content-Type") ?? "";
+      if (type.split(";")[0]?.trim().toLowerCase() !== XLSX_TYPE) return { ok: false, reason: "server" };
+      let blob: Blob;
+      try {
+        blob = await response.blob();
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+      if (blob.size === 0) return { ok: false, reason: "server" };
+      return {
+        ok: true,
+        value: { blob, fileName: exportFileNameOf(response.headers.get("Content-Disposition"), kind) },
+      };
     },
   };
 }

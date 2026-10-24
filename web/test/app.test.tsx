@@ -172,6 +172,7 @@ const idleApi: Api = {
   listAudit: async () => ({ ok: false, reason: "server" }),
   getDashboard: async () => ({ ok: false, reason: "server" }),
   getCategoryReport: async () => ({ ok: false, reason: "server" }),
+  downloadExport: async () => ({ ok: false, reason: "server" }),
 };
 
 const noop = async () => null;
@@ -533,6 +534,7 @@ function fakeApi(
         const answers = opts.report ?? [];
         return answers[Math.min(reportQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
+      downloadExport: async () => ({ ok: false, reason: "server" }),
     };
   };
 }

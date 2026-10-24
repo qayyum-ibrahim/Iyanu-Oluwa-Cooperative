@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.5 (size S), 2026-10-24: `downloadExport` in the web API client (A-254)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN 8.5 did not say whether the 400 code is passed on; it is (A-254 item 3). Every call sends `Content-Type: application/json`, also this GET; left as it is (A-254 item 7). PHASE_PLAN did not say where the file is saved; at 8.6, on the page (A-254 item 2). Found during the step: adding a method to `Api` broke the two fake APIs in `web/test/app.test.tsx`, which PHASE_PLAN 8.5 did not name; I stopped, the owner said yes, and PHASE_PLAN 8.5 now names it.
+**Changed:** `web/src/api.ts` (`ExportKind`, `ExportQuery`, `ExportFile`, `DownloadExportResult`, `exportQuery`, `exportFileNameOf`, `exportFailureOf`, `downloadExport`), `web/test/api.test.ts` (7 tests: the path and the file, the query order and escaping, content type with parameters or in capitals, unsafe or missing names give `<kind>.xlsx`, a 401 refresh, the 400 codes and the other failures, a 200 that is not an .xlsx file), `web/test/app.test.tsx` (a `downloadExport` stub in each fake API). Docs: ASSUMPTIONS (A-254), PHASE_PLAN (8.5), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** first `npm run check` (web): typecheck failed with 2 errors (`test/app.test.tsx(146,7)` and `(353,3)`: `downloadExport` missing in the fake APIs); fixed with the owner's yes; second `npm run check` (web): typecheck and lint clean, 4 files, 350 passed.
+**Not verified:** no file was downloaded in a browser; whether the browser lets the page read Content-Disposition is not checked (A-254 item 8). Server `npm run check` not rerun (no server change). Break-on-purpose for `downloadExport` waits for 8.7 (D-90).
+
 ## Step 8.4 (size M), 2026-10-24: the export route (A-253)
 
 The owner said "fix Inconsistencies and go".

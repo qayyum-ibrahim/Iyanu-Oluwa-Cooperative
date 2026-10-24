@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.3 (size M), 2026-10-24: dashboard logic; OQ-11 closed, DR-10 reworded (D-102, A-236)
+
+The owner said "Loan expenses do not count in Total Expenditures, fix Inconsistencies and go". That conflicted with DR-10; the owner chose the new wording (D-102).
+**Inconsistencies fixed:** 7.3 split into the logic (7.3) and the route (7.3b, A-236 item 1). The month-end tests set the clock with vitest fake timers on `Date` only, so `payments.ts` was not changed (A-236 item 11). The scope mismatch for Loan expenses is recorded (A-236 item 9). NEXT_FILES named no dashboard files; the step header named them.
+**Changed:** `server/src/dashboard.ts` (new: `getDashboard`, `monthDays`), `server/test/dashboard.test.ts` (new: 46 tests, one on real SQLite). Docs: DOMAIN_RULES (DR-10), DECISIONS (D-102), OPEN_QUESTIONS (OQ-11 closed), ASSUMPTIONS (A-236), PHASE_PLAN (7.3 done, 7.3b added), TRACEABILITY (R-15, R-16, R-17), STATUS.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint clean; 50 files, 1981 passed. The first run had 1 failure: `month: null` was taken as missing because of `??`; changed to a check for `undefined` only, then 1981 passed.
+**Not verified:** no route yet (7.3b), so no live check. No break-on-purpose yet (7.7, D-90). The dev database was not touched.
+
 ## Step 7.2 (size M), 2026-10-24: `loans.list` across members; OQ-11 second part answered (D-101, A-235)
 
 The owner said "Income includes Loan Repaid and Loan Interest, fix Inconsistencies and go".

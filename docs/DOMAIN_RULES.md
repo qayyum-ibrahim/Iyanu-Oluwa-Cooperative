@@ -12,7 +12,7 @@ Status: **confirmed** (project lead, 2026-10-13), **requested** (Context Memory 
 | DR-07 | Automatic Inactive: only if the member has payment history, every refundable balance is ₦0, and there is no active loan. Checked on the server inside the same transaction. A new member with no history stays Active. | confirmed |
 | DR-08 | Loan: one active per member. Outstanding = principal − repaid. Repayment above outstanding is rejected. At ₦0 outstanding the status becomes Fully Repaid and the loan stays in history. Example: ₦300,000 loan, ₦20,000 repaid → ₦280,000 outstanding. | confirmed (one loan, interest note); confirmed (owner, OQ-00, 2026-10-22) (example, rejection) |
 | DR-09 | Only "Loan Repaid" lines change a loan. Other lines never do. | confirmed (owner, OQ-00, 2026-10-22) |
-| DR-10 | A loan disbursement creates exactly one linked expense (category Loan). It is counted once in expenditure. | confirmed |
+| DR-10 | A loan disbursement creates exactly one linked expense (category Loan). It is listed once on the Expenses page and in its total. It is not counted in the dashboard's Total Expenditures (OQ-11, D-102). | confirmed; wording changed by the owner 2026-10-24 (D-102) |
 | DR-11 | Expense categories: Loan, Expenses, Allowances, Members Credit, Membership Withdrawal, Asset Purchase, Office Maintenance, Payment to Union, Payment to Apexes, Others (free-text narration). | confirmed (owner, OQ-00, 2026-10-22) |
 | DR-12 | Expense soft-delete removes it from totals and keeps it in the audit log. Loan-linked and pay-off expenses cannot be deleted. | confirmed |
 | DR-13 | Staff see only their own records unless the Super Admin grants more. Server enforces this on every query and export. | confirmed |

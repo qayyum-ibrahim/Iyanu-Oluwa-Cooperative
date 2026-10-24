@@ -4,7 +4,8 @@
 // an expense (U.6d), edit and delete an expense (U.6e), the pay-off on member detail (U.7a),
 // reactivate a member on member detail (U.7b), the staff list and add staff (U.8a), staff
 // permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d),
-// the dashboard on Home for the holder of `dashboard` (7.5b, A-242).
+// the dashboard on Home for the holder of `dashboard` (7.5b, A-242), the categories report for the
+// holder of `reports.view` (7.6b, A-244).
 import { useEffect, useState } from "react";
 import { browserRefreshLock, createApi, type Api, type ChangePasswordResult, type LoginResult, type Me } from "./api.ts";
 import Audit from "./Audit.tsx";
@@ -12,6 +13,7 @@ import ChangePassword from "./ChangePassword.tsx";
 import Dashboard from "./Dashboard.tsx";
 import Expenses from "./Expenses.tsx";
 import Members from "./Members.tsx";
+import Reports from "./Reports.tsx";
 import { browserLocalStorage, createSessionKeeper } from "./session.ts";
 import SignIn from "./SignIn.tsx";
 import Staff from "./Staff.tsx";
@@ -20,7 +22,7 @@ export const SYSTEM_NAME = "IYANU-OLUWA Cooperative Management System";
 export const SESSION_ENDED = "Your session has ended. Please sign in again.";
 export const PASSWORD_CHANGED = "Password changed. Please sign in with the new password.";
 
-type Page = "home" | "password" | "members" | "expenses" | "staff" | "audit";
+type Page = "home" | "password" | "members" | "expenses" | "reports" | "staff" | "audit";
 
 type View =
   | { kind: "loading" }
@@ -161,6 +163,15 @@ export default function App({ makeApi = browserApi }: AppProps) {
               Expenses
             </button>
           )}
+          {can("reports.view") && (
+            <button
+              type="button"
+              className={view.page === "reports" ? "active" : ""}
+              onClick={() => go("reports")}
+            >
+              Categories
+            </button>
+          )}
           {can("users.manage") && (
             <button
               type="button"
@@ -208,6 +219,8 @@ export default function App({ makeApi = browserApi }: AppProps) {
             canEdit={can("expenses.edit")}
             canDelete={can("expenses.delete")}
           />
+        ) : view.page === "reports" && can("reports.view") ? (
+          <Reports api={api} me={me.user} canFilterStaff={can("users.manage")} />
         ) : view.page === "staff" && can("users.manage") ? (
           <Staff api={api} />
         ) : view.page === "audit" && can("users.manage") ? (

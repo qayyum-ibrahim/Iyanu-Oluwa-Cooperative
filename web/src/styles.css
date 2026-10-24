@@ -628,13 +628,16 @@ td.amount {
 }
 
 /* Dashboard page (7.5b); the cards in the colours of the balance summary (U.3f) */
-.dashboard-filters {
+.dashboard-filters,
+.report-filters {
   max-width: none;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   margin-bottom: 18px;
 }
 .dashboard-filters .error,
-.dashboard-filters .form-actions {
+.dashboard-filters .form-actions,
+.report-filters .error,
+.report-filters .form-actions {
   grid-column: 1 / -1;
 }
 .cards {
@@ -659,4 +662,12 @@ td.amount {
   font-size: 20px;
   color: #065f46;
   font-variant-numeric: tabular-nums;
+}
+
+/* Categories report (7.6b); the totals row in the dashboard card colour */
+.category-report tfoot td {
+  font-weight: 700;
+  color: #065f46;
+  background: #ecfdf5;
+  border-bottom: none;
 }

@@ -16,6 +16,8 @@ import type {
   AuditFilter,
   AuditPage,
   CallResult,
+  CategoryReport,
+  CategoryReportQuery,
   ChangePasswordResult,
   CreateExpenseResult,
   CreateLoanResult,
@@ -113,6 +115,12 @@ import {
   type LoanFormInput,
   type PaymentFormInput,
 } from "../src/Members.tsx";
+import {
+  NO_REPORT_FILTER,
+  checkReportFilter,
+  reportMessage,
+  reportRange,
+} from "../src/Reports.tsx";
 import SignIn from "../src/SignIn.tsx";
 import {
   BLANK_STAFF,
@@ -268,6 +276,8 @@ interface FakeApi extends Api {
   auditQueries: AuditFilter[];
   /** Every dashboard query the screen sent, in order. */
   dashboardQueries: DashboardQuery[];
+  /** Every category report query the screen sent, in order. */
+  reportQueries: CategoryReportQuery[];
   signOutFromServer(): void;
 }
 
@@ -336,6 +346,8 @@ function fakeApi(
     audit?: CallResult<AuditPage>[];
     /** Answers to getDashboard in turn; the last one repeats. */
     dashboard?: CallResult<DashboardView>[];
+    /** Answers to getCategoryReport in turn; the last one repeats. */
+    report?: CallResult<CategoryReport>[];
   } = {},
 ): (onSignedOut: () => void) => FakeApi {
   return (onSignedOut) => {
@@ -354,6 +366,7 @@ function fakeApi(
     const resets: { id: string; password: string }[] = [];
     const auditQueries: AuditFilter[] = [];
     const dashboardQueries: DashboardQuery[] = [];
+    const reportQueries: CategoryReportQuery[] = [];
     const switchTo = (verb: string) => async (id: string) => {
       calls.push(`${verb} ${id}`);
       switched.push(`${verb} ${id}`);
@@ -378,6 +391,7 @@ function fakeApi(
       resets,
       auditQueries,
       dashboardQueries,
+      reportQueries,
       signOutFromServer: onSignedOut,
       login: async (email, password) => {
         calls.push(`login ${email} ${password}`);
@@ -513,7 +527,12 @@ function fakeApi(
         const answers = opts.dashboard ?? [];
         return answers[Math.min(dashboardQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
-      getCategoryReport: async () => ({ ok: false, reason: "server" }),
+      getCategoryReport: async (query) => {
+        calls.push("report");
+        reportQueries.push(query);
+        const answers = opts.report ?? [];
+        return answers[Math.min(reportQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
+      },
     };
   };
 }
@@ -4001,5 +4020,149 @@ describe("dashboard (jsdom)", () => {
     expect(el("[role=alert]").textContent).toBe("Cannot reach the server. Try again.");
     expect(cardTexts()).toHaveLength(0);
     expect(rowTexts()).toHaveLength(0);
+  });
+});
+
+const REPORT: CategoryReport = {
+  fromDay: null,
+  toDay: null,
+  categories: [
+    { category: "Shares", refundable: true, paid: "12000.00", paidOut: "2000.00" },
+    { category: "Development Levy", refundable: false, paid: "1000.50", paidOut: "0.00" },
+  ],
+  totalPaid: "13000.50",
+  totalPaidOut: "2000.00",
+};
+
+const REPORT_VIEWER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["reports.view"] };
+const REPORT_OWNER: Me = { ...ME, permissions: ["reports.view", "users.manage"] };
+
+async function openReports() {
+  await click(button("Categories"));
+}
+
+function footTexts(): string[] {
+  return Array.from(container?.querySelectorAll("tfoot tr") ?? []).map((r) => r.textContent ?? "");
+}
+
+describe("categories report helpers", () => {
+  it("checks the days in the server's order and adds only what was chosen", () => {
+    expect(checkReportFilter(NO_REPORT_FILTER)).toEqual({ ok: true, value: {} });
+    expect(checkReportFilter({ ...NO_REPORT_FILTER, fromDay: "2026-02-30", toDay: "x" })).toEqual({
+      ok: false,
+      message: "Enter a real From day.",
+    });
+    expect(checkReportFilter({ ...NO_REPORT_FILTER, toDay: "2026-13-01" })).toEqual({
+      ok: false,
+      message: "Enter a real To day.",
+    });
+    expect(checkReportFilter({ ...NO_REPORT_FILTER, fromDay: "2026-10-02", toDay: "2026-10-01" })).toEqual({
+      ok: false,
+      message: "The From day cannot be after the To day.",
+    });
+    expect(checkReportFilter({ fromDay: "2026-10-01", toDay: "2026-10-01", staffId: "" })).toEqual({
+      ok: true,
+      value: { fromDay: "2026-10-01", toDay: "2026-10-01" },
+    });
+    expect(checkReportFilter({ fromDay: "", toDay: "2026-10-31", staffId: "s1" })).toEqual({
+      ok: true,
+      value: { toDay: "2026-10-31", createdById: "s1" },
+    });
+  });
+
+  it("has a message for every failure, none for signed_out", () => {
+    expect(reportMessage("invalid_input")).toBe("The days or staff filter were refused. Press Clear and try again.");
+    expect(reportMessage("forbidden")).toBe("You do not have permission to do this.");
+    expect(reportMessage("signed_out")).toBeNull();
+    expect(reportMessage("network")).toBe("Cannot reach the server. Try again.");
+    expect(reportMessage("server")).toBe("Something went wrong. Try again.");
+    expect(reportMessage("not_found")).toBe("Something went wrong. Try again.");
+  });
+
+  it("writes the range the server used in words", () => {
+    expect(reportRange(null, null)).toBe("All days");
+    expect(reportRange("2026-10-01", null)).toBe("From 1 Oct 2026");
+    expect(reportRange(null, "2026-10-31")).toBe("Up to 31 Oct 2026");
+    expect(reportRange("2026-10-01", "2026-10-31")).toBe("1 Oct 2026 to 31 Oct 2026");
+  });
+});
+
+describe("categories report (jsdom)", () => {
+  it("has no Categories button without reports.view and never reads the report", async () => {
+    const api = await mount(fakeApi({ restore: { ...ME, permissions: ["members.view"] } }));
+    expect(() => button("Categories")).toThrow();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("shows the rows and totals as sent for a Staff holder, with no staff filter", async () => {
+    const api = await mount(fakeApi({ restore: REPORT_VIEWER, report: [{ ok: true, value: REPORT }] }));
+    expect(api.calls).toEqual([]);
+    await openReports();
+    expect(button("Categories").className).toBe("active");
+    expect(el("h1").textContent).toBe("Categories");
+    expect(api.calls).toEqual(["report"]);
+    expect(api.reportQueries).toEqual([{}]);
+    expect(rowTexts()).toEqual(["SharesYes₦12,000.00₦2,000.00", "Development LevyNo₦1,000.50₦0.00"]);
+    expect(footTexts()).toEqual(["Total₦13,000.50₦2,000.00"]);
+    expect(text()).toContain("All days.");
+    expect(container?.querySelector("select[name=staffId]")).toBeNull();
+  });
+
+  it("sends the days on Apply and shows the range of the reply", async () => {
+    const october = { ...REPORT, fromDay: "2026-10-01", toDay: "2026-10-31" };
+    const api = await mount(
+      fakeApi({ restore: REPORT_VIEWER, report: [{ ok: true, value: REPORT }, { ok: true, value: october }] }),
+    );
+    await openReports();
+    await type(el("input[name=fromDay]"), "2026-10-01");
+    await type(el("input[name=toDay]"), "2026-10-31");
+    await click(button("Apply"));
+    expect(api.reportQueries).toEqual([{}, { fromDay: "2026-10-01", toDay: "2026-10-31" }]);
+    expect(text()).toContain("1 Oct 2026 to 31 Oct 2026.");
+  });
+
+  it("stops a From day after the To day in the browser", async () => {
+    const api = await mount(fakeApi({ restore: REPORT_VIEWER, report: [{ ok: true, value: REPORT }] }));
+    await openReports();
+    await type(el("input[name=fromDay]"), "2026-10-02");
+    await type(el("input[name=toDay]"), "2026-10-01");
+    await click(button("Apply"));
+    expect(el("[role=alert]").textContent).toBe("The From day cannot be after the To day.");
+    expect(api.reportQueries).toEqual([{}]);
+    expect(rowTexts()).toHaveLength(2);
+  });
+
+  it("offers the staff filter to the Super Admin and sends createdById; Clear goes back", async () => {
+    const api = await mount(
+      fakeApi({ restore: REPORT_OWNER, staff: [staffAccount("s1", "Staff One")], report: [{ ok: true, value: REPORT }] }),
+    );
+    await openReports();
+    expect(api.calls).toContain("staff");
+    const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
+    expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
+    await type(el("input[name=fromDay]"), "2026-10-01");
+    await choose(select("staffId"), "s1");
+    await click(button("Apply"));
+    await click(button("Clear"));
+    expect(api.reportQueries).toEqual([{}, { fromDay: "2026-10-01", createdById: "s1" }, {}]);
+    expect(select("staffId").value).toBe("");
+    expect(el<HTMLInputElement>("input[name=fromDay]").value).toBe("");
+  });
+
+  it("shows no staff filter when the staff list cannot be read", async () => {
+    await mount(
+      fakeApi({ restore: REPORT_OWNER, staffList: { ok: false, reason: "server" }, report: [{ ok: true, value: REPORT }] }),
+    );
+    await openReports();
+    expect(container?.querySelector("select[name=staffId]")).toBeNull();
+    expect(rowTexts()).toHaveLength(2);
+  });
+
+  it("shows the message and no table when the report cannot be read", async () => {
+    await mount(fakeApi({ restore: REPORT_VIEWER, report: [{ ok: false, reason: "invalid_input" }] }));
+    await openReports();
+    expect(el("[role=alert]").textContent).toBe("The days or staff filter were refused. Press Clear and try again.");
+    expect(rowTexts()).toHaveLength(0);
+    expect(footTexts()).toHaveLength(0);
   });
 });

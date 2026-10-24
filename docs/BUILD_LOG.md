@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.6b (size M), 2026-10-24: web Categories report page (A-244)
+
+The owner said "go".
+**Changed:** `web/src/Reports.tsx` (new: `ReportFilterInput`, `NO_REPORT_FILTER`, `checkReportFilter`, `reportMessage`, `reportRange`, the `Reports` page), `web/src/App.tsx` (page `reports`, the "Categories" menu button for `reports.view`, `Reports` with `canFilterStaff` from `users.manage`), `web/src/styles.css` (`.report-filters` shares the dashboard filter rules; the Total row of `.category-report`), `web/test/app.test.tsx` (`report` answers and `reportQueries` in the fake Api; 3 helper tests, 7 screen tests). Docs: ASSUMPTIONS (A-244), PHASE_PLAN (7.6b done), TRACEABILITY (R-17), STATUS.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint clean; 4 files, 343 passed (333 plus 10). `npm run check` (server): 53 files, 2050 passed (no server change).
+**Not verified:** not opened in a browser. No live check (the route's live check ran at 7.4c). No break-on-purpose: the page is display only (rule 10); the call and the server code are run at 7.7.
+**Noted:** PHASE_PLAN 7.7 says "the two store lists"; 7.1, 7.2 and 7.4 added three. Written in STATUS item 1 for 7.7.
+
 ## Step 7.6 (size S), 2026-10-24: web `getCategoryReport` call (A-243)
 
 The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."

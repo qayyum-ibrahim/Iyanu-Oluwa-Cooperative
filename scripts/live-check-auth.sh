@@ -1,5 +1,5 @@
 #!/bin/sh
-# Live check of /auth, /staff, /audit, /members, /payments, /loans, /payoffs and /dashboard against a running server. Run from anywhere: sh scripts/live-check-auth.sh
+# Live check of /auth, /staff, /audit, /members, /payments, /loans, /payoffs, /dashboard and /reports against a running server. Run from anywhere: sh scripts/live-check-auth.sh
 # You type the owner email and password. The password is hidden, never printed, never in a command line.
 # Tokens are never printed and never put in a command line (the access token goes to curl on stdin).
 # The one wrong-password try counts as 1 failure and the next correct sign-in resets it (limit is 5).
@@ -443,6 +443,36 @@ expect "bad month refused" "$code" 400
 expect "bad month code" "$(pick code)" invalid_month
 code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/dashboard")
 expect "dashboard without a token refused" "$code" 401
+
+# --- category report (step 7.4c) ---
+# Read only. No day range, so the staff figures are this run's two payments of 20,000
+# (Shares 5,000, Savings 10,000, Special Savings 5,000 each). The pay-off was on the owner's member.
+code=$(authed_get /reports/categories "$SAT")
+expect "report without reports.view refused" "$code" 403
+printf '%s' '{"permissions":["members.create","members.view","payments.create","payments.view","loans.disburse","payoff.process","dashboard","reports.view"]}' > "$REQ"
+code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
+expect "staff given reports.view" "$code" 200
+code=$(authed_get /reports/categories "$SAT")
+expect "staff reads the category report" "$code" 200
+expect "report body fields" "$(keys)" "categories,fromDay,toDay,totalPaid,totalPaidOut"
+expect "report category count" "$(pick categories.length)" 14
+expect "report first category" "$(pick categories.0.category)" Shares
+expect "staff Shares paid" "$(pick categories.0.paid)" "10000.00"
+expect "staff Savings paid" "$(pick categories.1.paid)" "20000.00"
+expect "staff Special Savings paid" "$(pick categories.2.paid)" "10000.00"
+expect "staff total paid" "$(pick totalPaid)" "40000.00"
+expect "staff total paid out" "$(pick totalPaidOut)" "0.00"
+code=$(authed_get "/reports/categories?createdById=$SID" "$AT")
+expect "owner reads one staff member's report" "$code" 200
+expect "owner sees the staff total paid" "$(pick totalPaid)" "40000.00"
+code=$(authed_get /reports/categories "$AT")
+expect "owner reads the whole report" "$code" 200
+expect "owner report shows a pay-off" "$([ "$(pick totalPaidOut)" != "0.00" ] && echo yes || echo no)" yes
+code=$(authed_get "/reports/categories?fromDay=2026-10-02&toDay=2026-10-01" "$AT")
+expect "reversed range refused" "$code" 400
+expect "reversed range code" "$(pick code)" invalid_range
+code=$(curl -s -o "$BODY" -w "%{http_code}" "$BASE/reports/categories")
+expect "report without a token refused" "$code" 401
 
 code=$(token_json "$R1" | send /auth/refresh)
 expect "refresh" "$code" 200

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 7.4c (size M), 2026-10-24: `GET /reports/categories` route (A-240)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** D-99 named the category report route step 7.4; after the splits at 7.4 and 7.4b it is 7.4c. D-99 now carries a note (the decision itself is unchanged). DEV_SETUP now lists `/reports`.
+**Changed:** `server/src/reports-routes.ts` (new: `createReportsRouter`), `server/src/app.ts` (mounts `/reports`), `server/test/reports-routes.test.ts` (new: 18 tests), `scripts/live-check-auth.sh` (report part, 18 checks; header names `/reports`). Docs: ASSUMPTIONS (A-240), DECISIONS (D-99 note), PHASE_PLAN (7.4c done), TRACEABILITY (R-17), DEV_SETUP, STATUS.
+**Works (verified in this session):** `npx vitest run test/reports-routes.test.ts`: 18 passed. `sh -n scripts/live-check-auth.sh`: syntax-ok. `npm run check` (server): db:generate, typecheck and lint clean (chained before the tests); 53 files, 2050 passed.
+**Works (verified on owner's machine):** `sh scripts/live-check-auth.sh`: 194 passed, 0 failed (the owner pasted the last line only). The first try failed with "No such file or directory" because it ran inside `server/`; the owner then ran it from the repo root.
+**Not verified:** no break-on-purpose yet (7.7, D-90). No report screen yet (7.6).
+
 ## Step 7.4b (size M), 2026-10-24: category report logic (A-239)
 
 The owner said "fix Inconsistencies and go".

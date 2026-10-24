@@ -312,6 +312,17 @@ export class DuplicateIdempotencyKeyError extends Error {
   }
 }
 
+/**
+ * What to list across members (step 7.1). Every filter given must hold. memberCreatedById is the
+ * user who recorded the member, not the payment (A-133). The day range is on paidOn and includes
+ * both paidFrom and paidTo ("YYYY-MM-DD", so text order is day order). No filter means all payments.
+ */
+export interface PaymentListQuery {
+  memberCreatedById?: string;
+  paidFrom?: string;
+  paidTo?: string;
+}
+
 export interface PaymentStore {
   /**
    * Saves a payment and all its lines together, or nothing. Throws UnknownMemberError if the
@@ -323,6 +334,8 @@ export interface PaymentStore {
   findById(id: string): Promise<PaymentRecord | null>;
   /** Payments of one member, oldest first. Payments with equal times are in no fixed order. Returns copies. */
   listByMember(memberId: string): Promise<PaymentRecord[]>;
+  /** Payments that match the query, by paidOn, then oldest first. Returns copies. */
+  list(query: PaymentListQuery): Promise<PaymentRecord[]>;
   /** The payment this user saved with this key, or null. Returns a copy. */
   findByKey(createdById: string, idempotencyKey: string): Promise<PaymentRecord | null>;
 }

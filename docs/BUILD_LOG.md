@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 7.1 (size M), 2026-10-24: `payments.list` across members; OQ-11 first part answered (D-100, A-234)
+
+The owner said "Total Expenditures should not include Membership Withdrawal outflows. go".
+**Changed:** `server/src/store.ts` (`PaymentListQuery`, `PaymentStore.list`), `server/src/memory-store.ts` and `server/src/prisma-store.ts` (`payments.list`: the member's recorder, `paidOn` from and to, both included; by `paidOn`, then `createdAt`), `server/prisma/schema.prisma` (`@@index([paidOn])` on `Payment`), new `server/prisma/migrations/20261024090000_payment_paid_on_index/migration.sql` (written by hand), `server/test/helpers/payments-contract.ts` (7 cases). Docs: DECISIONS (D-100), OPEN_QUESTIONS (OQ-11 first part), ASSUMPTIONS (A-234; A-233 item 4 notes D-100), PHASE_PLAN (7.1 done; 7.3 names D-100), TRACEABILITY (R-15, R-30), STATUS.
+**Works (verified in this session):** first `npm run check` (server) stopped at the typecheck: `payments-contract.ts(238,7): error TS18048: 'listed' is possibly 'undefined'` (my new copy test indexed an array); fixed in the same test with a loop. Then `npm run check` (server): 49 files, 1927 passed (1913 plus 7 cases on each adapter), drift test included.
+Owner said yes: `npm run db:deploy` (server): "Applying migration `20261024090000_payment_paid_on_index`" ... "All migrations have been successfully applied." (verified in this session).
+**Not verified:** no break-on-purpose yet (7.7, D-90). No route uses `payments.list` yet (7.3).
+
 ## Step 7.0 (size S), 2026-10-24: Phase 7 plan; fixes for the TRACEABILITY browser notes and STATUS item 11 (D-99, A-233)
 
 The owner said "fix Inconsistencies and go. let me know if you need me to decide anything."

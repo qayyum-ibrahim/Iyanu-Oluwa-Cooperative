@@ -472,6 +472,26 @@ function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {
         });
         return rows.map(toPayment);
       },
+      async list(query) {
+        const rows = await prisma.payment.findMany({
+          where: {
+            ...(query.memberCreatedById !== undefined
+              ? { member: { createdById: query.memberCreatedById } }
+              : {}),
+            ...(query.paidFrom !== undefined || query.paidTo !== undefined
+              ? {
+                  paidOn: {
+                    ...(query.paidFrom !== undefined ? { gte: query.paidFrom } : {}),
+                    ...(query.paidTo !== undefined ? { lte: query.paidTo } : {}),
+                  },
+                }
+              : {}),
+          },
+          include: { lines: true },
+          orderBy: [{ paidOn: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        });
+        return rows.map(toPayment);
+      },
     },
     expenses: {
       async create(input) {

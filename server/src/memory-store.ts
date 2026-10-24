@@ -344,6 +344,20 @@ export function createMemoryStore(): Store {
         async listByMember(memberId) {
           return rows.filter((p) => p.memberId === memberId).map(copyPayment);
         },
+        async list(query) {
+          const { memberCreatedById, paidFrom, paidTo } = query;
+          return rows
+            .filter(
+              (p) =>
+                memberCreatedById === undefined ||
+                memberRows.some((m) => m.id === p.memberId && m.createdById === memberCreatedById),
+            )
+            .filter((p) => paidFrom === undefined || p.paidOn >= paidFrom)
+            .filter((p) => paidTo === undefined || p.paidOn <= paidTo)
+            // Rows are kept in the order saved, and sort is stable, so equal days stay oldest first.
+            .sort((x, y) => (x.paidOn < y.paidOn ? -1 : x.paidOn > y.paidOn ? 1 : 0))
+            .map(copyPayment);
+        },
       };
     })(),
     expenses: ((): ExpenseStore => {

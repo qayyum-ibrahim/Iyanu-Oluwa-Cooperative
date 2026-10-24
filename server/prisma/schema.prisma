@@ -126,6 +126,8 @@ model Payment {
 
   @@index([memberId])
   @@index([createdById])
+  // For the day range of payments.list (step 7.1).
+  @@index([paidOn])
   @@unique([createdById, idempotencyKey])
 }
 

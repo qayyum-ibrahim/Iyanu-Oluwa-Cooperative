@@ -6,9 +6,5 @@ server/src/store.ts
 server/src/memory-store.ts
 server/src/prisma-store.ts
 server/prisma/schema.prisma
-server/test/helpers/payments-contract.ts
-server/test/helpers/store-contract.ts
-server/test/memory-store.test.ts
-server/test/prisma-store.test.ts
-server/test/db.test.ts
-server/src/payments.ts
+server/test/helpers/loans-contract.ts
+server/src/loans.ts

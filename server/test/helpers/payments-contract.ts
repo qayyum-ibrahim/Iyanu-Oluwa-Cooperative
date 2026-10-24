@@ -140,6 +140,109 @@ export function runPaymentsContract(makeStore: () => Promise<Store> | Store): vo
       expect((await store.payments.listByMember(m2.id)).map((p) => p.id)).toEqual([p2.id]);
     });
 
+    // List across members (step 7.1). Each test filters by a new member recorder, so data kept from
+    // other tests cannot match.
+    it("lists the payments of members the asked user recorded, whoever recorded the payment", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "p-all-a");
+      const b = await newUser(store, "p-all-b");
+      const ma = await newMember(store, a.id);
+      const mb = await newMember(store, b.id);
+      const p1 = await store.payments.create(payment(ma.id, a.id));
+      await pause();
+      const p2 = await store.payments.create(payment(mb.id, b.id));
+      await pause();
+      // Recorded by b for a's member: still a's (A-133).
+      const p3 = await store.payments.create(payment(ma.id, b.id));
+      const ids = async (memberCreatedById: string) =>
+        (await store.payments.list({ memberCreatedById })).map((p) => p.id);
+      expect(await ids(a.id)).toEqual([p1.id, p3.id]);
+      expect(await ids(b.id)).toEqual([p2.id]);
+      const all = (await store.payments.list({})).map((p) => p.id);
+      expect(all.filter((id) => [p1.id, p2.id, p3.id].includes(id))).toEqual([p1.id, p2.id, p3.id]);
+      expect(await store.payments.list({ memberCreatedById: "no-such-user" })).toEqual([]);
+    });
+
+    it("returns whole payments with their lines, as listByMember does", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-all-whole");
+      const m = await newMember(store, u.id);
+      const p = await store.payments.create(payment(m.id, u.id));
+      expect(await store.payments.list({ memberCreatedById: u.id })).toEqual([p]);
+    });
+
+    it("includes both paidFrom and paidTo, by day paid", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-all-range");
+      const m = await newMember(store, u.id);
+      const p1 = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-09-30" }));
+      const p2 = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-01" }));
+      const p3 = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-31" }));
+      const p4 = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-11-01" }));
+      const ids = async (range: { paidFrom?: string; paidTo?: string }) =>
+        (await store.payments.list({ memberCreatedById: u.id, ...range })).map((p) => p.id);
+      expect(await ids({ paidFrom: "2026-10-01", paidTo: "2026-10-31" })).toEqual([p2.id, p3.id]);
+      expect(await ids({ paidFrom: "2026-10-01" })).toEqual([p2.id, p3.id, p4.id]);
+      expect(await ids({ paidTo: "2026-10-01" })).toEqual([p1.id, p2.id]);
+      expect(await ids({ paidFrom: "2026-10-31", paidTo: "2026-10-31" })).toEqual([p3.id]);
+      expect(await ids({ paidFrom: "2026-11-02" })).toEqual([]);
+    });
+
+    it("gives nothing for a reversed day range", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-all-empty");
+      const m = await newMember(store, u.id);
+      await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-15" }));
+      expect(
+        await store.payments.list({ memberCreatedById: u.id, paidFrom: "2026-10-16", paidTo: "2026-10-14" }),
+      ).toEqual([]);
+    });
+
+    it("lists by day paid first, then by time recorded", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-all-order");
+      const m = await newMember(store, u.id);
+      const late = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-20" }));
+      await pause();
+      const early = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-01" }));
+      await pause();
+      const lateAgain = await store.payments.create(payment(m.id, u.id, { paidOn: "2026-10-20" }));
+      expect((await store.payments.list({ memberCreatedById: u.id })).map((p) => p.id)).toEqual([
+        early.id,
+        late.id,
+        lateAgain.id,
+      ]);
+    });
+
+    it("needs every given filter to hold", async () => {
+      const store = await makeStore();
+      const a = await newUser(store, "p-all-and-a");
+      const b = await newUser(store, "p-all-and-b");
+      const ma = await newMember(store, a.id);
+      const mb = await newMember(store, b.id);
+      await store.payments.create(payment(ma.id, a.id, { paidOn: "2026-10-19" }));
+      const match = await store.payments.create(payment(ma.id, a.id, { paidOn: "2026-10-20" }));
+      await store.payments.create(payment(ma.id, a.id, { paidOn: "2026-10-21" }));
+      await store.payments.create(payment(mb.id, b.id, { paidOn: "2026-10-20" }));
+      expect(
+        await store.payments.list({ memberCreatedById: a.id, paidFrom: "2026-10-20", paidTo: "2026-10-20" }),
+      ).toEqual([match]);
+    });
+
+    it("does not let a caller change stored data through a listed record", async () => {
+      const store = await makeStore();
+      const u = await newUser(store, "p-all-copy");
+      const m = await newMember(store, u.id);
+      const p = await store.payments.create(payment(m.id, u.id));
+      for (const listed of await store.payments.list({ memberCreatedById: u.id })) {
+        listed.total = 1n;
+        listed.paidOn = "2000-01-01";
+        for (const l of listed.lines) l.amount = 1n;
+        listed.lines.pop();
+      }
+      expect(await store.payments.list({ memberCreatedById: u.id })).toEqual([p]);
+    });
+
     it("returns an empty list for a member with no payments", async () => {
       const store = await makeStore();
       const u = await newUser(store, "p-empty");

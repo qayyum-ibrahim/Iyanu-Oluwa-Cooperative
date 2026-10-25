@@ -397,7 +397,7 @@ describe("exportTransactions", () => {
 });
 
 describe("exportExpenses", () => {
-  it("gives every category not deleted in the day range, and the Total equals the Expenses page total", async () => {
+  it("gives every category not deleted in the day range; the Expenses page leaves out Loan and Membership Withdrawal", async () => {
     const { store, admin, addMember, spend } = await build();
     await spend(admin.id, "2026-09-30", "Allowances", 1n);
     const office = await spend(admin.id, "2026-10-01", "Office Maintenance", 1_500_000n, {
@@ -433,8 +433,9 @@ describe("exportExpenses", () => {
     ]);
     const page = await listExpenses(store, { id: admin.id, subject: subjectOf(admin) }, input);
     if (!page.ok) throw new Error("list failed");
-    expect(page.value.total).toBe("340000.25");
-    expect(rows.at(-1)?.[4]).toBe(Number(page.value.total));
+    // The page holds running costs only since 8.10 (D-107); the file follows at 8.12.
+    expect(page.value.total).toBe("15000.25");
+    expect(rows.at(-1)?.[4]).toBe(Number(page.value.total) + 300000 + 25000);
     expect(office.id).toBeTruthy();
   });
 
@@ -481,7 +482,7 @@ describe("exportCashflow", () => {
     expect(admin.id).toBeTruthy();
   });
 
-  it("In equals the transactions Total and the Categories report; Out equals the Expenses page total", async () => {
+  it("In equals the transactions Total and the Categories report; Out is every outflow, the Expenses page none of these (D-107)", async () => {
     const { store, admin, a, addMember, pay, spend } = await build();
     const m = await addMember(a.id, "Ada Test");
     await pay(m.id, "2026-10-01", [["Shares", 500n], ["Savings", 333n]], a.id);
@@ -509,7 +510,8 @@ describe("exportCashflow", () => {
     expect(rows.at(-1)?.slice(7, 9)).toEqual([8.33, 108.33]);
     expect(rows.at(-1)?.[7]).toBe(Number(report.value.totalPaid));
     expect(rows.at(-1)?.[7]).toBe(tx.at(-1)?.[4]);
-    expect(rows.at(-1)?.[8]).toBe(Number(page.value.total));
+    expect(page.value.total).toBe("0.00");
+    expect(rows.at(-1)?.[8]).toBe(8.33 + 100);
   });
 
   it("scopes In by the member's recorder and Out by the expense's recorder", async () => {

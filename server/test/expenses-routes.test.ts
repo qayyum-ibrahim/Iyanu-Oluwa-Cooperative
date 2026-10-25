@@ -340,6 +340,18 @@ describe("GET /expenses (5.8b)", () => {
     expect(one.body.total).toBe("0.30");
   });
 
+  it("lists and totals running costs only: Loan and Membership Withdrawal rows are left out (D-107)", async () => {
+    const { app, store, admin, b1, b2, ad, bearer } = await buildList();
+    const member = await store.members.create({ fullName: "Route Member", phone: "", address: "", occupation: "", createdById: admin.id });
+    const loan = await store.loans.create({ givenOn: "2026-09-30", memberId: member.id, principal: 100n, createdById: admin.id });
+    await store.expenses.create({ category: "Loan", amount: 100n, method: "CASH", spentOn: "2026-09-30", loanId: loan.id, createdById: admin.id });
+    await store.expenses.create({ category: "Membership Withdrawal", amount: 100n, method: "CASH", spentOn: "2026-09-30", createdById: admin.id });
+    const all = await request(app).get("/expenses").set("Authorization", bearer(admin));
+    expect(all.status).toBe(200);
+    expect(ids(all.body)).toEqual([b1.id, b2.id, ad.id].sort());
+    expect(all.body.total).toBe("250000.30");
+  });
+
   it("passes category, method and the days spent from the query", async () => {
     const { app, admin, b1, b2, ad, bearer } = await buildList();
     const get = (query: string) => request(app).get(`/expenses?${query}`).set("Authorization", bearer(admin));
@@ -361,6 +373,8 @@ describe("GET /expenses (5.8b)", () => {
   it.each([
     { label: "an unknown category", query: "category=Fuel", code: "invalid_category" },
     { label: "a repeated category", query: "category=Others&category=Loan", code: "invalid_category" },
+    { label: "the Loan category (D-107)", query: "category=Loan", code: "invalid_category" },
+    { label: "the Membership Withdrawal category (D-107)", query: "category=Membership%20Withdrawal", code: "invalid_category" },
     { label: "a method in the wrong case", query: "method=cash", code: "invalid_method" },
     { label: "an empty createdById", query: "createdById=", code: "invalid_created_by_id" },
     { label: "a fromDay with a time", query: "fromDay=2026-09-01T00:00:00Z", code: "invalid_from_day" },

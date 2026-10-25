@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.10 (size S), 2026-10-25: Expenses list running costs only (D-107, A-261)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** `server/test/exports.test.ts` compared the expenses and cashflow files with the old Expenses page total; it joined the step with the owner's word (A-261 item 3).
+**Changed:** `server/src/expenses.ts` (`listExpenses`: Loan and Membership Withdrawal filter gives `invalid_category` before the store is read; their rows are left out of the list and the total). `server/test/expenses.test.ts` (the system-only filter refused; running costs only in list, days and method; the delete refusal test now checks the rows stay saved and are not listed; the edit total test without the ₦325,000 of Loan and pay-off rows). `server/test/expenses-routes.test.ts` (two 400 rows; one 200 case). `server/test/exports.test.ts` (two comparisons). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-261), TRACEABILITY (R-11), PHASE_PLAN (8.10 done), NEXT_FILES.
+**Works (verified in this session):** first `npm run check` (server): 1 failed, "changes the list total to the edited amount" (expected "325001.10", got "1.10": `buildEdit` holds a Loan and a pay-off row, the intended change); its two totals fixed in the same test file. Second run: "Test Files 56 passed (56)", "Tests 2190 passed (2190)".
+**Not verified:** web checks not run (no web file changed). Live check not run. Break-on-purpose for this code is at 8.14.
+
 ## Step 8.9 (size S), 2026-10-25: plan for D-106, Expenses are running costs only and Total Outflow (D-107, A-260)
 
 The owner said "fix Inconsistencies and go".

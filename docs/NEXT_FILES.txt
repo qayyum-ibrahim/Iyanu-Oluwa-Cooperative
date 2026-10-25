@@ -5,7 +5,7 @@ docs/DOMAIN_RULES.md
 docs/PHASE_PLAN.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-server/src/expense-categories.ts
-server/src/expenses.ts
-server/test/expenses.test.ts
-server/test/expenses-routes.test.ts
+server/src/dashboard.ts
+server/test/dashboard.test.ts
+server/test/dashboard-routes.test.ts
+scripts/live-check-auth.sh

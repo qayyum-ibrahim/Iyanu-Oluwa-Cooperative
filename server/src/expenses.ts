@@ -9,7 +9,12 @@
 
 import { createHash } from "node:crypto";
 import { CategoryError } from "./categories.js";
-import { isExpenseCategory, parseManualExpenseCategory, type ExpenseCategory } from "./expense-categories.js";
+import {
+  isExpenseCategory,
+  isSystemOnlyExpenseCategory,
+  parseManualExpenseCategory,
+  type ExpenseCategory,
+} from "./expense-categories.js";
 import { MoneyError, parseNaira, sumKobo, type Kobo } from "./money.js";
 import { IDEMPOTENCY_KEY_PATTERN, isCalendarDay, koboToNairaString, lagosDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
@@ -288,11 +293,14 @@ export type ExpenseListResult = { ok: true; value: ExpenseList } | ExpenseFailur
 /**
  * Expenses by day spent, then time recorded, oldest first, with their total (step 5.8b, days since
  * U.6b2). Read only: no audit entry (as A-134).
- * Order: permission, createdById, category (any of DR-11, Loan too), method, fromDay, toDay, range.
+ * Order: permission, createdById, category (a running cost: Loan and Membership Withdrawal give
+ * invalid_category, D-107), method, fromDay, toDay, range.
  * The day range is on spentOn and includes both days (D-94); fromDay after toDay is refused.
  * Staff: always only the expenses they recorded; a createdById filter is checked but ignored
  * (DR-13, as listMembers). Super Admin: all expenses, or the ones recorded by createdById.
  * Soft-deleted expenses are never listed, so the total leaves them out (DR-12, step 5.9).
+ * Running costs only (D-106, D-107, step 8.10): the store keeps the Loan and Membership Withdrawal
+ * rows (loans.ts and payoffs.ts read them), so they are left out here, from the list and the total.
  */
 export async function listExpenses(
   store: Store,
@@ -309,7 +317,7 @@ export async function listExpenses(
     return failure("invalid_input", "invalid_created_by_id");
   }
   const category = input.category;
-  if (category !== undefined && !isExpenseCategory(category)) {
+  if (category !== undefined && (!isExpenseCategory(category) || isSystemOnlyExpenseCategory(category))) {
     return failure("invalid_input", "invalid_category");
   }
   const method = input.method === undefined ? undefined : parseMethod(input.method);
@@ -324,13 +332,14 @@ export async function listExpenses(
   }
 
   const createdById = actor.subject.role === "SUPER_ADMIN" ? userFilter : actor.id;
-  const rows = await store.expenses.list({
+  const stored = await store.expenses.list({
     ...(createdById !== undefined ? { createdById } : {}),
     ...(category !== undefined ? { category } : {}),
     ...(method !== undefined ? { method } : {}),
     ...(fromDay !== undefined ? { spentFrom: fromDay } : {}),
     ...(toDay !== undefined ? { spentTo: toDay } : {}),
   });
+  const rows = stored.filter((e) => !isExpenseCategory(e.category) || !isSystemOnlyExpenseCategory(e.category));
   return {
     ok: true,
     value: { expenses: rows.map(toView), total: koboToNairaString(sumKobo(rows.map((e) => e.amount))) },

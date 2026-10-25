@@ -691,6 +691,28 @@ async function buildList(store: Store = createMemoryStore()) {
   return { ...base, b, c, b1, b2, ad };
 }
 
+/** A Loan and a Membership Withdrawal row on 2026-09-30, saved straight in the store, as loans.ts and payoffs.ts do. */
+async function systemExpenses(store: Store, adminId: string): Promise<string[]> {
+  const member = await store.members.create({ fullName: "List Member", phone: "", address: "", occupation: "", createdById: adminId });
+  const loan = await store.loans.create({ givenOn: "2026-09-30", memberId: member.id, principal: 30_000_000n, createdById: adminId });
+  const loanExpense = await store.expenses.create({
+    category: "Loan",
+    amount: 30_000_000n,
+    method: "CASH",
+    spentOn: "2026-09-30",
+    loanId: loan.id,
+    createdById: adminId,
+  });
+  const payOff = await store.expenses.create({
+    category: "Membership Withdrawal",
+    amount: 2_500_000n,
+    method: "CASH",
+    spentOn: "2026-09-30",
+    createdById: adminId,
+  });
+  return [loanExpense.id, payOff.id];
+}
+
 function mustList(r: Awaited<ReturnType<typeof listExpenses>>) {
   if (!r.ok) throw new Error(`unexpected failure: ${r.reason} ${r.code ?? ""}`);
   return r.value;
@@ -816,10 +838,30 @@ describe("listExpenses: filters (D-66, days since U.6b2)", () => {
     expect(mustList(await as({ category: "Allowances", method: "BANK_TRANSFER" }))).toEqual({ expenses: [], total: "0.00" });
   });
 
-  it("accepts the system-only categories as a filter", async () => {
-    const { store, admin } = await buildList();
-    expect(mustList(await listExpenses(store, actorOf(admin), { category: "Loan" }))).toEqual({ expenses: [], total: "0.00" });
-    expect(mustList(await listExpenses(store, actorOf(admin), { category: "Membership Withdrawal" })).total).toBe("0.00");
+  it("refuses the system-only categories as a filter, without reading the store (D-107)", async () => {
+    const { store: inner, admin } = await buildList();
+    const { store, seen } = spying(inner);
+    for (const category of ["Loan", "Membership Withdrawal"]) {
+      expect(await listExpenses(store, actorOf(admin), { category })).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "invalid_category",
+      });
+    }
+    expect(seen).toEqual([]);
+  });
+
+  it("lists and totals running costs only: Loan and Membership Withdrawal rows are left out (D-107)", async () => {
+    const { store, admin, b1, b2, ad } = await buildList();
+    const saved = await systemExpenses(store, admin.id);
+    const all = mustList(await listExpenses(store, actorOf(admin), {}));
+    expect(ids(all)).toEqual([b1.id, b2.id, ad.id].sort());
+    expect(all.total).toBe("1000000.35");
+    const days = mustList(await listExpenses(store, actorOf(admin), { fromDay: "2026-09-30", toDay: "2026-09-30" }));
+    expect(days).toEqual({ expenses: [ad], total: "1000000.05" });
+    const cash = mustList(await listExpenses(store, actorOf(admin), { method: "CASH", createdById: admin.id }));
+    expect(cash).toEqual({ expenses: [ad], total: "1000000.05" });
+    expect((await store.expenses.list({})).map((e) => e.id)).toEqual(expect.arrayContaining(saved));
   });
 
   it("filters by days spent, both days included (U.6b2)", async () => {
@@ -1200,13 +1242,15 @@ describe("deleteExpense: Loan-linked and pay-off expenses stay (DR-12)", () => {
     expect(await deletedActions(store, admin.id)).toEqual([]);
   });
 
-  it("keeps the Loan and pay-off expenses in the list total after the refusals", async () => {
-    const { store, admin, loanExpense, payOff } = await buildDelete();
+  it("keeps the Loan and pay-off expenses saved after the refusals; the list leaves them out (D-107)", async () => {
+    const { store, admin, d1, e1, loanExpense, payOff } = await buildDelete();
     await deleteExpense(store, actorOf(admin), loanExpense.id);
     await deleteExpense(store, actorOf(admin), payOff.id);
+    expect(await store.expenses.findById(loanExpense.id)).toMatchObject({ deletedAt: null });
+    expect(await store.expenses.findById(payOff.id)).toMatchObject({ deletedAt: null });
     const listed = mustList(await listExpenses(store, actorOf(admin), {}));
-    expect(ids(listed)).toEqual(expect.arrayContaining([loanExpense.id, payOff.id]));
-    expect(listed.total).toBe("325000.50");
+    expect(ids(listed)).toEqual([d1.id, e1.id].sort());
+    expect(listed.total).toBe("0.50");
   });
 });
 
@@ -1374,11 +1418,11 @@ describe("updateExpense: who may edit what (5.9c, DR-13)", () => {
 
   it("changes the list total to the edited amount", async () => {
     const { store, admin, f, f1 } = await buildEdit();
-    expect(mustList(await listExpenses(store, actorOf(admin), {})).total).toBe("325001.10");
+    expect(mustList(await listExpenses(store, actorOf(admin), {})).total).toBe("1.10");
     mustEdit(await updateExpense(store, actorOf(f), f1.id, edit()));
     const listed = mustList(await listExpenses(store, actorOf(admin), {}));
     expect(listed.expenses.find((x) => x.id === f1.id)?.amount).toBe("1500.75");
-    expect(listed.total).toBe("326501.65");
+    expect(listed.total).toBe("1501.65");
   });
 
   it("gives Staff not_found for an expense someone else recorded, and changes nothing", async () => {

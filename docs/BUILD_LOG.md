@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 8.8 (size S), 2026-10-25: Phase 8 walk-through on the owner's machine (A-259)
+
+The owner said "go".
+**Changed:** no source file. Docs: DECISIONS (D-106), ASSUMPTIONS (A-259), PHASE_PLAN (8.8 done, 8.9 added), TRACEABILITY (R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): 56 files, 2186 passed. `npm run check` (web): 4 files, 365 passed.
+**Works (verified on owner's machine):** the owner reported "all 6 checks passed": each of the five files opens in a spreadsheet program; transactions Total equals the Categories report Total (Paid); expenses Total equals the Expenses page total; a payment category file and an expense category file match their report and page; a Staff account's file holds only its rows; a Staff account without `reports.export` has no Exports button. The owner gave no numbers and no screen output. Phase 8 exit met.
+**Findings:** (1) The Exports page has no Apply button; the buttons use the filters as typed (A-255). Recorded as option A (no change; A-259 item 2). (2) The owner asked that Loan and Membership Withdrawal no longer count as expenses, with a new term "Total Outflow" for all money going out (D-106). Planned at 8.9.
+**Not verified:** the 403 for a Staff account without `reports.export` (the live check export part is still not run). The checks were not seen in this session.
+
 ## Step 8.7c (size M), 2026-10-25: tests for the 8.7 gaps and a rerun (A-258)
 
 The owner said "fix Inconsistencies and go".

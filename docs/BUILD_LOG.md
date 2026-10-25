@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.9 (size S), 2026-10-25: plan for D-106, Expenses are running costs only and Total Outflow (D-107, A-260)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** A-259 item 3 said the add-expense form was not read; read now: Loan and Membership Withdrawal cannot be picked (server and web), recorded in A-259. The glossary row "Expense / outflow" treated both as one; split into Expense, Outflow and Total Outflow. The code still counts Loan and Membership Withdrawal as expenses in the Expenses list and total, the expenses file and Recent expenses; planned at 8.10 to 8.13.
+**Changed:** no source or test file. Docs: DOMAIN_RULES (DR-10, DR-11, DR-12), GLOSSARY, DECISIONS (D-107; change notes on D-102, D-104, D-106), ASSUMPTIONS (A-259 item 3, A-260), PHASE_PLAN (8.9 done; 8.10 to 8.15), TRACEABILITY (R-11, R-15, R-23), STATUS, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 56 passed (56)", "Tests 2186 passed (2186)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)".
+**Not verified:** the memory and Prisma adapters and the test files were not read; the plan's file lists for 8.10 to 8.13 are first looks. The live check was not run.
+
 ## Step 8.8 (size S), 2026-10-25: Phase 8 walk-through on the owner's machine (A-259)
 
 The owner said "go".

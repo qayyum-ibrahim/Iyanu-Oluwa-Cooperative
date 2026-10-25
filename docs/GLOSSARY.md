@@ -10,13 +10,15 @@
 | Category | A named type of contribution, such as Shares |
 | Refundable category | A category paid out at exit: Shares, Savings, Special Savings, Special Deposit, Building Funds |
 | Pay-off | Paying a member their refundable balances and closing the account |
-| Membership Withdrawal | The expense category used for pay-off outflows (DR-11; system-only, A-148) |
+| Membership Withdrawal | The outflow category used for pay-offs (DR-11; system-only, A-148). Not an expense (D-106) |
 | Active / Inactive | Member status. Inactive members are kept but hidden from the default list. |
 | Loan | Money given to a member. One active loan per member. |
 | Outstanding | Loan amount minus the amount repaid |
 | On Loan | Badge shown while a loan is active |
 | Fully Repaid | Loan status when outstanding is ₦0 |
-| Expense / outflow | Money paid out by the cooperative |
+| Expense | A running cost, such as fuel or stationery: any DR-11 category but Loan and Membership Withdrawal (D-106) |
+| Outflow | Any money paid out: an expense, a loan given or a Membership Withdrawal (D-106) |
+| Total Outflow | Expenses + loans given + Membership Withdrawals (D-106) |
 | Soft-delete | Marking a record deleted without erasing it |
 | Kobo | 1/100 of a naira. All money is stored as whole kobo. |
 | Actor | The user who performed an action |

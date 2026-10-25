@@ -145,6 +145,7 @@ describe("getDashboard: figures", () => {
       income: ZERO,
       expenditure: ZERO,
       membershipWithdrawal: ZERO,
+      totalOutflow: ZERO,
       outstandingLoans: "0.00",
       activeMembers: 0,
       recentExpenses: [],
@@ -185,10 +186,11 @@ describe("getDashboard: figures", () => {
     const v = must(await getDashboard(store, actorOf(admin), { month: "2026-10" }));
     expect(v.income).toEqual({ month: "1.10", allTime: "11.11" });
     expect(v.expenditure).toEqual({ month: "2.20", allTime: "22.22" });
+    expect(v.totalOutflow).toEqual({ month: "2.20", allTime: "22.22" });
     expect(v.recentExpenses.map((e) => e.spentOn)).toEqual(["2026-10-31", "2026-10-01"]);
   });
 
-  it("leaves Loan and Membership Withdrawal out of expenditure, and shows Membership Withdrawal alone (D-100, D-102)", async () => {
+  it("leaves Loan and Membership Withdrawal out of expenditure and recent expenses, shows Membership Withdrawal alone, and counts all in Total Outflow (D-100, D-102, D-107)", async () => {
     const { store, admin, a, addMember, spend, lend } = await build();
     const m = await addMember(a.id, "A One");
     await lend(m.id, 30_000_000n, "2026-10-02", admin.id);
@@ -200,6 +202,9 @@ describe("getDashboard: figures", () => {
     const v = must(await getDashboard(store, actorOf(admin), { month: "2026-10" }));
     expect(v.expenditure).toEqual({ month: "10.50", allTime: "10.53" });
     expect(v.membershipWithdrawal).toEqual({ month: "25000.00", allTime: "25000.07" });
+    // ₦300,000 lent + ₦25,000 withdrawn + ₦10.50 spent; all time adds ₦0.07 and ₦0.03.
+    expect(v.totalOutflow).toEqual({ month: "325010.50", allTime: "325010.60" });
+    expect(v.recentExpenses.map((e) => e.category)).toEqual(["Others", "Expenses"]);
   });
 
   it("leaves soft-deleted expenses out of every figure and the recent list", async () => {
@@ -209,6 +214,7 @@ describe("getDashboard: figures", () => {
     await store.expenses.softDelete(gone.id, admin.id);
     const v = must(await getDashboard(store, actorOf(admin), { month: "2026-10" }));
     expect(v.expenditure).toEqual({ month: "1.00", allTime: "1.00" });
+    expect(v.totalOutflow).toEqual({ month: "1.00", allTime: "1.00" });
     expect(v.recentExpenses.map((e) => e.id)).toEqual([kept.id]);
   });
 
@@ -238,7 +244,7 @@ describe("getDashboard: figures", () => {
     expect(must(await getDashboard(store, actorOf(admin), { month: "2026-10" })).activeMembers).toBe(2);
   });
 
-  it("shows the 10 newest expenses of the month, newest first, by day then time recorded, every category", async () => {
+  it("shows the 10 newest running costs of the month, newest first, by day then time recorded (D-107)", async () => {
     const { store, admin, a, addMember, spend, lend } = await build();
     const m = await addMember(a.id, "A One");
     const saved = [];
@@ -247,13 +253,15 @@ describe("getDashboard: figures", () => {
     }
     const sameDay = await spend("Expenses", 12n, "2026-10-11", admin.id);
     const loan = await lend(m.id, 13n, "2026-10-11", admin.id);
+    await spend("Membership Withdrawal", 15n, "2026-10-11", admin.id);
     await spend("Allowances", 14n, "2026-11-01", admin.id);
     const v = must(await getDashboard(store, actorOf(admin), { month: "2026-10" }));
     expect(RECENT_EXPENSES).toBe(10);
     expect(v.recentExpenses).toHaveLength(10);
-    expect(v.recentExpenses[0]).toMatchObject({ category: "Loan", amount: "0.13", spentOn: "2026-10-11" });
-    expect(v.recentExpenses[1]?.id).toBe(sameDay.id);
-    expect(v.recentExpenses.slice(2).map((e) => e.id)).toEqual(saved.slice(3).reverse().map((e) => e.id));
+    expect(v.recentExpenses[0]).toMatchObject({ id: sameDay.id, category: "Expenses", amount: "0.12", spentOn: "2026-10-11" });
+    expect(v.recentExpenses.slice(1).map((e) => e.id)).toEqual(saved.slice(2).reverse().map((e) => e.id));
+    // 1 to 11, 12, the Loan 13 and the withdrawal 15 kobo; November is left out.
+    expect(v.totalOutflow.month).toBe("1.06");
     expect(loan.id).toBeTruthy();
     expect(Object.keys(v.recentExpenses[0] as object).sort()).toEqual([
       "amount",
@@ -301,6 +309,8 @@ describe("getDashboard: scope (DR-13, D-99)", () => {
     expect(v.income).toEqual({ month: "3.00", allTime: "3.00" });
     expect(v.outstandingLoans).toBe("10.00");
     expect(v.expenditure).toEqual({ month: "0.10", allTime: "0.10" });
+    // The loan to a's member was recorded by the Super Admin, so its Loan row is not a's outflow.
+    expect(v.totalOutflow).toEqual({ month: "0.10", allTime: "0.10" });
     expect(v.recentExpenses.map((e) => e.amount)).toEqual(["0.10"]);
     expect(v.activeMembers).toBe(1);
   });
@@ -317,11 +327,13 @@ describe("getDashboard: scope (DR-13, D-99)", () => {
     expect(all.income.month).toBe("7.00");
     expect(all.outstandingLoans).toBe("30.00");
     expect(all.expenditure.month).toBe("0.70");
+    expect(all.totalOutflow).toEqual({ month: "30.70", allTime: "30.70" });
     expect(all.activeMembers).toBe(2);
     const one = must(await getDashboard(store, actorOf(admin), { month: "2026-10", createdById: b.id }));
     expect(one.income.month).toBe("4.00");
     expect(one.outstandingLoans).toBe("20.00");
     expect(one.expenditure.month).toBe("0.20");
+    expect(one.totalOutflow).toEqual({ month: "20.20", allTime: "20.20" });
     expect(one.activeMembers).toBe(1);
     const nobody = must(await getDashboard(store, actorOf(admin), { month: "2026-10", createdById: "no-such-user" }));
     expect(nobody.income).toEqual(ZERO);
@@ -396,6 +408,10 @@ describe("getDashboard on the Prisma store (real SQLite)", () => {
     expect(v.membershipWithdrawal).toEqual(ZERO);
     expect(v.outstandingLoans).toBe("280000.00");
     expect(v.activeMembers).toBe(1);
+    expect(v.totalOutflow).toEqual({ month: "0.07", allTime: "0.07" });
     expect(v.recentExpenses.map((e) => e.amount)).toEqual(["0.07"]);
+    const all = must(await getDashboard(store, actorOf(admin), { month: "2026-10" }));
+    expect(all.totalOutflow).toEqual({ month: "300000.12", allTime: "300000.12" });
+    expect(all.recentExpenses.map((e) => e.category)).toEqual(["Allowances"]);
   });
 });

@@ -416,7 +416,8 @@ expect "pay-off without a token refused" "$code" 401
 # --- dashboard (step 7.3b) ---
 # Read only. The staff account is new on each run, so its figures are this run's rows only:
 # two payments of 20,000 and one loan of 300,000 with its Loan expense, all in this Lagos month.
-# The Loan expense is not in expenditure (D-102); the pay-off was recorded by the owner (D-99).
+# The Loan expense is not in expenditure (D-102) or recent expenses, but is in Total Outflow (D-107);
+# the pay-off was recorded by the owner (D-99).
 # A run that crosses midnight at a Lagos month end can fail the month figures (no data is harmed).
 code=$(authed_get /dashboard "$SAT")
 expect "dashboard without dashboard permission refused" "$code" 403
@@ -425,16 +426,17 @@ code=$(authed_send PUT "/staff/$SID/permissions" "$AT")
 expect "staff given dashboard" "$code" 200
 code=$(authed_get /dashboard "$SAT")
 expect "staff reads the dashboard" "$code" 200
-expect "dashboard body fields" "$(keys)" "activeMembers,expenditure,fromDay,income,membershipWithdrawal,month,outstandingLoans,recentExpenses,toDay"
+expect "dashboard body fields" "$(keys)" "activeMembers,expenditure,fromDay,income,membershipWithdrawal,month,outstandingLoans,recentExpenses,toDay,totalOutflow"
 DMONTH=$(pick month)
 expect "staff income this month" "$(pick income.month)" "40000.00"
 expect "staff income all time" "$(pick income.allTime)" "40000.00"
 expect "staff expenditure leaves out the Loan expense" "$(pick expenditure.month)" "0.00"
 expect "staff membership withdrawal" "$(pick membershipWithdrawal.month)" "0.00"
+expect "staff total outflow this month is the Loan" "$(pick totalOutflow.month)" "300000.00"
+expect "staff total outflow all time" "$(pick totalOutflow.allTime)" "300000.00"
 expect "staff outstanding loans" "$(pick outstandingLoans)" "300000.00"
 expect "staff active members" "$(pick activeMembers)" 1
-expect "staff recent expenses" "$(pick recentExpenses.length)" 1
-expect "staff recent expense is the Loan" "$(pick recentExpenses.0.category)" Loan
+expect "staff recent expenses leave out the Loan" "$(pick recentExpenses.length)" 0
 code=$(authed_get "/dashboard?month=$DMONTH&createdById=$SID" "$AT")
 expect "owner reads one staff member's dashboard" "$code" 200
 expect "owner sees the staff income" "$(pick income.month)" "40000.00"

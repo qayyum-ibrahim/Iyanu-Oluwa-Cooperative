@@ -5,7 +5,6 @@ docs/DOMAIN_RULES.md
 docs/PHASE_PLAN.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-server/src/dashboard.ts
-server/test/dashboard.test.ts
-server/test/dashboard-routes.test.ts
-scripts/live-check-auth.sh
+server/src/exports.ts
+server/test/exports.test.ts
+server/test/exports-routes.test.ts

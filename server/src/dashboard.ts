@@ -1,8 +1,9 @@
 // Dashboard logic (step 7.3; D-99, D-100, D-101, D-102, DR-13). Rules over the Store: no HTTP here.
 // Months are Lagos months of the day fields (paidOn, spentOn), first to last day, both included.
 // Income is every payment line (D-101). Expenditure is every expense that is not deleted, except
-// Loan and Membership Withdrawal (D-100, D-102). Read only: nothing is written, not even an audit
-// entry (as A-134).
+// Loan and Membership Withdrawal (D-100, D-102). Total Outflow is every expense that is not deleted,
+// Loan and Membership Withdrawal included (D-106, D-107). Read only: nothing is written, not even an
+// audit entry (as A-134).
 
 import type { ExpenseView } from "./expenses.js";
 import { isLoanActive, loanOutstanding, LOAN_EXPENSE_CATEGORY } from "./loans.js";
@@ -43,10 +44,12 @@ export interface DashboardView {
   income: MonthAndAllTime;
   expenditure: MonthAndAllTime;
   membershipWithdrawal: MonthAndAllTime;
+  /** Expenditure + loans given + Membership Withdrawals: every outflow not deleted (D-107). */
+  totalOutflow: MonthAndAllTime;
   /** Sum of what is outstanding on loans that are Active now (all time only, A-233 item 8). */
   outstandingLoans: string;
   activeMembers: number;
-  /** The newest expenses of the month, newest first, every category (A-236). */
+  /** The newest running costs of the month, newest first: no Loan or Membership Withdrawal (D-107). */
   recentExpenses: ExpenseView[];
 }
 
@@ -175,10 +178,11 @@ export async function getDashboard(
           amountTotal(monthExpenses.filter(withdrawal)),
           amountTotal(expenses.filter(withdrawal)),
         ),
+        totalOutflow: pair(amountTotal(monthExpenses), amountTotal(expenses)),
         outstandingLoans: koboToNairaString(outstanding),
         activeMembers,
         // The store lists by day spent, then time recorded, oldest first.
-        recentExpenses: monthExpenses.slice(-RECENT_EXPENSES).reverse().map(toExpenseView),
+        recentExpenses: monthExpenses.filter(counted).slice(-RECENT_EXPENSES).reverse().map(toExpenseView),
       },
     };
   });

@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.11 (size M), 2026-10-25: dashboard Total Outflow; recent expenses running costs only (D-107, A-262)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** A-260 item 2 named the live check dashboard lines 418 to 437; they are 416 to 448 (corrected in A-260). Recent expenses for a category outside DR-11 had no rule; it follows `listExpenses` (A-262 item 2). DECISIONS, ASSUMPTIONS, PHASE_PLAN and TRACEABILITY were read in the parts that touch 8.11, not whole.
+**Changed:** `server/src/dashboard.ts` (`totalOutflow` in `DashboardView`: every outflow not deleted, month and all time; `recentExpenses` filtered by `counted`). `server/test/dashboard.test.ts` (`totalOutflow` checks in the empty, month, D-100, soft-delete, scope and Prisma tests; the recent test leaves out a Loan and a Membership Withdrawal row). `server/test/dashboard-routes.test.ts` (body keys gain `totalOutflow`; values for Staff, the Super Admin, one user and September; recent leaves out Membership Withdrawal). `scripts/live-check-auth.sh` (body fields; staff `totalOutflow` 300000.00; no staff recent expense). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-260 item 2, A-262), TRACEABILITY (R-15), PHASE_PLAN (8.11 done), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 56 passed (56)", "Tests 2190 passed (2190)". `sh -n scripts/live-check-auth.sh`: no syntax error.
+**Not verified:** live check not run (needs the owner's word). Web not run (no web file changed). Break-on-purpose for this code is at 8.14.
+
 ## Step 8.10 (size S), 2026-10-25: Expenses list running costs only (D-107, A-261)
 
 The owner said "fix Inconsistencies and go".

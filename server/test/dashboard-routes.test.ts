@@ -91,6 +91,7 @@ describe("GET /dashboard (7.3b)", () => {
       "outstandingLoans",
       "recentExpenses",
       "toDay",
+      "totalOutflow",
     ]);
     expect(res.body).toMatchObject({
       month: "2026-10",
@@ -99,6 +100,7 @@ describe("GET /dashboard (7.3b)", () => {
       income: { month: "10000.00", allTime: "10000.50" },
       expenditure: { month: "300.00", allTime: "300.00" },
       membershipWithdrawal: ZERO,
+      totalOutflow: { month: "300.00", allTime: "300.00" },
       outstandingLoans: "0.00",
       activeMembers: 1,
     });
@@ -123,11 +125,11 @@ describe("GET /dashboard (7.3b)", () => {
       income: { month: "12000.00", allTime: "12000.50" },
       expenditure: { month: "9300.00", allTime: "9300.00" },
       membershipWithdrawal: { month: "70.00", allTime: "70.00" },
+      totalOutflow: { month: "9370.00", allTime: "9370.00" },
       activeMembers: 2,
     });
     expect((all.body.recentExpenses as { category: string }[]).map((e) => e.category)).toEqual([
       "Asset Purchase",
-      "Membership Withdrawal",
       "Allowances",
     ]);
     const one = await request(app).get(`/dashboard?month=2026-10&createdById=${b.id}`).set("Authorization", bearer(admin));
@@ -136,7 +138,9 @@ describe("GET /dashboard (7.3b)", () => {
       income: { month: "2000.00", allTime: "2000.00" },
       expenditure: ZERO,
       membershipWithdrawal: { month: "70.00", allTime: "70.00" },
+      totalOutflow: { month: "70.00", allTime: "70.00" },
       activeMembers: 1,
+      recentExpenses: [],
     });
   });
 
@@ -149,6 +153,7 @@ describe("GET /dashboard (7.3b)", () => {
       toDay: "2026-09-30",
       income: { month: "0.50", allTime: "10000.50" },
       expenditure: { month: "0.00", allTime: "300.00" },
+      totalOutflow: { month: "0.00", allTime: "300.00" },
       recentExpenses: [],
     });
   });

@@ -4,7 +4,7 @@
 // The audit detail holds the kind, the scope, the days and the category: no name, no phone.
 
 import { isPaymentCategory } from "./categories.js";
-import { isExpenseCategory } from "./expense-categories.js";
+import { isExpenseCategory, isSystemOnlyExpenseCategory } from "./expense-categories.js";
 import { lagosDay, isCalendarDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import type { MemberStatus, PaymentMethod, Store } from "./store.js";
@@ -195,8 +195,8 @@ const TRANSACTION_COLUMNS: readonly SheetColumn[] = [
 /**
  * One row per payment line whose payment was paid in the day range (paidOn, both days included),
  * by paidOn, then time recorded; lines in their saved order. Payment lines only: pay-offs show in
- * the expenses file as their Membership Withdrawal expense (A-249 item 5), so the Total equals
- * the Categories report Total (Paid). Scope is the member's recorder (A-133); "Recorded by" is
+ * the cashflow Out side and the Membership Withdrawal category file as their Membership Withdrawal
+ * row (A-249 item 5, D-107), so the Total equals the Categories report Total (Paid). Scope is the member's recorder (A-133); "Recorded by" is
  * who recorded the payment.
  */
 export async function exportTransactions(
@@ -270,9 +270,11 @@ const EXPENSE_COLUMNS: readonly SheetColumn[] = [
 ];
 
 /**
- * Every expense not deleted, every category (Loan and Membership Withdrawal too), spent in the day
- * range (spentOn, both days included), in the store's order, so the Total equals the Expenses page
- * total (A-249 item 6). Scope is the expense's recorder, as listExpenses (D-67).
+ * Every running cost not deleted, spent in the day range (spentOn, both days included), in the
+ * store's order, so the Total equals the Expenses page total. Loan and Membership Withdrawal rows
+ * are money going out, not expenses: they are left out, as listExpenses does (D-106, D-107, step
+ * 8.12); they stay in the cashflow and category files. Scope is the expense's recorder, as
+ * listExpenses (D-67).
  */
 export async function exportExpenses(
   store: Store,
@@ -285,7 +287,9 @@ export async function exportExpenses(
   return run(store, actor, "expenses", checked.value, async (tx) => ({
     name: "Expenses",
     columns: EXPENSE_COLUMNS,
-    rows: (await expensesOf(tx, checked.value)).map(expenseRow),
+    rows: (await expensesOf(tx, checked.value))
+      .filter((e) => !isExpenseCategory(e.category) || !isSystemOnlyExpenseCategory(e.category))
+      .map(expenseRow),
   }));
 }
 
@@ -301,8 +305,9 @@ interface OutRow {
 }
 
 /**
- * The expenses not deleted, in scope and in the day range, in the store's order (day spent, then
- * time recorded). With a category, only that category, as the Expenses page filter.
+ * The outflows not deleted (every category, Loan and Membership Withdrawal too), in scope and in
+ * the day range, in the store's order (day spent, then time recorded). With a category, only that
+ * category.
  */
 async function expensesOf(tx: Store, checked: Checked): Promise<OutRow[]> {
   const { scopeId, fromDay, toDay, category } = checked;
@@ -335,16 +340,17 @@ const CASHFLOW_COLUMNS: readonly SheetColumn[] = [
   { key: "description", header: "Description", kind: "text", width: 30 },
   { key: "narration", header: "Narration", kind: "text", width: 30 },
   { key: "in", header: "In (₦)", kind: "money" },
-  { key: "out", header: "Out (₦)", kind: "money" },
+  { key: "out", header: "Outflow (₦)", kind: "money" },
   { key: "method", header: "Method", kind: "text" },
   { key: "recordedBy", header: "Recorded by", kind: "text", width: 24 },
 ];
 
 /**
- * Payment lines as In and expenses as Out, by day; on the same day In rows come first, each side
+ * Payment lines as In and outflows as Out, by day; on the same day In rows come first, each side
  * in its own order (A-252). The Total row has both totals: In equals the transactions Total, Out
- * the expenses Total (every category not deleted, so the Expenses page total, not the dashboard's
- * Total Expenditures, A-249 item 6). Scope as the two files it joins.
+ * every outflow not deleted, Loan and Membership Withdrawal too, so the dashboard's Total Outflow
+ * for the same days (D-107), not the expenses file Total. Scope as the transactions file for In
+ * and the expenses file for Out.
  */
 export async function exportCashflow(
   store: Store,
@@ -403,8 +409,9 @@ export async function exportCashflow(
 /**
  * One category in the day range (A-249 item 7, A-252). A payment category (DR-04) gives its
  * payment lines, in the transactions columns, so the Total equals that category's Paid in the
- * Categories report. Any other name of DR-11 (Membership Withdrawal and Loan too) gives its
- * expenses, in the expenses columns, so the Total equals the Expenses page with that filter.
+ * Categories report. Any other name of DR-11 gives its outflows, in the expenses columns: a running
+ * cost's Total equals the Expenses page with that filter; Membership Withdrawal and Loan, which the
+ * Expenses page leaves out, still give their rows here (D-107).
  * The two lists share no name. The sheet is named after the category.
  */
 export async function exportCategory(

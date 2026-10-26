@@ -194,6 +194,34 @@ describe("GET /exports/:kind (8.4)", () => {
     expect(file.rows.at(-1)).toEqual(["Total", null, null, null, 1000, null, null]);
   });
 
+  it("leaves Loan and Membership Withdrawal out of the expenses file, not out of cashflow Outflow or their category (D-107)", async () => {
+    const { app, store, admin, bearer } = await build();
+    for (const [category, amount] of [
+      ["Loan", 300_000n],
+      ["Membership Withdrawal", 25_000n],
+    ] as const) {
+      await store.expenses.create({
+        category,
+        amount,
+        method: "CASH",
+        spentOn: "2026-10-09",
+        description: "",
+        narration: "",
+        createdById: admin.id,
+      });
+    }
+    const spent = await open((await download(app, "/exports/expenses", bearer(admin))).body as Buffer);
+    expect(spent.rows.slice(1).map((r) => r[1] ?? r[0])).toEqual(["Allowances", "Allowances", "Total"]);
+    expect(spent.rows.at(-1)?.[4]).toBe(1000);
+    const flow = await open((await download(app, "/exports/cashflow", bearer(admin))).body as Buffer);
+    expect(flow.rows[0]?.[8]).toBe("Outflow (₦)");
+    expect([flow.rows.at(-1)?.[7], flow.rows.at(-1)?.[8]]).toEqual([12005.5, 4250]);
+    const loan = await open((await download(app, "/exports/category?category=Loan", bearer(admin))).body as Buffer);
+    expect(loan.rows.at(-1)?.[4]).toBe(3000);
+    const withdrawal = await download(app, "/exports/category?category=Membership%20Withdrawal", bearer(admin));
+    expect((await totalRow(withdrawal.body as Buffer))?.[4]).toBe(250);
+  });
+
   it("ignores the days on members and the category on the four other kinds (A-253)", async () => {
     const { app, admin, bearer } = await build();
     const members = await download(app, "/exports/members?fromDay=bad&toDay=bad", bearer(admin));

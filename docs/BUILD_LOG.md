@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.12 (size S), 2026-10-26: the expenses file running costs only; cashflow header "Outflow (₦)" (D-107, A-263)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** the `exports.ts` comments on `exportTransactions`, `exportExpenses`, `expensesOf`, `exportCashflow` and `exportCategory` still described the D-104 rules (pay-offs in the expenses file; cashflow Out equal to the Expenses page); reworded. STATUS "What exists" now says `GET /expenses` lists running costs only and the dashboard reply has `totalOutflow`; the duplicate live check request in the brief is merged. Found for 8.13: the dashboard reply check lives in `web/src/api.ts`, and `web/test/api.test.ts` (not named in PHASE_PLAN 8.13) tests it; asked in STATUS.
+**Changed:** `server/src/exports.ts` (`exportExpenses` leaves out Loan and Membership Withdrawal rows with the `listExpenses` rule; cashflow column header "Outflow (₦)"; comments). `server/test/exports.test.ts` (`CASHFLOW_HEADER`; the expenses file test expects running costs only, a stored name outside DR-11 kept, the Total equal to the Expenses page, and the cashflow Out still holding the Loan and the withdrawal; the cashflow test checks the expenses file is empty; a test name). `server/test/exports-routes.test.ts` (one new test: expenses file without Loan and Membership Withdrawal, cashflow header and Out total, the two category files). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-263), TRACEABILITY (R-23), PHASE_PLAN (8.12 done), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)".
+**Not verified:** live check not run. Web not run (no web file changed). Break-on-purpose for this code is at 8.14.
+
 ## Step 8.11 (size M), 2026-10-25: dashboard Total Outflow; recent expenses running costs only (D-107, A-262)
 
 The owner said "fix Inconsistencies and go".

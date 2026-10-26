@@ -141,7 +141,7 @@ const CASHFLOW_HEADER = [
   "Description",
   "Narration",
   "In (₦)",
-  "Out (₦)",
+  "Outflow (₦)",
   "Method",
   "Recorded by",
 ];
@@ -397,7 +397,7 @@ describe("exportTransactions", () => {
 });
 
 describe("exportExpenses", () => {
-  it("gives every category not deleted in the day range; the Expenses page leaves out Loan and Membership Withdrawal", async () => {
+  it("gives running costs not deleted in the day range, no Loan or Membership Withdrawal; the Total equals the Expenses page (D-107)", async () => {
     const { store, admin, addMember, spend } = await build();
     await spend(admin.id, "2026-09-30", "Allowances", 1n);
     const office = await spend(admin.id, "2026-10-01", "Office Maintenance", 1_500_000n, {
@@ -405,6 +405,8 @@ describe("exportExpenses", () => {
       method: "BANK_TRANSFER",
     });
     await spend(admin.id, "2026-10-02", "Others", 25n, { narration: "Water for the meeting" });
+    // A stored name outside DR-11 stays listed, as on the Expenses page (A-261 item 4).
+    await spend(admin.id, "2026-10-02", "Old Category", 100n);
     const deleted = await spend(admin.id, "2026-10-02", "Allowances", 999n);
     await store.expenses.softDelete(deleted.id, admin.id);
     const m = await addMember(admin.id, "Ada Test");
@@ -427,15 +429,16 @@ describe("exportExpenses", () => {
       EXPENSE_HEADER,
       ["2026-10-01", "Office Maintenance", "Fan repair", empty, 15000, "Bank transfer", "Admin Test"],
       ["2026-10-02", "Others", empty, "Water for the meeting", 0.25, "Cash", "Admin Test"],
-      ["2026-10-03", "Loan", empty, empty, 300000, "Cash", "Admin Test"],
-      ["2026-10-31", "Membership Withdrawal", empty, empty, 25000, "Cash", "Admin Test"],
-      ["Total", null, null, null, 340000.25, null, null],
+      ["2026-10-02", "Old Category", empty, empty, 1, "Cash", "Admin Test"],
+      ["Total", null, null, null, 15001.25, null, null],
     ]);
     const page = await listExpenses(store, { id: admin.id, subject: subjectOf(admin) }, input);
     if (!page.ok) throw new Error("list failed");
-    // The page holds running costs only since 8.10 (D-107); the file follows at 8.12.
-    expect(page.value.total).toBe("15000.25");
-    expect(rows.at(-1)?.[4]).toBe(Number(page.value.total) + 300000 + 25000);
+    expect(page.value.total).toBe("15001.25");
+    expect(rows.at(-1)?.[4]).toBe(Number(page.value.total));
+    // The Loan and Membership Withdrawal rows are still in the cashflow Out side (Total Outflow).
+    const flow = await table(must(await exportCashflow(store, actorOf(admin), input)), "Cashflow");
+    expect(flow.at(-1)?.[8]).toBe(15001.25 + 300000 + 25000);
     expect(office.id).toBeTruthy();
   });
 
@@ -507,10 +510,12 @@ describe("exportCashflow", () => {
     const page = await listExpenses(store, { id: admin.id, subject: subjectOf(admin) }, {});
     if (!page.ok) throw new Error("list failed");
     const tx = await table(must(await exportTransactions(store, actorOf(admin), {})), "Transactions");
+    const spent = await table(must(await exportExpenses(store, actorOf(admin), {})), "Expenses");
     expect(rows.at(-1)?.slice(7, 9)).toEqual([8.33, 108.33]);
     expect(rows.at(-1)?.[7]).toBe(Number(report.value.totalPaid));
     expect(rows.at(-1)?.[7]).toBe(tx.at(-1)?.[4]);
     expect(page.value.total).toBe("0.00");
+    expect(spent).toEqual([EXPENSE_HEADER, ["Total", null, null, null, 0, null, null]]);
     expect(rows.at(-1)?.[8]).toBe(8.33 + 100);
   });
 
@@ -588,7 +593,7 @@ describe("exportCategory", () => {
     expect(rows.at(-1)?.[4]).toBe(Number(page.value.total));
   });
 
-  it("Membership Withdrawal and Loan are expense categories: they give expenses, not payment lines", async () => {
+  it("Membership Withdrawal and Loan give their outflow rows (not payment lines), though the expenses file leaves them out", async () => {
     const { store, admin, addMember, pay, spend } = await build();
     const m = await addMember(admin.id, "Ada Test");
     await pay(m.id, "2026-10-01", [["Loan Repaid", 4n]], admin.id);

@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1c (size S), 2026-10-27: Prisma 7.10.1 (D-109, A-271)
+
+The owner said "go", then "yes" to the install.
+**Conflicts logged (A-271):** the release page reads "19 Oct", the npm registry reads 2026-10-15T19:25:15Z; the registry wins. npm `latest` is now 8.0.0-rc.28 (D-109 read rc.27); no change to the plan.
+**Changed:** `server/package.json` (`prisma`, `@prisma/client`, `@prisma/adapter-better-sqlite3` 7.10.0 to 7.10.1), `server/package-lock.json`. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-20, A-271), PHASE_PLAN (9.1c done), TRACEABILITY (R-37), NEXT_FILES.
+**Works (verified in this session):** `npm install`: exit 0, "2 moderate severity vulnerabilities". `npm ls`: "@prisma/adapter-better-sqlite3@7.10.1", "@prisma/client@7.10.1", "prisma@7.10.1", "deepmerge-ts@8.0.2", "mysql2@3.24.4". `npx prisma generate`: "Generated Prisma Client (7.10.1)". `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)". `npm audit` and `npm audit --omit=dev --omit=peer --omit=optional`: each "2 moderate severity vulnerabilities". `git diff --stat`: "server/package-lock.json | 201", "server/package.json | 6", "2 files changed, 104 insertions(+), 103 deletions(-)".
+**Not verified:** the npm warning "6 packages have install scripts not yet covered by allowScripts" (npm docs not read; whether the scripts ran is not checked; check and generate passed). Advisory pages not opened. Web checks not run (no web file changed). Live check not run (no source file changed). Migrate against the dev database not run (no schema change).
+
+---
+
 ## Step 9.1b (size S), 2026-10-27: `body-parser` and `fast-uri` fix (D-109, A-270)
 
 The owner said "go", then "yes" to the install. Before that, the owner passed on a client update (A-270 items 2 to 6) and chose ticked kinds in one workbook, plus a PDF choice.

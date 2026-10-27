@@ -1,5 +1,12 @@
 # Build log (newest first)
 
+## Step 8.14b (size S), 2026-10-27: close the C3 gap (D-90, A-265, A-266)
+
+The owner said "go".
+**Changed:** `web/test/app.test.tsx` (Dashboard test data `totalOutflow.month` "15000.00" to "65000.00"; the two expected "Total Outflow · Oct 2026" texts to "₦65,000.00"). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-266), TRACEABILITY (R-15), PHASE_PLAN (8.14b done), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)". `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)". C3 rerun by hand (`sed` on `web/src/Dashboard.tsx`, `npx vitest run test/app.test.tsx` inside `web/`): "Tests 2 failed | 219 passed (221)" (the `dashboardCards` list test and the Staff jsdom test); file restored with `git checkout -- src/Dashboard.tsx`; `git status --short` then showed only ` M web/test/app.test.tsx`.
+**Not verified:** the full `mutate-8.14.mjs` script not rerun (44 caught is inference). Not run in a browser. Live check not run (no server file changed).
+
 ## Step 8.14 (size M), 2026-10-27: break-on-purpose for the 8.10 to 8.13 money code (D-90, D-107, A-265)
 
 The owner said "fix Inconsistencies and go."

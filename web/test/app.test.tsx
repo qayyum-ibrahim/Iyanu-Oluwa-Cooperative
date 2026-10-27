@@ -3884,7 +3884,7 @@ const DASHBOARD: DashboardView = {
   income: { month: "125000.00", allTime: "3400000.50" },
   expenditure: { month: "15000.00", allTime: "220000.00" },
   membershipWithdrawal: { month: "0.00", allTime: "48000.00" },
-  totalOutflow: { month: "15000.00", allTime: "358000.00" },
+  totalOutflow: { month: "65000.00", allTime: "358000.00" },
   outstandingLoans: "90000.00",
   activeMembers: 12,
   recentExpenses: [
@@ -3945,7 +3945,7 @@ describe("dashboard helpers", () => {
       { label: "Outstanding Loans", value: "₦90,000.00" },
       { label: "Withdrawals · Oct 2026", value: "₦0.00" },
       { label: "Withdrawals · All Time", value: "₦48,000.00" },
-      { label: "Total Outflow · Oct 2026", value: "₦15,000.00" },
+      { label: "Total Outflow · Oct 2026", value: "₦65,000.00" },
       { label: "Total Outflow · All Time", value: "₦358,000.00" },
     ]);
   });
@@ -3976,7 +3976,7 @@ describe("dashboard (jsdom)", () => {
       "Outstanding Loans₦90,000.00",
       "Withdrawals · Oct 2026₦0.00",
       "Withdrawals · All Time₦48,000.00",
-      "Total Outflow · Oct 2026₦15,000.00",
+      "Total Outflow · Oct 2026₦65,000.00",
       "Total Outflow · All Time₦358,000.00",
     ]);
     expect(text()).toContain("1 Oct 2026 to 31 Oct 2026");

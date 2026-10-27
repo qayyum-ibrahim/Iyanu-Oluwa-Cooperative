@@ -1,5 +1,12 @@
 # Build log (newest first)
 
+## Step 9.0 (size S), 2026-10-27: Phase 9 plan and open-question fix (D-108, A-268)
+
+The owner said "fix Inconsistencies and continue".
+**Changed:** no source or test file. Docs: PHASE_PLAN (Phase 9 steps 9.0 to 9.11), OPEN_QUESTIONS (OQ-04, OQ-05, OQ-08, OQ-10, OQ-16 needed by Phase 10), DECISIONS (D-108), ASSUMPTIONS (A-268), TRACEABILITY (R-37, R-38, R-39), STATUS, BUILD_LOG, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server) ran to the end with no failure; its test totals were cut from the shown output, so `npm run test` (server) was run again: "Test Files 56 passed (56)", "Tests 2191 passed (2191)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)".
+**Not verified:** no official source was read at this step (headers, rate limits, SQLite backup, WCAG); each is read at the step that uses it. The live check, the export 403 and the A-267 check above ₦0.00 are still owed (planned at 9.11).
+
 ## Step 8.15 (size S), 2026-10-27: walk-through on the owner's machine (D-107, A-267)
 
 The owner said "go".

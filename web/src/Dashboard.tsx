@@ -3,6 +3,7 @@
 // (DR-13); the browser shows the amounts as sent (A-18) and does no money sums. The Super Admin
 // may pick one staff member's records; the names come from GET /staff (A-241 item 3).
 // Card labels from legacy-prototype/src/App.jsx (Dashboard), with the server's figures (A-242).
+// Total Outflow cards: every outflow, Loan and Membership Withdrawal included (D-106, D-107).
 import { useEffect, useState, type FormEvent } from "react";
 import { actorNames } from "./Audit.tsx";
 import type { Api, CallFailure, Dashboard as DashboardView, DashboardQuery, StaffAccount, User } from "./api.ts";
@@ -70,6 +71,8 @@ export function dashboardCards(d: DashboardView): { label: string; value: string
     { label: "Outstanding Loans", value: formatNaira(d.outstandingLoans) },
     { label: `Withdrawals · ${month}`, value: formatNaira(d.membershipWithdrawal.month) },
     { label: "Withdrawals · All Time", value: formatNaira(d.membershipWithdrawal.allTime) },
+    { label: `Total Outflow · ${month}`, value: formatNaira(d.totalOutflow.month) },
+    { label: "Total Outflow · All Time", value: formatNaira(d.totalOutflow.allTime) },
   ];
 }
 
@@ -202,8 +205,9 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
       {dashboard && (
         <>
           <p className="form-note">
-            {formatDay(dashboard.fromDay)} to {formatDay(dashboard.toDay)}. Total Expenditures leaves out
-            Loan and Membership Withdrawal expenses; income counts every payment line.
+            {formatDay(dashboard.fromDay)} to {formatDay(dashboard.toDay)}. Total Expenditures is the
+            running costs only. Total Outflow is all money going out: running costs, loans given and
+            Membership Withdrawals. Income counts every payment line.
           </p>
           <div className="cards">
             {dashboardCards(dashboard).map((c) => (

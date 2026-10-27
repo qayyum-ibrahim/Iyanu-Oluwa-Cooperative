@@ -3,6 +3,8 @@
 // (DR-13) and sums the total; the browser shows the total as sent (A-18) and does no money sums.
 // Record an expense (U.6d, A-220). Edit and delete (U.6e, D-95, A-221): no buttons on Loan and
 // Membership Withdrawal rows, as the system sets them; the server still refuses with a 409.
+// Expenses are running costs only (D-106, D-107): the server lists no Loan or Membership
+// Withdrawal row, and the category filter offers the running costs alone.
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   Api,
@@ -29,7 +31,8 @@ import {
 
 /**
  * The expense categories in the order of DR-11, copied from server/src/expense-categories.ts
- * (A-191 item 5). The filter offers all of them, Loan and Membership Withdrawal too.
+ * (A-191 item 5). The Exports page offers all of them; the Expenses page filter offers the running
+ * costs only, MANUAL_EXPENSE_CATEGORIES below (D-107).
  */
 export const EXPENSE_CATEGORIES = [
   "Loan",
@@ -62,7 +65,7 @@ export function checkExpenseFilter(
   input: ExpenseFilterInput,
 ): { ok: true; value: ExpenseFilter } | { ok: false; message: string } {
   const refuse = (message: string) => ({ ok: false as const, message });
-  if (input.category !== "" && !(EXPENSE_CATEGORIES as readonly string[]).includes(input.category)) {
+  if (input.category !== "" && !MANUAL_EXPENSE_CATEGORIES.includes(input.category)) {
     return refuse("Choose a category from the list.");
   }
   if (input.fromDay !== "" && !isCalendarDay(input.fromDay)) return refuse("Enter a real From day.");
@@ -106,7 +109,8 @@ export function expenseCount(n: number): string {
 
 /**
  * The categories a person may pick, in DR-11 order: all but Loan and Membership Withdrawal,
- * which the system sets (MANUAL_EXPENSE_CATEGORIES in server/src/expense-categories.ts).
+ * which the system sets (MANUAL_EXPENSE_CATEGORIES in server/src/expense-categories.ts). These are
+ * the running costs, so the list filter offers them too (D-107).
  */
 export const MANUAL_EXPENSE_CATEGORIES: readonly string[] = EXPENSE_CATEGORIES.filter(
   (c) => c !== "Loan" && c !== "Membership Withdrawal",
@@ -648,7 +652,7 @@ export default function Expenses({ api, canCreate, canEdit, canDelete }: Expense
             onChange={(e) => setForm({ ...form, category: e.target.value })}
           >
             <option value="">All categories</option>
-            {EXPENSE_CATEGORIES.map((c) => (
+            {MANUAL_EXPENSE_CATEGORIES.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>

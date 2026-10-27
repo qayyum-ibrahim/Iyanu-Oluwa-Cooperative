@@ -2074,7 +2074,7 @@ describe("loan form (jsdom)", () => {
 });
 
 describe("expense list helpers", () => {
-  it("offers the DR-11 categories in order, Loan and Membership Withdrawal too", () => {
+  it("keeps the DR-11 categories in order, Loan and Membership Withdrawal too, for Exports", () => {
     expect(EXPENSE_CATEGORIES).toEqual([
       "Loan",
       "Expenses",
@@ -2113,6 +2113,8 @@ describe("expense list helpers", () => {
       return result.ok ? null : result.message;
     };
     expect(refused({ ...NO_FILTER, category: "Food", fromDay: "x" })).toBe("Choose a category from the list.");
+    expect(refused({ ...NO_FILTER, category: "Loan" })).toBe("Choose a category from the list.");
+    expect(refused({ ...NO_FILTER, category: "Membership Withdrawal" })).toBe("Choose a category from the list.");
     expect(refused({ ...NO_FILTER, fromDay: "2026-02-30", toDay: "x" })).toBe("Enter a real From day.");
     expect(refused({ ...NO_FILTER, toDay: "2026-13-01" })).toBe("Enter a real To day.");
     expect(refused({ ...NO_FILTER, fromDay: "2026-10-06", toDay: "2026-10-05" })).toBe(
@@ -2208,6 +2210,7 @@ describe("expenses page (jsdom)", () => {
   it("sends the filters on Apply, and Clear loads the full list again", async () => {
     const api = await mount(fakeApi({ restore: EXPENSE_VIEWER }));
     await openExpenses();
+    expect(Array.from(select("category").options, (o) => o.value)).toEqual(["", ...MANUAL_EXPENSE_CATEGORIES]);
     await choose(select("category"), "Payment to Union");
     await choose(select("method"), "BANK_TRANSFER");
     await type(el("input[name=fromDay]"), "2026-10-01");
@@ -3881,6 +3884,7 @@ const DASHBOARD: DashboardView = {
   income: { month: "125000.00", allTime: "3400000.50" },
   expenditure: { month: "15000.00", allTime: "220000.00" },
   membershipWithdrawal: { month: "0.00", allTime: "48000.00" },
+  totalOutflow: { month: "15000.00", allTime: "358000.00" },
   outstandingLoans: "90000.00",
   activeMembers: 12,
   recentExpenses: [
@@ -3941,6 +3945,8 @@ describe("dashboard helpers", () => {
       { label: "Outstanding Loans", value: "₦90,000.00" },
       { label: "Withdrawals · Oct 2026", value: "₦0.00" },
       { label: "Withdrawals · All Time", value: "₦48,000.00" },
+      { label: "Total Outflow · Oct 2026", value: "₦15,000.00" },
+      { label: "Total Outflow · All Time", value: "₦358,000.00" },
     ]);
   });
 });
@@ -3970,8 +3976,14 @@ describe("dashboard (jsdom)", () => {
       "Outstanding Loans₦90,000.00",
       "Withdrawals · Oct 2026₦0.00",
       "Withdrawals · All Time₦48,000.00",
+      "Total Outflow · Oct 2026₦15,000.00",
+      "Total Outflow · All Time₦358,000.00",
     ]);
     expect(text()).toContain("1 Oct 2026 to 31 Oct 2026");
+    expect(el(".form-note").textContent).toContain("Total Expenditures is the running costs only.");
+    expect(el(".form-note").textContent).toContain(
+      "Total Outflow is all money going out: running costs, loans given and Membership Withdrawals.",
+    );
     expect(rowTexts()).toEqual([
       "3 Oct 2026Office MaintenancePlumber₦15,000.00Cash",
       "1 Oct 2026OthersFuel₦5,000.00Bank transfer",
@@ -4010,7 +4022,7 @@ describe("dashboard (jsdom)", () => {
     await click(button("Apply"));
     expect(el("[role=alert]").textContent).toBe("Choose a month.");
     expect(api.dashboardQueries).toEqual([{}]);
-    expect(cardTexts()).toHaveLength(8);
+    expect(cardTexts()).toHaveLength(10);
   });
 
   it("offers the staff filter to the Super Admin and sends createdById; Clear goes back", async () => {
@@ -4042,7 +4054,7 @@ describe("dashboard (jsdom)", () => {
       }),
     );
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
-    expect(cardTexts()).toHaveLength(8);
+    expect(cardTexts()).toHaveLength(10);
   });
 
   it("shows the message and no cards when the dashboard cannot be read", async () => {

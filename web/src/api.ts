@@ -287,9 +287,11 @@ export interface Dashboard {
   income: MonthAndAllTime;
   expenditure: MonthAndAllTime;
   membershipWithdrawal: MonthAndAllTime;
+  /** Expenditure + loans given + Membership Withdrawals: every outflow not deleted (D-107). */
+  totalOutflow: MonthAndAllTime;
   outstandingLoans: string;
   activeMembers: number;
-  /** The month's newest expenses, newest first. */
+  /** The month's newest running costs, newest first: no Loan or Membership Withdrawal (D-107). */
   recentExpenses: Expense[];
 }
 
@@ -814,8 +816,15 @@ function dashboardOf(value: unknown): Dashboard | null {
   const income = monthAndAllTimeOf(value["income"]);
   const expenditure = monthAndAllTimeOf(value["expenditure"]);
   const membershipWithdrawal = monthAndAllTimeOf(value["membershipWithdrawal"]);
+  const totalOutflow = monthAndAllTimeOf(value["totalOutflow"]);
   const recentExpenses = listOf(expenseOf)(value["recentExpenses"]);
-  if (income === null || expenditure === null || membershipWithdrawal === null || recentExpenses === null) {
+  if (
+    income === null ||
+    expenditure === null ||
+    membershipWithdrawal === null ||
+    totalOutflow === null ||
+    recentExpenses === null
+  ) {
     return null;
   }
   return {
@@ -825,6 +834,7 @@ function dashboardOf(value: unknown): Dashboard | null {
     income,
     expenditure,
     membershipWithdrawal,
+    totalOutflow,
     outstandingLoans,
     activeMembers: activeMembers as number,
     recentExpenses,

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 8.13 (size M), 2026-10-26: Expenses filter running costs only; Dashboard Total Outflow cards (D-107, A-264)
+
+The owner said "fix Inconsistencies and go. yes, add web/test/api.test.ts to 8.13".
+**Inconsistencies fixed:** `web/test/api.test.ts` added to 8.13 (owner's word); PHASE_PLAN 8.13 now names it and `web/src/api.ts` without "only if". Stale comments reworded: `EXPENSE_CATEGORIES` in `web/src/Expenses.tsx` ("The filter offers all of them") and `recentExpenses` in the `Dashboard` type of `web/src/api.ts`. Since 8.10 the page filter offered Loan and Membership Withdrawal, which the server refuses with 400; fixed here.
+**Changed:** `web/src/Expenses.tsx` (the filter select and `checkExpenseFilter` use `MANUAL_EXPENSE_CATEGORIES`; comments). `web/src/api.ts` (`totalOutflow` in the `Dashboard` type and in `dashboardOf`). `web/src/Dashboard.tsx` (two Total Outflow cards after the Withdrawals cards; the note reworded). `web/test/api.test.ts` (`DASHBOARD` gains `totalOutflow`; four wrong-shape replies). `web/test/app.test.tsx` (filter refuses Loan and Membership Withdrawal; the page filter offers the 8; the card list and count; the note; a test name). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-264), TRACEABILITY (R-11, R-15), PHASE_PLAN (8.13 done), NEXT_FILES.
+**A check failed first:** the web run gave "Tests 2 failed | 363 passed (365)": two dashboard tests still expected 8 cards (`toHaveLength(8)`, lines 4025 and 4057). Cause: my test update missed them. Changed to 10; nothing else changed.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)". `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)".
+**Not verified:** not run in a browser. Live check not run (no server file changed). Break-on-purpose for this code is at 8.14.
+
 ## Step 8.12 (size S), 2026-10-26: the expenses file running costs only; cashflow header "Outflow (₦)" (D-107, A-263)
 
 The owner said "fix Inconsistencies and go".

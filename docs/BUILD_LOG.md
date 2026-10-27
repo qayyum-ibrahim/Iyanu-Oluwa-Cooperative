@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 8.14 (size M), 2026-10-27: break-on-purpose for the 8.10 to 8.13 money code (D-90, D-107, A-265)
+
+The owner said "fix Inconsistencies and go."
+**Inconsistency fixed:** PHASE_PLAN 8.14 did not name the dashboard reply check (`dashboardOf` in `web/src/api.ts`), which STATUS did; added. The 10 test files and 3 web source files were not read in full in the pre-check: the step read the 8.10 to 8.13 source diff (`git diff fa80d7b 1d67b1f -- server/src web/src`) and the code each mutation touches.
+**Changed:** no source or test file. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-265), TRACEABILITY (R-11, R-15), PHASE_PLAN (8.14 done, 8.14b added), NEXT_FILES. Outside git: `~/Desktop/mutate-8.14.mjs` and `~/Desktop/mutate-8.14.out`.
+**Works (verified in this session):** `node ~/Desktop/mutate-8.14.mjs --dry`: "dry run done: 44 mutations". Full run: baselines 412 (server) and 351 (web); "mutations: 44 {\"caught\":43,\"escaped\":1,\"error\":0,\"timeout\":0,\"notApplied\":0}", "escaped: C3", "files restored: yes", `git status --short` empty. `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)".
+**Escaped:** C3 (the "Total Outflow · <month>" card shows `expenditure.month`): a test gap, as the test data has "15000.00" for both. Closed at 8.14b.
+**Not verified:** the script's run time (not measured). Not run in a browser. Live check not run (no server file changed).
+
+
 ## Step 8.13 (size M), 2026-10-26: Expenses filter running costs only; Dashboard Total Outflow cards (D-107, A-264)
 
 The owner said "fix Inconsistencies and go. yes, add web/test/api.test.ts to 8.13".

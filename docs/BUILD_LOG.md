@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 9.1b (size S), 2026-10-27: `body-parser` and `fast-uri` fix (D-109, A-270)
+
+The owner said "go", then "yes" to the install. Before that, the owner passed on a client update (A-270 items 2 to 6) and chose ticked kinds in one workbook, plus a PDF choice.
+**Inconsistency settled:** PHASE_PLAN 9.1b said `body-parser` goes to 2.4.0, which 9.1 had not checked; the dry run confirmed it.
+**Changed:** `server/package-lock.json` only (`body-parser` 2.3.0 to 2.4.0, `fast-uri` 3.1.8 to 3.1.9, `qs` 6.16.0 to 6.17.0). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-20, A-270), PHASE_PLAN (9.1b done; 9.1d added), TRACEABILITY (R-37), NEXT_FILES.
+**Works (verified in this session):** `npm audit fix --dry-run`: "change qs 6.16.0 => 6.17.0", "change fast-uri 3.1.8 => 3.1.9", "change body-parser 2.3.0 => 2.4.0", "changed 3 packages". `npm audit fix`: "6 vulnerabilities (2 moderate, 4 high)". `git diff --stat`: "server/package-lock.json | 24 ++++++++++++------------". `npm audit --omit=dev --omit=peer --omit=optional`: "2 moderate severity vulnerabilities" (`uuid`). `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)".
+**Not verified:** why `qs` moved (my guess: `body-parser` 2.4.0 asks for it; not read). Advisory pages not opened. Web checks not run (no web file changed). Live check not run (no source file changed; the running server now loads `body-parser` 2.4.0, covered only by the route tests).
+
 ## Step 9.1 (size S), 2026-10-27: dependency check (D-109, A-269)
 
 The owner said "fix Inconsistencies and go".

@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 8.15 (size S), 2026-10-27: walk-through on the owner's machine (D-107, A-267)
+
+The owner said "go".
+**Changed:** no source or test file. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-267), TRACEABILITY (R-15, R-17, R-23), PHASE_PLAN (8.15 done), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)".
+**Works (verified on owner's machine, owner's report):** October 2026, owner's account: Dashboard Total Expenditures ₦0.00, Withdrawals ₦145,000.00, Total Outflow ₦2,045,000.00; Expenses page total ₦0.00; expenses file Total 0.00; cashflow file Out Total 2045000.00; Loan category file Total 1900000.00. The Expenses category filter offers neither Loan nor Membership Withdrawal, and no such row is listed. Total Outflow ₦2,045,000.00 = Total Expenditures ₦0.00 + Withdrawals ₦145,000.00 + loans given ₦1,900,000.00 = the cashflow Out Total. The expenses file Total = the Expenses page total = Total Expenditures (all ₦0.00).
+**Not verified:** the running-cost equalities were checked only at ₦0.00 (no running cost in October; the suggested fictional Fuel expense was not added). The owner did not say in words that 2045000.00 is the Out Total, not In (read so from the sum, A-267). Live check not run since 8.11 changed it.
+
 ## Step 8.14b (size S), 2026-10-27: close the C3 gap (D-90, A-265, A-266)
 
 The owner said "go".

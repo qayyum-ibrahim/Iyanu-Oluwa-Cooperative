@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step 9.1 (size S), 2026-10-27: dependency check (D-109, A-269)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** A-20 named only the 4 high findings through Prisma; rewritten with the full 9.1 audit. STATUS item 11 said "D-55 to D-107" although D-108 existed; now D-109.
+**Changed:** no source, test or package file. Docs: ASSUMPTIONS (A-16, A-20, A-269), DECISIONS (D-109), PHASE_PLAN (9.1 done; 9.1b and 9.1c added), TRACEABILITY (R-37), STATUS, BUILD_LOG, NEXT_FILES.
+**Works (verified in this session):** `npm audit` (server): "8 vulnerabilities (3 moderate, 5 high)": `body-parser` 2.0.0 - 2.3.0 high, `deepmerge-ts` <8.0.0 high, `fast-uri` 3.0.0 - 3.1.8 moderate, `mysql2` <=3.23.0 high, `uuid` <11.1.1 moderate (with `exceljs`), plus `@prisma/config` and `prisma`. `npm audit --omit=dev --omit=peer --omit=optional` (server): "3 vulnerabilities (2 moderate, 1 high)". `npm audit` and `npm audit --omit=dev` (web): "found 0 vulnerabilities". `npm outdated` (server and web): see A-269 item 1. `npm view typescript-eslint@latest version peerDependencies`: "8.72.1", typescript ">=4.8.4 <6.1.0" (8.71.2 the same). `npm run check` (server) ran with no failure; its totals were cut from the shown output, so `npm run test` (server) was run again: "Test Files 56 passed (56)", "Tests 2191 passed (2191)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 365 passed (365)". `git status --short` empty before the docs.
+**Not verified:** the advisory pages and Prisma release notes were not read; `npm view prisma version` gave 8.0.0-rc.27 against `npm outdated`'s 7.10.1 (A-269 item 5). The first audit runs failed on the network and were retried. No upgrade was made. Live check not run (no server file changed).
+
 ## Step 9.0 (size S), 2026-10-27: Phase 9 plan and open-question fix (D-108, A-268)
 
 The owner said "fix Inconsistencies and continue".

@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1d (size S), 2026-10-28: plan for the client's update of 2026-10-27 (D-110, A-272)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** A-270 item 4 named the Expenses page among the staff filters; `web/src/Expenses.tsx` has none (read in this session), so the default changes on Dashboard, Categories (`Reports.tsx`) and Exports only (A-272 item 2). `GET /members` sends no loan field (`MemberView` read), so the loan tag needs a server step (9.1e). The files in NEXT_FILES were read where the plan needed them.
+**Changed:** docs only: DECISIONS (D-110; D-104 marked changed), PHASE_PLAN (9.1d done; 9.1e to 9.1m; 9.10 and 9.11 scope), ASSUMPTIONS (A-272), TRACEABILITY (R-23 note, R-40), STATUS, BUILD_LOG, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 56 passed (56)", "Tests 2191 passed (2191)".
+**Not verified:** web checks not run (no web file changed). The PDF library is not looked up (9.1k). The client's cooperative details are not received. The "You" default effect on the owner's totals (A-272 item 3) needs the owner's word.
+
+---
+
 ## Step 9.1c (size S), 2026-10-27: Prisma 7.10.1 (D-109, A-271)
 
 The owner said "go", then "yes" to the install.

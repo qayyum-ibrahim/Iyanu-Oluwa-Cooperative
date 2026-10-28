@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { LOCKOUT_MAX_FAILURES, LOCKOUT_SECONDS } from "../src/auth.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { hashPassword } from "../src/password.js";
+import { LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS } from "../src/rate-limit.js";
 import { REFRESH_TOKEN_SECONDS } from "../src/sessions.js";
 import type { Store } from "../src/store.js";
 import {
@@ -163,6 +164,41 @@ describe("POST /auth/login", () => {
     const res = await login(app);
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: "invalid_credentials" });
+  });
+
+  it("answers 429 too_many_requests with Retry-After past the per-address limit (A-42)", async () => {
+    const { app, store, clock } = await build();
+    for (let i = 0; i < LOGIN_LIMIT_MAX; i += 1) {
+      // A new forwarded address each time: the limit reads the socket address only.
+      const res = await request(app)
+        .post("/auth/login")
+        .set("X-Forwarded-For", `203.0.113.${i}`)
+        .send({ email: "nobody@example.test", password: WRONG });
+      expect(res.status).toBe(401);
+    }
+    const auditBefore = (await store.audit.list({ limit: 1000, offset: 0 })).length;
+    const blocked = await login(app);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({ error: "too_many_requests" });
+    expect(blocked.headers["retry-after"]).toBe(String(LOGIN_LIMIT_WINDOW_SECONDS));
+    expect(blocked.headers["cache-control"]).toBe("no-store");
+    expect((await store.audit.list({ limit: 1000, offset: 0 })).length).toBe(auditBefore);
+
+    clock.now = new Date(T0.getTime() + 60_000);
+    const later = await login(app);
+    expect(later.status).toBe(429);
+    expect(later.headers["retry-after"]).toBe(String(LOGIN_LIMIT_WINDOW_SECONDS - 60));
+
+    clock.now = new Date(T0.getTime() + LOGIN_LIMIT_WINDOW_SECONDS * 1000);
+    expect((await login(app)).status).toBe(200);
+  });
+
+  it("does not limit /auth/refresh or /auth/logout", async () => {
+    const { app } = await build();
+    for (let i = 0; i < LOGIN_LIMIT_MAX + 1; i += 1) {
+      expect((await refresh(app, "abc")).status).toBe(401);
+      expect((await request(app).post("/auth/logout").send({})).status).toBe(204);
+    }
   });
 
   it("writes a login.success audit entry for the user", async () => {

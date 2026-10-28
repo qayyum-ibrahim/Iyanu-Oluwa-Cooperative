@@ -7,6 +7,7 @@ import { changeOwnPassword } from "./account.js";
 import { authenticate } from "./auth.js";
 import { getAuth, requireAuth, sendUnauthorized } from "./guards.js";
 import { ALL_PERMISSIONS, hasPermission } from "./permissions.js";
+import { LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS, createRateLimiter } from "./rate-limit.js";
 import { SessionError, issueSession, refreshSession, signOut, type Session } from "./sessions.js";
 import type { Store } from "./store.js";
 
@@ -37,18 +38,23 @@ function sessionJson(session: Session) {
 /** Every sign-in failure looks the same (D-26). */
 const INVALID_CREDENTIALS = { error: "invalid_credentials" };
 const INVALID_TOKEN = { error: "invalid_token" };
+const TOO_MANY_REQUESTS = { error: "too_many_requests" };
 
 export function createAuthRouter(deps: AuthRouteDeps): Router {
   const router = Router();
-
-  router.use((_req, res, next) => {
-    res.set("Cache-Control", "no-store");
-    next();
-  });
+  // One counter per router, so each app (and each test app) starts with its own (A-42, A-284).
+  const loginLimiter = createRateLimiter(LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS);
 
   router.post("/login", async (req, res) => {
-    const body = bodyOf(req);
     const now = deps.now();
+    // The socket address, not X-Forwarded-For: no "trust proxy" until hosting is known (OQ-01).
+    const limit = loginLimiter.hit(req.socket.remoteAddress ?? "unknown", now);
+    if (!limit.ok) {
+      res.set("Retry-After", String(limit.retryAfterSeconds));
+      res.status(429).json(TOO_MANY_REQUESTS);
+      return;
+    }
+    const body = bodyOf(req);
     const result = await authenticate(deps.store, body["email"], body["password"], now);
     if (!result.ok) {
       res.status(401).json(INVALID_CREDENTIALS);

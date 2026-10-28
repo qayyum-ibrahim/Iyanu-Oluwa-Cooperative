@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.3 (size M), 2026-10-28: per-address limit on sign-in (R-37, A-42, A-284)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** `auth-routes.ts` set its own `Cache-Control: no-store`, repeated by `app.ts` since 9.2 (A-283 item 5); the router line is removed and the existing test still sees the header. `app.ts` and `auth.ts` were read only; no change was needed outside the step.
+**Sources:** https://www.rfc-editor.org/rfc/rfc6585#section-4 (429, Retry-After MAY, MUST NOT be stored by a cache; verbatim), https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3 (Retry-After delay-seconds; summary only), https://nodejs.org/api/net.html#socketremoteaddress (may be undefined if the socket is destroyed; summary only), https://expressjs.com/en/5x/api/request (`req.ip` uses X-Forwarded-For only when trust proxy is not false; verbatim). All read through a fetch agent.
+**Changed:** new `server/src/rate-limit.ts` (`createRateLimiter(max, windowSeconds)`, fixed window per key, refused hits not counted, ended windows swept at most once per window, `Retry-After` rounded up and clamped to 1..window; `LOGIN_LIMIT_MAX` 30, `LOGIN_LIMIT_WINDOW_SECONDS` 900), new `server/test/rate-limit.test.ts` (16 tests), `server/src/auth-routes.ts` (one limiter per router, checked first in `POST /login` on `req.socket.remoteAddress`, 429 `too_many_requests` with `Retry-After`; router Cache-Control line removed), `server/test/auth-routes.test.ts` (2 tests: 429 after 30 attempts with changing X-Forwarded-For, Retry-After 900 then 840, no audit entry, open again after the window; refresh and logout not limited). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-284, A-42, A-283 item 5), PHASE_PLAN, TRACEABILITY (R-37), NEXT_FILES. No new decision.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint with no error, "Test Files 59 passed (59)", "Tests 2288 passed (2288)".
+**Not verified:** the limit on a running server (the live check was not run; it makes 13 sign-in attempts per run). Behaviour behind a proxy (OQ-01). Break-on-purpose for this code is at 9.10 (D-90).
+
+---
+
 ## Step 9.2 (size S), 2026-10-28: security headers on every API reply (R-37, A-283)
 
 The owner said "fix Inconsistencies and go".

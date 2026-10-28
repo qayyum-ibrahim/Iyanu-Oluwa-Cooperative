@@ -33,7 +33,6 @@ import type {
   ExpenseFilter,
   ExpenseList,
   ExportFile,
-  ExportKind,
   ExportQuery,
   LoginResult,
   Loan,
@@ -129,10 +128,11 @@ import {
   reportRange,
 } from "../src/Reports.tsx";
 import {
-  EXPORT_BUTTONS,
   EXPORT_CATEGORIES,
+  EXPORT_KIND_CHOICES,
   NO_EXPORT_FILTER,
   checkExport,
+  exportMembersMessage,
   exportMessage,
 } from "../src/Exports.tsx";
 import SignIn from "../src/SignIn.tsx";
@@ -294,7 +294,7 @@ interface FakeApi extends Api {
   /** Every category report query the screen sent, in order. */
   reportQueries: CategoryReportQuery[];
   /** Every export the screen asked for, in order. */
-  exportCalls: { kind: ExportKind; query: ExportQuery }[];
+  exportCalls: ExportQuery[];
   signOutFromServer(): void;
 }
 
@@ -391,7 +391,7 @@ function fakeApi(
     const auditQueries: AuditFilter[] = [];
     const dashboardQueries: DashboardQuery[] = [];
     const reportQueries: CategoryReportQuery[] = [];
-    const exportCalls: { kind: ExportKind; query: ExportQuery }[] = [];
+    const exportCalls: ExportQuery[] = [];
     const switchTo = (verb: string) => async (id: string) => {
       calls.push(`${verb} ${id}`);
       switched.push(`${verb} ${id}`);
@@ -561,9 +561,9 @@ function fakeApi(
         const answers = opts.report ?? [];
         return answers[Math.min(reportQueries.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
-      downloadExport: async (kind, query) => {
-        calls.push(`export ${kind}`);
-        exportCalls.push({ kind, query });
+      downloadExport: async (query) => {
+        calls.push(`export ${query.kinds.join(",")}`);
+        exportCalls.push(query);
         const answers = opts.exports ?? [];
         return answers[Math.min(exportCalls.length, answers.length) - 1] ?? { ok: false, reason: "server" };
       },
@@ -4331,58 +4331,115 @@ describe("categories report (jsdom)", () => {
 
 const EXPORTER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["reports.export"] };
 const EXPORT_OWNER: Me = { ...ME, permissions: ["reports.export", "users.manage"] };
-const XLSX_FILE: ExportFile = { blob: new Blob(["PK"]), fileName: "transactions-2026-10-24.xlsx" };
+const XLSX_FILE: ExportFile = { blob: new Blob(["PK"]), fileName: "export-2026-10-28.xlsx" };
+const PDF_FILE: ExportFile = { blob: new Blob(["%PDF"]), fileName: "export-2026-10-28.pdf" };
+
+function kindBox(kind: string): HTMLInputElement {
+  return el(`input[type=checkbox][name=kind][value="${kind}"]`);
+}
+
+function formatRadio(format: string): HTMLInputElement {
+  return el(`input[type=radio][name=format][value="${format}"]`);
+}
 
 describe("exports helpers", () => {
-  it("offers DR-04 then DR-11, each name once", () => {
+  it("offers DR-04 then DR-11, each name once, and the kinds in the server's sheet order", () => {
     expect(EXPORT_CATEGORIES).toEqual([...PAYMENT_CATEGORIES, ...EXPENSE_CATEGORIES]);
     expect(new Set(EXPORT_CATEGORIES).size).toBe(EXPORT_CATEGORIES.length);
-    expect(EXPORT_BUTTONS.map((b) => b.kind)).toEqual(["members", "transactions", "expenses", "cashflow", "category"]);
+    expect(EXPORT_KIND_CHOICES.map((c) => c.kind)).toEqual([
+      "members",
+      "transactions",
+      "expenses",
+      "cashflow",
+      "category",
+      "member",
+    ]);
+    expect(NO_EXPORT_FILTER.format).toBe("xlsx");
+    expect(NO_EXPORT_FILTER.kinds).toEqual([]);
   });
 
-  it("sends only the staff filter for members, whatever the days and category", () => {
-    const typed = { fromDay: "2026-02-30", toDay: "x", category: "Shares", staffId: "" };
-    expect(checkExport("members", typed)).toEqual({ ok: true, value: {} });
-    expect(checkExport("members", { ...typed, staffId: "s1" })).toEqual({ ok: true, value: { createdById: "s1" } });
+  it("needs at least one kind", () => {
+    expect(checkExport(NO_EXPORT_FILTER)).toEqual({ ok: false, message: "Tick at least one export." });
+  });
+
+  it("sends only the kinds, the format and the staff filter for members, whatever the days and category", () => {
+    const typed = { ...NO_EXPORT_FILTER, kinds: ["members" as const], fromDay: "2026-02-30", toDay: "x", category: "Shares" };
+    expect(checkExport(typed)).toEqual({ ok: true, value: { kinds: ["members"], format: "xlsx" } });
+    expect(checkExport({ ...typed, staffId: "s1", format: "pdf" })).toEqual({
+      ok: true,
+      value: { kinds: ["members"], format: "pdf", createdById: "s1" },
+    });
   });
 
   it("checks the days in the server's order and sends no category for the day kinds", () => {
     for (const kind of ["transactions", "expenses", "cashflow"] as const) {
-      expect(checkExport(kind, NO_EXPORT_FILTER)).toEqual({ ok: true, value: {} });
-      expect(checkExport(kind, { ...NO_EXPORT_FILTER, fromDay: "2026-02-30", toDay: "x" })).toEqual({
+      const base = { ...NO_EXPORT_FILTER, kinds: [kind] };
+      expect(checkExport(base)).toEqual({ ok: true, value: { kinds: [kind], format: "xlsx" } });
+      expect(checkExport({ ...base, fromDay: "2026-02-30", toDay: "x" })).toEqual({
         ok: false,
         message: "Enter a real From day.",
       });
-      expect(checkExport(kind, { ...NO_EXPORT_FILTER, toDay: "2026-13-01" })).toEqual({
-        ok: false,
-        message: "Enter a real To day.",
-      });
-      expect(checkExport(kind, { ...NO_EXPORT_FILTER, fromDay: "2026-10-02", toDay: "2026-10-01" })).toEqual({
+      expect(checkExport({ ...base, toDay: "2026-13-01" })).toEqual({ ok: false, message: "Enter a real To day." });
+      expect(checkExport({ ...base, fromDay: "2026-10-02", toDay: "2026-10-01" })).toEqual({
         ok: false,
         message: "The From day cannot be after the To day.",
       });
       expect(
-        checkExport(kind, { fromDay: "2026-10-01", toDay: "2026-10-01", category: "Shares", staffId: "s1" }),
-      ).toEqual({ ok: true, value: { fromDay: "2026-10-01", toDay: "2026-10-01", createdById: "s1" } });
+        checkExport({ ...base, fromDay: "2026-10-01", toDay: "2026-10-01", category: "Shares", memberId: "m1", staffId: "s1" }),
+      ).toEqual({
+        ok: true,
+        value: { kinds: [kind], format: "xlsx", fromDay: "2026-10-01", toDay: "2026-10-01", createdById: "s1" },
+      });
     }
   });
 
-  it("needs a listed category for the category kind, checked before the days", () => {
-    expect(checkExport("category", { ...NO_EXPORT_FILTER, fromDay: "x" })).toEqual({
-      ok: false,
-      message: "Choose a category.",
-    });
-    expect(checkExport("category", { ...NO_EXPORT_FILTER, category: "shares" })).toEqual({
-      ok: false,
-      message: "Choose a category.",
-    });
-    expect(checkExport("category", { ...NO_EXPORT_FILTER, category: "Loan", toDay: "2026-13-01" })).toEqual({
+  it("needs a listed category for One category, checked before the days", () => {
+    const base = { ...NO_EXPORT_FILTER, kinds: ["category" as const] };
+    expect(checkExport({ ...base, fromDay: "x" })).toEqual({ ok: false, message: "Choose a category." });
+    expect(checkExport({ ...base, category: "shares" })).toEqual({ ok: false, message: "Choose a category." });
+    expect(checkExport({ ...base, category: "Loan", toDay: "2026-13-01" })).toEqual({
       ok: false,
       message: "Enter a real To day.",
     });
-    expect(checkExport("category", { fromDay: "", toDay: "2026-10-31", category: "Loan", staffId: "s1" })).toEqual({
+    expect(checkExport({ ...base, toDay: "2026-10-31", category: "Loan", staffId: "s1" })).toEqual({
       ok: true,
-      value: { toDay: "2026-10-31", category: "Loan", createdById: "s1" },
+      value: { kinds: ["category"], format: "xlsx", toDay: "2026-10-31", category: "Loan", createdById: "s1" },
+    });
+  });
+
+  it("needs a member for One member, after the days, and sends it with no days and no staff filter", () => {
+    const base = { ...NO_EXPORT_FILTER, kinds: ["member" as const] };
+    expect(checkExport({ ...base, fromDay: "x" })).toEqual({ ok: false, message: "Choose a member." });
+    expect(checkExport({ ...base, kinds: ["member", "cashflow"], fromDay: "x" })).toEqual({
+      ok: false,
+      message: "Enter a real From day.",
+    });
+    expect(checkExport({ ...base, memberId: "m1", fromDay: "2026-10-01", category: "Loan", staffId: "s1" })).toEqual({
+      ok: true,
+      value: { kinds: ["member"], format: "xlsx", memberId: "m1" },
+    });
+  });
+
+  it("sends the kinds in sheet order, whatever the order they were ticked", () => {
+    const input = {
+      ...NO_EXPORT_FILTER,
+      kinds: ["member", "cashflow", "members", "category"] as ExportQuery["kinds"],
+      format: "pdf" as const,
+      category: "Loan",
+      memberId: "m2",
+      fromDay: "2026-10-01",
+      staffId: "s1",
+    };
+    expect(checkExport(input)).toEqual({
+      ok: true,
+      value: {
+        kinds: ["members", "cashflow", "category", "member"],
+        format: "pdf",
+        fromDay: "2026-10-01",
+        category: "Loan",
+        memberId: "m2",
+        createdById: "s1",
+      },
     });
   });
 
@@ -4393,14 +4450,32 @@ describe("exports helpers", () => {
     expect(fail("invalid_input", "invalid_created_by_id")).toBe(
       "The staff filter was refused. Press Clear and try again.",
     );
+    for (const code of ["missing_member_id", "invalid_member_id"]) {
+      expect(fail("invalid_input", code)).toBe("The member was refused. Choose one from the list.");
+    }
+    for (const code of ["missing_kinds", "invalid_kinds", "invalid_format"]) {
+      expect(fail("invalid_input", code)).toBe("The export was refused. Press Clear and try again.");
+    }
     for (const code of ["invalid_from_day", "invalid_to_day", "invalid_range", undefined]) {
       expect(fail("invalid_input", code)).toBe("The days were refused. Check them and try again.");
     }
     expect(fail("forbidden")).toBe("You do not have permission to do this.");
+    expect(fail("not_found")).toBe("The member was not found. Choose another.");
     expect(fail("signed_out")).toBeNull();
     expect(fail("network")).toBe("Cannot reach the server. Try again.");
     expect(fail("server")).toBe("Something went wrong. Try again.");
-    expect(fail("not_found")).toBe("Something went wrong. Try again.");
+  });
+
+  it("has a note for a member list that cannot be read, none for signed_out", () => {
+    expect(exportMembersMessage("forbidden")).toBe(
+      "You do not have permission to view members, so One member cannot be exported.",
+    );
+    expect(exportMembersMessage("signed_out")).toBeNull();
+    for (const reason of ["network", "server", "invalid_input", "not_found"] as const) {
+      expect(exportMembersMessage(reason)).toBe(
+        "Cannot read the member list. Untick One member and tick it again to retry.",
+      );
+    }
   });
 });
 
@@ -4411,61 +4486,123 @@ describe("exports page (jsdom)", () => {
     expect(api.calls).toEqual([]);
   });
 
-  it("shows the five buttons to a Staff holder, with no staff filter, and reads nothing first", async () => {
+  it("shows the tick boxes and Excel to a Staff holder, Export waits for a tick, and reads nothing first", async () => {
     const api = await mount(fakeApi({ restore: EXPORTER }));
     await click(button("Exports"));
     expect(button("Exports").className).toBe("active");
     expect(el("h1").textContent).toBe("Export");
-    for (const b of EXPORT_BUTTONS) expect(button(b.label).disabled).toBe(false);
+    expect(inputs("checkbox").map((b) => `${b.value}:${b.checked}`)).toEqual(
+      EXPORT_KIND_CHOICES.map((c) => `${c.kind}:false`),
+    );
+    expect(text()).toContain("Full members list");
+    expect(formatRadio("xlsx").checked).toBe(true);
+    expect(formatRadio("pdf").checked).toBe(false);
+    expect(button("Export").disabled).toBe(true);
+    await click(kindBox("cashflow"));
+    expect(button("Export").disabled).toBe(false);
+    await click(kindBox("cashflow"));
+    expect(button("Export").disabled).toBe(true);
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
+    expect(container?.querySelector("select[name=memberId]")).toBeNull();
     expect(api.calls).toEqual([]);
   });
 
-  it("sends the days, saves the file it gets and names it", async () => {
+  it("sends the ticked kinds in sheet order with the days, saves the file it gets and names it", async () => {
     const saved: ExportFile[] = [];
     const api = await mount(fakeApi({ restore: EXPORTER, exports: [{ ok: true, value: XLSX_FILE }] }), (file) =>
       saved.push(file),
     );
     await click(button("Exports"));
+    await click(kindBox("transactions"));
+    await click(kindBox("members"));
     await type(el("input[name=fromDay]"), "2026-10-01");
     await type(el("input[name=toDay]"), "2026-10-31");
     await choose(select("category"), "Shares");
-    await click(button("Export Filtered Transactions"));
-    expect(api.exportCalls).toEqual([{ kind: "transactions", query: { fromDay: "2026-10-01", toDay: "2026-10-31" } }]);
+    await click(button("Export"));
+    expect(api.exportCalls).toEqual([
+      { kinds: ["members", "transactions"], format: "xlsx", fromDay: "2026-10-01", toDay: "2026-10-31" },
+    ]);
     expect(saved).toEqual([XLSX_FILE]);
-    expect(el("[role=status]").textContent).toBe("Downloaded transactions-2026-10-24.xlsx.");
+    expect(el("[role=status]").textContent).toBe("Downloaded export-2026-10-28.xlsx.");
   });
 
-  it("sends the category for Export Category and no days for the members list", async () => {
+  it("asks for a PDF when PDF is chosen, with the category for One category", async () => {
     const saved: ExportFile[] = [];
-    const api = await mount(fakeApi({ restore: EXPORTER, exports: [{ ok: true, value: XLSX_FILE }] }), (file) =>
+    const api = await mount(fakeApi({ restore: EXPORTER, exports: [{ ok: true, value: PDF_FILE }] }), (file) =>
       saved.push(file),
     );
     await click(button("Exports"));
-    await type(el("input[name=fromDay]"), "2026-10-01");
+    await click(kindBox("category"));
     await choose(select("category"), "Membership Withdrawal");
-    await click(button("Export Category"));
-    await click(button("Export Full Members List"));
-    expect(api.exportCalls).toEqual([
-      { kind: "category", query: { fromDay: "2026-10-01", category: "Membership Withdrawal" } },
-      { kind: "members", query: {} },
-    ]);
-    expect(saved).toHaveLength(2);
+    await click(formatRadio("pdf"));
+    expect(formatRadio("pdf").checked).toBe(true);
+    await click(button("Export"));
+    expect(api.exportCalls).toEqual([{ kinds: ["category"], format: "pdf", category: "Membership Withdrawal" }]);
+    expect(saved).toEqual([PDF_FILE]);
+    expect(el("[role=status]").textContent).toBe("Downloaded export-2026-10-28.pdf.");
   });
 
-  it("stops Export Category without a category and a From day after the To day in the browser", async () => {
+  it("reads every member once when One member is ticked and sends the chosen member", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: EXPORTER,
+        members: [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE],
+        exports: [{ ok: true, value: XLSX_FILE }],
+      }),
+      () => undefined,
+    );
+    await click(button("Exports"));
+    await click(kindBox("member"));
+    expect(api.calls).toEqual(["list all"]);
+    expect(Array.from(select("memberId").options).map((o) => `${o.value}:${o.textContent}`)).toEqual([
+      ":Choose a member",
+      "m1:IO-001 Test Member One",
+      "m2:IO-002 Sample Person Two",
+      "m3:IO-003 Example Inactive (Inactive)",
+    ]);
+    await click(button("Export"));
+    expect(el("[role=alert]").textContent).toBe("Choose a member.");
+    expect(api.exportCalls).toEqual([]);
+    await choose(select("memberId"), "m3");
+    await click(button("Export"));
+    expect(api.exportCalls).toEqual([{ kinds: ["member"], format: "xlsx", memberId: "m3" }]);
+    await click(kindBox("member"));
+    expect(container?.querySelector("select[name=memberId]")).toBeNull();
+    await click(kindBox("member"));
+    expect(api.calls.filter((c) => c === "list all")).toHaveLength(1);
+  });
+
+  it("shows a note and no member choice when the member list cannot be read, and reads again on the next tick", async () => {
+    const api = await mount(fakeApi({ restore: EXPORTER, list: { ok: false, reason: "forbidden" } }));
+    await click(button("Exports"));
+    await click(kindBox("member"));
+    expect(container?.querySelector("select[name=memberId]")).toBeNull();
+    expect(text()).toContain("You do not have permission to view members, so One member cannot be exported.");
+    await click(button("Export"));
+    expect(el("[role=alert]").textContent).toBe("Choose a member.");
+    await click(kindBox("member"));
+    expect(text()).not.toContain("You do not have permission to view members");
+    await click(kindBox("member"));
+    expect(api.calls).toEqual(["list all", "list all"]);
+    expect(api.exportCalls).toEqual([]);
+  });
+
+  it("stops One category without a category and a From day after the To day in the browser", async () => {
     const api = await mount(fakeApi({ restore: EXPORTER }));
     await click(button("Exports"));
-    await click(button("Export Category"));
+    await click(kindBox("category"));
+    await click(button("Export"));
     expect(el("[role=alert]").textContent).toBe("Choose a category.");
+    await click(kindBox("category"));
+    await click(kindBox("cashflow"));
     await type(el("input[name=fromDay]"), "2026-10-02");
     await type(el("input[name=toDay]"), "2026-10-01");
-    await click(button("Export Cashflow"));
+    await click(button("Export"));
     expect(el("[role=alert]").textContent).toBe("The From day cannot be after the To day.");
     expect(api.exportCalls).toEqual([]);
   });
 
-  it("starts the Super Admin on You, sends the chosen createdById and All staff; Clear goes back to You", async () => {
+  it("starts the Super Admin on You, sends the chosen createdById and All staff; Clear goes back to the start", async () => {
     const api = await mount(
       fakeApi({ restore: EXPORT_OWNER, staff: [staffAccount("s1", "Staff One")], exports: [{ ok: true, value: XLSX_FILE }] }),
       () => undefined,
@@ -4475,21 +4612,28 @@ describe("exports page (jsdom)", () => {
     const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
     expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
     expect(select("staffId").value).toBe("u1");
-    await click(button("Export Full Members List"));
+    await click(kindBox("members"));
+    await click(button("Export"));
+    await click(kindBox("members"));
+    await click(kindBox("expenses"));
     await type(el("input[name=toDay]"), "2026-10-31");
     await choose(select("staffId"), "s1");
-    await click(button("Export Filtered Expenses"));
+    await click(button("Export"));
     await choose(select("staffId"), "");
-    await click(button("Export Cashflow"));
+    await click(formatRadio("pdf"));
+    await click(button("Export"));
     expect(api.exportCalls).toEqual([
-      { kind: "members", query: { createdById: "u1" } },
-      { kind: "expenses", query: { toDay: "2026-10-31", createdById: "s1" } },
-      { kind: "cashflow", query: { toDay: "2026-10-31" } },
+      { kinds: ["members"], format: "xlsx", createdById: "u1" },
+      { kinds: ["expenses"], format: "xlsx", toDay: "2026-10-31", createdById: "s1" },
+      { kinds: ["expenses"], format: "pdf", toDay: "2026-10-31" },
     ]);
     await click(button("Clear"));
     expect(select("staffId").value).toBe("u1");
     expect(select("category").value).toBe("");
     expect(el<HTMLInputElement>("input[name=toDay]").value).toBe("");
+    expect(inputs("checkbox").every((b) => !b.checked)).toBe(true);
+    expect(formatRadio("xlsx").checked).toBe(true);
+    expect(button("Export").disabled).toBe(true);
     expect(container?.querySelector("[role=status]")).toBeNull();
   });
 
@@ -4500,13 +4644,14 @@ describe("exports page (jsdom)", () => {
     );
     await click(button("Exports"));
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
-    expect(button("Export Cashflow").disabled).toBe(false);
-    await click(button("Export Cashflow"));
+    await click(kindBox("cashflow"));
+    await click(button("Export"));
     await click(button("Clear"));
-    await click(button("Export Full Members List"));
+    await click(kindBox("members"));
+    await click(button("Export"));
     expect(api.exportCalls).toEqual([
-      { kind: "cashflow", query: {} },
-      { kind: "members", query: {} },
+      { kinds: ["cashflow"], format: "xlsx" },
+      { kinds: ["members"], format: "xlsx" },
     ]);
   });
 
@@ -4514,30 +4659,38 @@ describe("exports page (jsdom)", () => {
     const api = await mount(
       fakeApi({
         restore: EXPORTER,
+        members: [ACTIVE_ONE],
         exports: [
           { ok: false, reason: "invalid_input", code: "invalid_category" },
+          { ok: false, reason: "not_found" },
           { ok: false, reason: "forbidden" },
         ],
       }),
     );
     await click(button("Exports"));
+    await click(kindBox("category"));
     await choose(select("category"), "Loan");
-    await click(button("Export Category"));
+    await click(button("Export"));
     expect(el("[role=alert]").textContent).toBe("The category was refused. Choose one from the list.");
-    await click(button("Export Cashflow"));
+    await click(kindBox("category"));
+    await click(kindBox("member"));
+    await choose(select("memberId"), "m1");
+    await click(button("Export"));
+    expect(el("[role=alert]").textContent).toBe("The member was not found. Choose another.");
+    await click(button("Export"));
     expect(el("[role=alert]").textContent).toBe("You do not have permission to do this.");
-    expect(api.exportCalls.map((c) => c.kind)).toEqual(["category", "cashflow"]);
+    expect(api.exportCalls.map((c) => c.kinds)).toEqual([["category"], ["member"], ["member"]]);
     expect(container?.querySelector("[role=status]")).toBeNull();
   });
 
-  it("holds every button while a file is being prepared", async () => {
+  it("holds Export and Clear while a file is being prepared", async () => {
     let answer: (result: DownloadExportResult) => void = () => undefined;
     const saved: ExportFile[] = [];
     const make = fakeApi({ restore: EXPORTER });
     await mount((onSignedOut) => {
       const api = make(onSignedOut);
-      api.downloadExport = (kind, query) => {
-        api.exportCalls.push({ kind, query });
+      api.downloadExport = (query) => {
+        api.exportCalls.push(query);
         return new Promise((resolve) => {
           answer = resolve;
         });
@@ -4545,11 +4698,14 @@ describe("exports page (jsdom)", () => {
       return api;
     }, (file) => saved.push(file));
     await click(button("Exports"));
-    await click(button("Export Cashflow"));
-    for (const b of EXPORT_BUTTONS) expect(button(b.label).disabled).toBe(true);
+    await click(kindBox("cashflow"));
+    await click(button("Export"));
+    expect(button("Export").disabled).toBe(true);
+    expect(button("Clear").disabled).toBe(true);
     expect(text()).toContain("Preparing the file…");
     await act(async () => answer({ ok: true, value: XLSX_FILE }));
-    for (const b of EXPORT_BUTTONS) expect(button(b.label).disabled).toBe(false);
+    expect(button("Export").disabled).toBe(false);
+    expect(button("Clear").disabled).toBe(false);
     expect(saved).toEqual([XLSX_FILE]);
   });
 });

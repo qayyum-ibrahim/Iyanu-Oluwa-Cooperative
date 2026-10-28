@@ -7,7 +7,7 @@
 // (U.8b), deactivate, reactivate and reset a staff password (U.8c), and the audit log
 // (server/src/audit-routes.ts, U.8d), the dashboard (server/src/dashboard-routes.ts, 7.5) and the
 // category report (server/src/reports-routes.ts, 7.6) and the export files
-// (server/src/exports-routes.ts, 8.5).
+// (server/src/exports-routes.ts, 8.5; GET /exports with ticked kinds and a format since 9.1m).
 // Tokens travel in the JSON body
 // and the Authorization header, never in the URL. Never log a body, a token or a password.
 // A 401 on a signed-in call triggers one refresh and one retry; a refused refresh signs out.
@@ -335,21 +335,28 @@ export interface CategoryReportQuery {
   createdById?: string;
 }
 
-/** The kinds of GET /exports/:kind (D-104). */
-export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category";
+/** The kinds of GET /exports, in the server's sheet order (D-110 item 4). */
+export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category" | "member";
+
+/** The file formats of GET /exports (D-110 item 7, D-112). */
+export type ExportFormat = "xlsx" | "pdf";
 
 /**
- * The query of GET /exports/:kind. A day left out is no bound. The server reads category only for
- * the category kind and no days for members (A-253 item 3). createdById: Super Admin only.
+ * The query of GET /exports (9.1m). kinds: at least one, each once. A day left out is no bound.
+ * The server reads each part only when a ticked kind reads it (A-278): the days for the kinds with
+ * days, category for the category kind, memberId for the member kind. createdById: Super Admin only.
  */
 export interface ExportQuery {
+  kinds: ExportKind[];
+  format: ExportFormat;
   fromDay?: string;
   toDay?: string;
   category?: string;
+  memberId?: string;
   createdById?: string;
 }
 
-/** An export file: the .xlsx body and the name to save it under. */
+/** An export file: the .xlsx or PDF body and the name to save it under. */
 export interface ExportFile {
   blob: Blob;
   fileName: string;
@@ -480,7 +487,7 @@ export interface Api {
   listAudit(filter: AuditFilter): Promise<CallResult<AuditPage>>;
   getDashboard(query: DashboardQuery): Promise<CallResult<Dashboard>>;
   getCategoryReport(query: CategoryReportQuery): Promise<CallResult<CategoryReport>>;
-  downloadExport(kind: ExportKind, query: ExportQuery): Promise<DownloadExportResult>;
+  downloadExport(query: ExportQuery): Promise<DownloadExportResult>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -901,30 +908,38 @@ function categoryReportQuery(query: CategoryReportQuery): string {
   return parts.length === 0 ? "" : `?${parts.join("&")}`;
 }
 
-/** The query string for GET /exports/:kind, fields in a fixed order, each value made safe. */
+/**
+ * The query string for GET /exports: kinds (comma separated) and format first, then the other
+ * fields in a fixed order, each value made safe.
+ */
 function exportQuery(query: ExportQuery): string {
-  const parts: string[] = [];
-  for (const name of ["fromDay", "toDay", "category", "createdById"] as const) {
+  const parts = [`kinds=${query.kinds.map(encodeURIComponent).join(",")}`, `format=${encodeURIComponent(query.format)}`];
+  for (const name of ["fromDay", "toDay", "category", "memberId", "createdById"] as const) {
     const value = query[name];
     if (value !== undefined) parts.push(`${name}=${encodeURIComponent(value)}`);
   }
-  return parts.length === 0 ? "" : `?${parts.join("&")}`;
+  return `?${parts.join("&")}`;
 }
 
-const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+/** The content type the server sends for each format (server/src/exports-routes.ts). */
+const EXPORT_TYPES: Record<ExportFormat, string> = {
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pdf: "application/pdf",
+};
 
 /**
- * The name from Content-Disposition (`attachment; filename="<kind>-<day>.xlsx"`, A-253 item 4).
- * A missing name, or one with anything but letters, digits, dot, dash and underscore, gives
- * `<kind>.xlsx`, so a reply cannot pick a path or a file type.
+ * The name from Content-Disposition (`attachment; filename="export-<day>.<format>"`, A-278, A-281).
+ * A missing name, one with anything but letters, digits, dot, dash and underscore, or one that does
+ * not end in the asked format gives `export.<format>`, so a reply cannot pick a path or a file type.
  */
-function exportFileNameOf(header: string | null, kind: ExportKind): string {
+function exportFileNameOf(header: string | null, format: ExportFormat): string {
   const match = /filename="([^"]*)"/.exec(header ?? "");
   const name = match?.[1];
-  return name !== undefined && /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.xlsx$/.test(name) ? name : `${kind}.xlsx`;
+  const safe = name !== undefined && /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(name) && name.endsWith(`.${format}`);
+  return safe ? name : `export.${format}`;
 }
 
-/** A refused GET /exports/:kind. The 400 code is passed on (A-254). */
+/** A refused GET /exports. The 400 code is passed on (A-254). */
 function exportFailureOf(status: number, body: unknown): Extract<DownloadExportResult, { ok: false }> {
   if (status !== 400) return { ok: false, reason: failureOf(status) };
   const code = isObject(body) ? body["code"] : undefined;
@@ -1512,17 +1527,20 @@ export function createApi(deps: ApiDeps): Api {
     },
 
     // The reply is a file; a refusal is JSON. Saving the file is the page's job (8.6, A-254).
-    async downloadExport(kind, query) {
+    // The file must be of the format asked for (9.1m).
+    async downloadExport(query) {
       let response: Response | null;
       try {
-        response = await authed(`/exports/${encodeURIComponent(kind)}${exportQuery(query)}`);
+        response = await authed(`/exports${exportQuery(query)}`);
       } catch {
         return { ok: false, reason: "network" };
       }
       if (response === null) return { ok: false, reason: "signed_out" };
       if (response.status !== 200) return exportFailureOf(response.status, await readJson(response));
       const type = response.headers.get("Content-Type") ?? "";
-      if (type.split(";")[0]?.trim().toLowerCase() !== XLSX_TYPE) return { ok: false, reason: "server" };
+      if (type.split(";")[0]?.trim().toLowerCase() !== EXPORT_TYPES[query.format]) {
+        return { ok: false, reason: "server" };
+      }
       let blob: Blob;
       try {
         blob = await response.blob();
@@ -1532,7 +1550,7 @@ export function createApi(deps: ApiDeps): Api {
       if (blob.size === 0) return { ok: false, reason: "server" };
       return {
         ok: true,
-        value: { blob, fileName: exportFileNameOf(response.headers.get("Content-Disposition"), kind) },
+        value: { blob, fileName: exportFileNameOf(response.headers.get("Content-Disposition"), query.format) },
       };
     },
   };

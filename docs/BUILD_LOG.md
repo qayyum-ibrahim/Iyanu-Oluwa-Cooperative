@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1m (size M), 2026-10-28: the Exports page with tick boxes, a member choice and Excel or PDF (D-110 item 6, A-282)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** STATUS no longer says `pdf.ts` is "not on a route yet"; D-110 in DECISIONS gains the 9.1l2 change (`format=pdf` gives a PDF, `unsupported_format` gone); the `.export-grid` comment ("the five buttons") went with the rule, replaced by `.export-kinds` and `.export-format`.
+**Changed:** `web/src/api.ts` (`ExportKind` gains `member`, `ExportFormat`, `ExportQuery` with `kinds`, `format` and `memberId`; `downloadExport(query)` reads `GET /exports?kinds=..&format=..`, checks the content type and file name against the asked format), `web/src/Exports.tsx` (six tick boxes, one Export button, a member choice from `GET /members?status=all` read on the first tick of One member, Excel or PDF; `checkExport` takes the whole form; new messages), `web/src/styles.css` (`.export-kinds`, `.export-format`; `.export-grid` removed), `web/test/api.test.ts` (downloadExport tests rewritten, 9), `web/test/app.test.tsx` (fake `downloadExport(query)`; export helper and page tests rewritten, 20). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-282), DECISIONS (D-110 notes), PHASE_PLAN, TRACEABILITY (R-23), NEXT_FILES. No new decision.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint with no error, "Test Files 4 passed (4)", "Tests 378 passed (378)". `npm run check` (server, no server change): "Test Files 57 passed (57)", "Tests 2262 passed (2262)".
+**Not verified:** the page in a browser, a real Excel or PDF download through it. No live check (the step has none). Break-on-purpose for the export web code is at 9.10 (D-90).
+
+---
+
 ## Step 9.1l2 (size S), 2026-10-28: `format=pdf` on `GET /exports` (D-110 item 7, D-112, A-281)
 
 The owner said "fix Inconsistencies and go".

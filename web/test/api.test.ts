@@ -3,6 +3,7 @@ import {
   REFRESH_LOCK_NAME,
   browserRefreshLock,
   createApi,
+  type ExportQuery,
   type LockRequester,
   type RefreshLock,
 } from "../src/api.ts";
@@ -2141,86 +2142,114 @@ describe("getCategoryReport", () => {
 });
 
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PDF = "application/pdf";
 
-function xlsx(body: string, disposition: string | null, type: string = XLSX): Response {
+function file(body: string, disposition: string | null, type: string = XLSX): Response {
   const headers: Record<string, string> = { "Content-Type": type };
   if (disposition !== null) headers["Content-Disposition"] = disposition;
   return new Response(body, { status: 200, headers });
 }
 
+const MEMBERS_XLSX: ExportQuery = { kinds: ["members"], format: "xlsx" };
+
 describe("downloadExport", () => {
-  it("reads GET /exports/:kind with no query and gives the file and its name", async () => {
-    const { api, calls } = signedIn(() => xlsx("PK-file", 'attachment; filename="members-2026-10-24.xlsx"'));
-    const result = await api.downloadExport("members", {});
+  it("reads GET /exports with the kinds and format and gives the file and its name", async () => {
+    const { api, calls } = signedIn(() => file("PK-file", 'attachment; filename="export-2026-10-28.xlsx"'));
+    const result = await api.downloadExport({ kinds: ["members"], format: "xlsx" });
     if (!result.ok) throw new Error("expected a file");
-    expect(result.value.fileName).toBe("members-2026-10-24.xlsx");
+    expect(result.value.fileName).toBe("export-2026-10-28.xlsx");
     expect(result.value.blob.type).toBe(XLSX);
     expect(await result.value.blob.text()).toBe("PK-file");
-    expect(calls).toEqual([{ path: "/api/exports/members", method: "GET", auth: "Bearer acc1", body: null }]);
+    expect(calls).toEqual([
+      { path: "/api/exports?kinds=members&format=xlsx", method: "GET", auth: "Bearer acc1", body: null },
+    ]);
   });
 
-  it("sends fromDay, toDay, category and createdById in a fixed order, each value made safe", async () => {
-    const { api, calls } = signedIn(() => xlsx("PK", null));
-    await api.downloadExport("category", {
+  it("asks for a PDF and takes a PDF reply", async () => {
+    const { api, calls } = signedIn(() => file("%PDF-1.3", 'attachment; filename="export-2026-10-28.pdf"', PDF));
+    const result = await api.downloadExport({ kinds: ["cashflow", "member"], format: "pdf", memberId: "m1" });
+    if (!result.ok) throw new Error("expected a file");
+    expect(result.value.fileName).toBe("export-2026-10-28.pdf");
+    expect(await result.value.blob.text()).toBe("%PDF-1.3");
+    expect(calls.map((c) => c.path)).toEqual(["/api/exports?kinds=cashflow,member&format=pdf&memberId=m1"]);
+  });
+
+  it("sends kinds and format first, then the other fields in a fixed order, each value made safe", async () => {
+    const { api, calls } = signedIn(() => file("PK", null));
+    await api.downloadExport({
       createdById: "a/b?c&d",
+      memberId: "m 1&x",
       category: "Building Levy & More",
       toDay: "2026-10-31",
       fromDay: "2026-10-01",
+      format: "xlsx",
+      kinds: ["members", "transactions", "expenses", "cashflow", "category", "member"],
     });
-    await api.downloadExport("transactions", { toDay: "2026-10-31" });
-    await api.downloadExport("expenses", { fromDay: "2026-10-01" });
-    await api.downloadExport("cashflow", { createdById: "s1" });
-    await api.downloadExport("category", { category: "Loan" });
+    await api.downloadExport({ kinds: ["transactions"], format: "xlsx", toDay: "2026-10-31" });
+    await api.downloadExport({ kinds: ["expenses"], format: "xlsx", fromDay: "2026-10-01" });
+    await api.downloadExport({ kinds: ["cashflow"], format: "xlsx", createdById: "s1" });
+    await api.downloadExport({ kinds: ["category"], format: "xlsx", category: "Loan" });
     expect(calls.map((c) => c.path)).toEqual([
-      "/api/exports/category?fromDay=2026-10-01&toDay=2026-10-31&category=Building%20Levy%20%26%20More&createdById=a%2Fb%3Fc%26d",
-      "/api/exports/transactions?toDay=2026-10-31",
-      "/api/exports/expenses?fromDay=2026-10-01",
-      "/api/exports/cashflow?createdById=s1",
-      "/api/exports/category?category=Loan",
+      "/api/exports?kinds=members,transactions,expenses,cashflow,category,member&format=xlsx&fromDay=2026-10-01&toDay=2026-10-31&category=Building%20Levy%20%26%20More&memberId=m%201%26x&createdById=a%2Fb%3Fc%26d",
+      "/api/exports?kinds=transactions&format=xlsx&toDay=2026-10-31",
+      "/api/exports?kinds=expenses&format=xlsx&fromDay=2026-10-01",
+      "/api/exports?kinds=cashflow&format=xlsx&createdById=s1",
+      "/api/exports?kinds=category&format=xlsx&category=Loan",
     ]);
   });
 
   it("accepts the content type with parameters or in another case", async () => {
     for (const type of [`${XLSX}; charset=utf-8`, `${XLSX} ; charset=utf-8`, XLSX.toUpperCase()]) {
-      const { api } = signedIn(() => xlsx("PK", null, type));
-      expect((await api.downloadExport("members", {})).ok).toBe(true);
+      const { api } = signedIn(() => file("PK", null, type));
+      expect((await api.downloadExport(MEMBERS_XLSX)).ok).toBe(true);
     }
+    const { api } = signedIn(() => file("%PDF", null, "Application/PDF; charset=binary"));
+    expect((await api.downloadExport({ kinds: ["members"], format: "pdf" })).ok).toBe(true);
   });
 
-  it("names the file <kind>.xlsx when the header is missing or the name is not safe", async () => {
+  it("names the file export.<format> when the header is missing, the name is not safe or of another format", async () => {
     const headers: (string | null)[] = [
       null,
       "attachment",
       'attachment; filename=""',
-      'attachment; filename="../members.xlsx"',
+      'attachment; filename="../export.xlsx"',
       'attachment; filename="a/b.xlsx"',
-      'attachment; filename="members.exe"',
-      'attachment; filename="members.xlsx.exe"',
-      'attachment; filename=".members.xlsx"',
+      'attachment; filename="export.exe"',
+      'attachment; filename="export.xlsx.exe"',
+      'attachment; filename=".export.xlsx"',
       'attachment; filename=".xlsx"',
-      'attachment; filename="members 2026.xlsx"',
-      "attachment; filename=members.xlsx",
+      'attachment; filename="export 2026.xlsx"',
+      "attachment; filename=export.xlsx",
+      'attachment; filename="export-2026-10-28.pdf"',
     ];
     for (const header of headers) {
-      const { api } = signedIn(() => xlsx("PK", header));
-      const result = await api.downloadExport("cashflow", {});
-      expect(result.ok && result.value.fileName).toBe("cashflow.xlsx");
+      const { api } = signedIn(() => file("PK", header));
+      const result = await api.downloadExport({ kinds: ["cashflow"], format: "xlsx" });
+      expect(result.ok && result.value.fileName).toBe("export.xlsx");
     }
+    const { api } = signedIn(() => file("%PDF", 'attachment; filename="export-2026-10-28.xlsx"', PDF));
+    const result = await api.downloadExport({ kinds: ["cashflow"], format: "pdf" });
+    expect(result.ok && result.value.fileName).toBe("export.pdf");
   });
 
   it("on a 401 refreshes once and reads again", async () => {
     const { api, calls } = signedIn((call) => {
       if (call.path === "/api/auth/refresh") return json(200, { ...tokens(2), userId: "u1" });
-      return call.auth === "Bearer acc2" ? xlsx("PK", null) : json(401, {});
+      return call.auth === "Bearer acc2" ? file("PK", null) : json(401, {});
     });
-    expect((await api.downloadExport("expenses", {})).ok).toBe(true);
-    expect(calls.map((c) => c.path)).toEqual(["/api/exports/expenses", "/api/auth/refresh", "/api/exports/expenses"]);
+    expect((await api.downloadExport({ kinds: ["expenses"], format: "xlsx" })).ok).toBe(true);
+    expect(calls.map((c) => c.path)).toEqual([
+      "/api/exports?kinds=expenses&format=xlsx",
+      "/api/auth/refresh",
+      "/api/exports?kinds=expenses&format=xlsx",
+    ]);
   });
 
   it("passes on the 400 code, and maps 403, 404, 500, a network failure and a lost session", async () => {
     const cases: [Handler, object][] = [
       [() => json(400, { error: "invalid_input", code: "invalid_range" }), { reason: "invalid_input", code: "invalid_range" }],
-      [() => json(400, { error: "invalid_input", code: "invalid_category" }), { reason: "invalid_input", code: "invalid_category" }],
+      [() => json(400, { error: "invalid_input", code: "invalid_kinds" }), { reason: "invalid_input", code: "invalid_kinds" }],
+      [() => json(400, { error: "invalid_input", code: "missing_member_id" }), { reason: "invalid_input", code: "missing_member_id" }],
       [() => json(400, { error: "invalid_input" }), { reason: "invalid_input" }],
       [() => json(400, { error: "invalid_input", code: 7 }), { reason: "invalid_input" }],
       [() => new Response("not json", { status: 400 }), { reason: "invalid_input" }],
@@ -2236,34 +2265,37 @@ describe("downloadExport", () => {
     ];
     for (const [handler, failure] of cases) {
       const { api } = signedIn(handler);
-      expect(await api.downloadExport("transactions", {})).toEqual({ ok: false, ...failure });
+      expect(await api.downloadExport({ kinds: ["transactions"], format: "xlsx" })).toEqual({ ok: false, ...failure });
     }
     const gone = setup(() => json(401, { error: "invalid_token" }));
-    expect(await gone.api.downloadExport("members", {})).toEqual({ ok: false, reason: "signed_out" });
+    expect(await gone.api.downloadExport(MEMBERS_XLSX)).toEqual({ ok: false, reason: "signed_out" });
     expect(gone.signedOutCount()).toBe(1);
   });
 
-  it("answers network when the body of a 200 .xlsx reply cannot be read (A-257)", async () => {
+  it("answers network when the body of a 200 file reply cannot be read (A-257)", async () => {
     const broken = new ReadableStream({
       start(controller) {
         controller.error(new TypeError("connection lost"));
       },
     });
     const { api } = signedIn(() => new Response(broken, { status: 200, headers: { "Content-Type": XLSX } }));
-    expect(await api.downloadExport("members", {})).toEqual({ ok: false, reason: "network" });
+    expect(await api.downloadExport(MEMBERS_XLSX)).toEqual({ ok: false, reason: "network" });
   });
 
-  it("answers server for a 200 that is not an .xlsx file, an empty file, and a 201", async () => {
+  it("answers server for a 200 that is not the asked file, an empty file, and a 201", async () => {
     const replies: Response[] = [
       json(200, { ok: true }),
       new Response("PK", { status: 200 }),
-      xlsx("PK", null, "text/html"),
-      xlsx("", null),
+      file("PK", null, "text/html"),
+      file("%PDF", null, PDF),
+      file("", null),
       new Response("PK", { status: 201, headers: { "Content-Type": XLSX } }),
     ];
     for (const reply of replies) {
       const { api } = signedIn(() => reply);
-      expect(await api.downloadExport("members", {})).toEqual({ ok: false, reason: "server" });
+      expect(await api.downloadExport(MEMBERS_XLSX)).toEqual({ ok: false, reason: "server" });
     }
+    const { api } = signedIn(() => file("PK", null, XLSX));
+    expect(await api.downloadExport({ kinds: ["members"], format: "pdf" })).toEqual({ ok: false, reason: "server" });
   });
 });

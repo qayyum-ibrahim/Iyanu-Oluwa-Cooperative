@@ -657,12 +657,38 @@ td.amount {
   grid-column: 1 / -1;
 }
 
-/* Exports page (8.6): the five buttons as in the prototype's export grid */
-.export-grid {
+/* Exports page (9.1m): the kind tick boxes in the permission grid's look, and the format choice */
+.export-kinds {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 14px;
   margin: 12px 0 18px;
+  border: 1px solid #e2e8e5;
+  border-radius: 10px;
+}
+.export-kinds > b {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+.export-kinds label,
+.export-format label {
+  font-size: 12px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.export-kinds input,
+.export-format input {
+  accent-color: #047857;
+}
+/* undo .field input for the two radio buttons */
+.export-format input {
+  width: auto;
+  padding: 0;
+}
+.export-format label + label {
+  margin-top: 8px;
 }
 .cards {
   display: grid;

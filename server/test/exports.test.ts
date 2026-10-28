@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { COOPERATIVE } from "../src/cooperative.js";
 import { listExpenses } from "../src/expenses.js";
 import {
   exportCashflow,
@@ -21,6 +22,7 @@ import { createPrismaStore } from "../src/prisma-store.js";
 import { getCategoryReport } from "../src/reports.js";
 import type { Role, Store, UserRecord } from "../src/store.js";
 import { WorkbookError } from "../src/workbook.js";
+import { pdfPageCount, pdfTexts } from "./helpers/pdf-text.js";
 import { createTempDb, type TempDb } from "./helpers/temp-db.js";
 
 // Fictional data only (D-08).
@@ -943,18 +945,22 @@ describe("exportKinds (9.1j)", () => {
     expect(await exportsAudit(store)).toEqual([]);
   });
 
-  it("answers unsupported_format for pdf and invalid_format for anything but xlsx, before the other input", async () => {
+  it("answers invalid_format for anything but xlsx or pdf, before the other input", async () => {
     const { store, admin } = await build();
     const actor = actorOf(admin);
-    expect(await exportKinds(store, actor, { kinds: "transactions", format: "pdf", fromDay: "bad" })).toEqual(
-      invalid("unsupported_format"),
-    );
-    for (const format of ["", "XLSX", "xls", ["xlsx"], 1]) {
+    for (const format of ["", "XLSX", "PDF", "xls", ["xlsx"], ["pdf"], 1]) {
       expect(await exportKinds(store, actor, { kinds: "transactions", format, fromDay: "bad" })).toEqual(
         invalid("invalid_format"),
       );
     }
-    expect((await exportKinds(store, actor, { kinds: "members", format: "xlsx" })).ok).toBe(true);
+    for (const [format, expected] of [[undefined, "xlsx"], ["xlsx", "xlsx"], ["pdf", "pdf"]] as const) {
+      const r = await exportKinds(store, actor, { kinds: "members", ...(format ? { format } : {}) });
+      expect(r.ok && r.format).toBe(expected);
+    }
+    // A bad day is still checked for a PDF.
+    expect(await exportKinds(store, actor, { kinds: "transactions", format: "pdf", fromDay: "bad" })).toEqual(
+      invalid("invalid_from_day"),
+    );
   });
 
   it("checks each part only when a ticked kind reads it", async () => {
@@ -1108,6 +1114,65 @@ describe("exportKinds (9.1j)", () => {
     expect((await exportKinds(store, actorOf(admin), { kinds: "members" })).ok).toBe(true);
     await expect(exportKinds(store, actorOf(admin), { kinds: "members,transactions" })).rejects.toThrow(WorkbookError);
     expect((await exportsAudit(store)).map((e) => e.detail)).toEqual(["kind=members scope=all"]);
+  });
+});
+
+describe("exportKinds as a PDF (9.1l2)", () => {
+  it("gives the same sheets as a PDF: the cooperative heading, the day printed, one page per sheet, the Totals", async () => {
+    const { store, admin, ma } = await withLoans();
+    const r = await exportKinds(store, actorOf(admin), { kinds: "transactions,members", format: "pdf" }, "2026-10-21");
+    const file = must(r);
+    expect(r.ok && r.format).toBe("pdf");
+    expect(file.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(pdfPageCount(file)).toBe(2);
+    const texts = pdfTexts(file);
+    expect(texts.slice(0, 4)).toEqual([
+      COOPERATIVE.name,
+      COOPERATIVE.address,
+      `Reg. No. ${COOPERATIVE.registrationNumber}   Phone: ${COOPERATIVE.phone}   Email: ${COOPERATIVE.email}`,
+      "Printed on 2026-10-21",
+    ]);
+    // Members first, as in the workbook; it has no money column, so no Total row.
+    expect(texts.indexOf("Members")).toBeLessThan(texts.indexOf("Transactions"));
+    expect(texts).toContain("Ada Test");
+    expect(texts).toContain(ma.membershipId);
+    expect(texts).toContain("Amount (NGN)");
+    // Every line of Ada's: 10,000.00 + 500.00 + 2,000.00 + 30,000.00 + 20,000.00.
+    expect(texts.slice(-2)).toEqual(["Total", "62,500.00"]);
+  });
+
+  it("writes one audit entry with format=pdf before the category; an .xlsx entry stays as before", async () => {
+    const { store, admin, a, ma } = await withLoans();
+    must(await exportKinds(store, actorOf(admin), { kinds: "members", format: "xlsx" }));
+    must(
+      await exportKinds(store, actorOf(a), {
+        kinds: "member,category",
+        memberId: ma.id,
+        category: "Special Savings",
+        format: "pdf",
+      }),
+    );
+    expect((await exportsAudit(store)).reverse().map((e) => e.detail)).toEqual([
+      "kind=members scope=all",
+      `kind=category,member scope=${a.id} from_day=none to_day=none membership_id=${ma.membershipId} format=pdf category=Special Savings`,
+    ]);
+  });
+
+  it("gives no PDF when the audit write fails, and writes no entry for a refusal", async () => {
+    const { store, admin, noExport } = await withLoans();
+    const failing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({ ...tx, audit: { ...tx.audit, append: () => Promise.reject(new Error("audit down")) } }),
+        ),
+    };
+    await expect(exportKinds(failing, actorOf(admin), { kinds: "members", format: "pdf" })).rejects.toThrow("audit down");
+    expect(await exportKinds(store, actorOf(noExport), { kinds: "members", format: "pdf" })).toEqual({
+      ok: false,
+      reason: "forbidden",
+    });
+    expect(await exportsAudit(store)).toEqual([]);
   });
 });
 

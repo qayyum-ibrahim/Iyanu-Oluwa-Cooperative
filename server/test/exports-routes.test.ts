@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import type { Role } from "../src/store.js";
 import { createAccessToken } from "../src/tokens.js";
+import { pdfPageCount, pdfTexts } from "./helpers/pdf-text.js";
 
 // Fake values for tests only. Fictional data only (D-08).
 const SECRET = "test-only-secret-for-exports-routes-0123";
@@ -444,7 +445,8 @@ describe("GET /exports?kinds= (9.1j)", () => {
     ["?kinds=nope", "invalid_kinds"],
     ["?kinds=members,members", "invalid_kinds"],
     ["?kinds=members&kinds=cashflow", "invalid_kinds"],
-    ["?kinds=members&format=pdf", "unsupported_format"],
+    ["?kinds=members&format=PDF", "invalid_format"],
+    ["?kinds=members&format=pdf&format=pdf", "invalid_format"],
     ["?kinds=members&format=csv", "invalid_format"],
     ["?kinds=members&format=xlsx&format=xlsx", "invalid_format"],
     ["?kinds=cashflow&fromDay=bad", "invalid_from_day"],
@@ -481,6 +483,35 @@ describe("GET /exports?kinds= (9.1j)", () => {
     expect((await store.audit.listByActor(a.id)).map((e) => [e.action, e.detail])).toEqual([
       ["export.created", `kind=members,cashflow,member scope=${a.id} from_day=none to_day=2026-10-31 membership_id=${ma.membershipId}`],
     ]);
+  });
+
+  it("answers 200 with a PDF for format=pdf, named export-<day>.pdf, and one audit entry (9.1l2)", async () => {
+    const { app, store, admin, bearer } = await build();
+    const res = await download(app, "/exports?kinds=transactions,members&format=pdf", bearer(admin));
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-disposition"]).toBe('attachment; filename="export-2026-10-21.pdf"');
+    expect(res.headers["cache-control"]).toBe("no-store");
+    const body = res.body as Buffer;
+    expect(body.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    expect(pdfPageCount(body)).toBe(2);
+    const texts = pdfTexts(body);
+    expect(texts).toContain("Printed on 2026-10-21");
+    expect(texts).toContain("Member A");
+    expect(texts.slice(-2)).toEqual(["Total", "12,005.50"]);
+    expect((await store.audit.listByActor(admin.id)).map((e) => e.detail)).toEqual([
+      "kind=members,transactions scope=all from_day=none to_day=none format=pdf",
+    ]);
+  });
+
+  it.each([
+    ["2026-10-21T22:59:59.999Z", "2026-10-21"],
+    ["2026-10-21T23:00:00.000Z", "2026-10-22"],
+  ])("names the PDF and its Printed on after the Lagos day at %s", async (at, day) => {
+    const { app, admin, bearer } = await build(new Date(at));
+    const res = await download(app, "/exports?kinds=members&format=pdf", bearer(admin));
+    expect(res.headers["content-disposition"]).toBe(`attachment; filename="export-${day}.pdf"`);
+    expect(pdfTexts(res.body as Buffer)).toContain(`Printed on ${day}`);
   });
 
   it("answers 500 as JSON, and writes no audit entry, when one sheet cannot be built", async () => {

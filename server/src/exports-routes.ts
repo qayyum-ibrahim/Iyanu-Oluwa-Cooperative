@@ -1,7 +1,8 @@
-// Export routes (steps 8.4, 9.1i and 9.1j; D-104, D-110, A-253, A-277, A-278). Thin: all rules live
-// in exports.ts. GET /exports?kinds= gives several kinds in one file; GET /exports/:kind gives one.
-// Guards run first (401, then 403), then the kind, then the query. The reply is an .xlsx file,
-// or JSON on a refusal. Never log a query.
+// Export routes (steps 8.4, 9.1i, 9.1j and 9.1l2; D-104, D-110, D-112, A-253, A-277, A-278, A-281).
+// Thin: all rules live in exports.ts. GET /exports?kinds= gives several kinds in one file;
+// GET /exports/:kind gives one. Guards run first (401, then 403), then the kind, then the query.
+// The reply is an .xlsx file, a PDF for GET /exports?format=pdf, or JSON on a refusal.
+// Never log a query.
 
 import { Router, type Response } from "express";
 import {
@@ -25,6 +26,7 @@ import { lagosDay } from "./payments.js";
 import type { Store } from "./store.js";
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PDF_TYPE = "application/pdf";
 
 const STATUS: Record<ExportFailure, number> = {
   forbidden: 403,
@@ -73,6 +75,7 @@ export function createExportsRouter(deps: GuardDeps): Router {
       return;
     }
     const q = req.query;
+    const day = lagosDay(deps.now());
     const result = await exportKinds(deps.store, actor, {
       kinds: q["kinds"],
       format: q["format"],
@@ -81,15 +84,15 @@ export function createExportsRouter(deps: GuardDeps): Router {
       category: q["category"],
       createdById: q["createdById"],
       memberId: q["memberId"],
-    });
+    }, day);
     if (!result.ok) {
       sendFailure(res, result);
       return;
     }
     // The name holds only today's Lagos day: no kind list, no category text, no person, no member.
     res.status(200);
-    res.set("Content-Type", XLSX_TYPE);
-    res.set("Content-Disposition", `attachment; filename="export-${lagosDay(deps.now())}.xlsx"`);
+    res.set("Content-Type", result.format === "pdf" ? PDF_TYPE : XLSX_TYPE);
+    res.set("Content-Disposition", `attachment; filename="export-${day}.${result.format}"`);
     res.send(result.value);
   });
 

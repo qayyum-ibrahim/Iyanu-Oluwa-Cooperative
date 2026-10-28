@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1l2 (size S), 2026-10-28: `format=pdf` on `GET /exports` (D-110 item 7, D-112, A-281)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** the comments in `server/src/exports.ts` ("pdf is planned at 9.1l") and `server/src/exports-routes.ts` ("the reply is an .xlsx file") now match the code. The STATUS brief no longer points at the old 9.1l sample file in a past scratchpad.
+**Changed:** `server/src/exports.ts` (`exportKinds` takes `printedOn`, builds with `buildPdf` and `COOPERATIVE` for `format=pdf`, returns `KindsExportResult` with the format; `unsupported_format` removed; `format=pdf` in the audit detail), `server/src/exports-routes.ts` (`application/pdf`, `export-<day>.pdf`), `server/test/exports.test.ts` (the format test rewritten, 3 PDF tests), `server/test/exports-routes.test.ts` (2 format rows, 3 PDF tests). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-281), PHASE_PLAN, TRACEABILITY (R-23), NEXT_FILES. No new decision.
+**Works (verified in this session):** `npm run check` (server): "Test Files 57 passed (57)", "Tests 2262 passed (2262)".
+**Not verified:** the PDF opened in a reader app. No live check (the step has none). Break-on-purpose for the export code is at 9.10 (D-90).
+
+---
+
 ## Step 9.1l (size M, split from L), 2026-10-28: PDF builder `buildPdf` and the cooperative details (D-110 item 7, D-112, A-280)
 
 The owner said "fix Inconsistencies and go".

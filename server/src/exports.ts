@@ -1,15 +1,18 @@
-// Export logic (steps 8.2, 8.3, 9.1i and 9.1j; D-104, D-110, A-249, A-251, A-252, A-277, A-278, DR-13).
-// Rules over the Store: no HTTP here.
+// Export logic (steps 8.2, 8.3, 9.1i, 9.1j and 9.1l2; D-104, D-110, D-112, A-249, A-251, A-252,
+// A-277, A-278, A-281, DR-13). Rules over the Store: no HTTP here.
 // Each export reads its rows, builds one .xlsx file (workbook.ts) and writes one audit entry
 // "export.created", all in one store transaction: a file that cannot be built writes no entry.
-// exportKinds puts several kinds in one file, one sheet per kind, with one entry naming them all.
+// exportKinds puts several kinds in one file, one sheet per kind, with one entry naming them all;
+// it can give the same sheets as a PDF file (pdf.ts).
 // The audit detail holds the kinds, the scope, the days and the category: no name, no phone.
 
 import { memberBalances } from "./balances.js";
 import { isPaymentCategory } from "./categories.js";
+import { COOPERATIVE } from "./cooperative.js";
 import { isExpenseCategory, isSystemOnlyExpenseCategory } from "./expense-categories.js";
 import { loanOutstanding } from "./loans.js";
 import { lagosDay, isCalendarDay } from "./payments.js";
+import { buildPdf } from "./pdf.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import type { MemberRecord, MemberStatus, PaymentMethod, Store } from "./store.js";
 import { buildWorkbook, type Sheet, type SheetColumn, type SheetRow } from "./workbook.js";
@@ -154,15 +157,22 @@ function run(
 
 /**
  * "kind=<k1,k2> scope=<id|all>", then the days when a kind reads them, then the Membership ID for
- * the member kind, then the category for the category kind: last, because a name may hold spaces.
+ * the member kind, then "format=pdf" for a PDF (an .xlsx file adds nothing, A-281), then the
+ * category for the category kind: last, because a name may hold spaces.
  */
-function detailOf(kinds: readonly ExportKind[], checked: Checked, membershipId?: string): string {
+function detailOf(
+  kinds: readonly ExportKind[],
+  checked: Checked,
+  membershipId?: string,
+  format: ExportFormat = "xlsx",
+): string {
   const days = kinds.some((k) => DATED_KINDS.has(k))
     ? ` from_day=${checked.fromDay ?? "none"} to_day=${checked.toDay ?? "none"}`
     : "";
   const member = membershipId !== undefined ? ` membership_id=${membershipId}` : "";
+  const pdf = format === "pdf" ? " format=pdf" : "";
   const category = checked.category !== undefined ? ` category=${checked.category}` : "";
-  return `kind=${kinds.join(",")} scope=${checked.scopeId ?? "all"}${days}${member}${category}`;
+  return `kind=${kinds.join(",")} scope=${checked.scopeId ?? "all"}${days}${member}${pdf}${category}`;
 }
 
 function appendAudit(tx: Store, actor: ExportActor, detail: string): Promise<unknown> {
@@ -600,9 +610,14 @@ async function memberSheet(tx: Store, member: MemberRecord): Promise<Sheet> {
 export interface KindsExportInput extends CategoryExportInput, MemberExportInput {
   /** The kinds, comma separated, each once, for example "members,cashflow". Required. */
   kinds?: unknown;
-  /** "xlsx" or none. "pdf" is planned at 9.1l. */
+  /** "xlsx", "pdf" or none (xlsx). */
   format?: unknown;
 }
+
+export type ExportFormat = "xlsx" | "pdf";
+
+/** The file and its format: an .xlsx file or a PDF. */
+export type KindsExportResult = { ok: true; value: Buffer; format: ExportFormat } | ExportFailureResult;
 
 /** Longest kinds text accepted; all six kinds take 54 characters. */
 const KINDS_MAX = 100;
@@ -622,8 +637,10 @@ function checkKinds(value: unknown): ExportKind[] | ExportFailureResult {
 }
 
 /**
- * Several kinds in one .xlsx file, one sheet per kind in the order of EXPORT_KINDS, and one audit
- * entry naming every kind (D-110 item 4, A-278). Each kind reads its rows as its own export does.
+ * Several kinds in one file, one sheet per kind in the order of EXPORT_KINDS, and one audit entry
+ * naming every kind (D-110 item 4, A-278). Each kind reads its rows as its own export does.
+ * format=pdf gives the same sheets as a PDF with the cooperative heading and printedOn, the Lagos
+ * day the caller passes (D-112, A-281); no format or "xlsx" gives an .xlsx file.
  * Order: permission, kinds, format, then as the kinds ticked: createdById (a kind other than
  * member), category (category kind), fromDay, toDay and range (a kind with days), memberId (member
  * kind); inside the transaction, not_found for the member. The member sheet ignores createdById. The category sheet is named after the category, or
@@ -633,12 +650,15 @@ export async function exportKinds(
   store: Store,
   actor: ExportActor,
   input: KindsExportInput,
-): Promise<ExportResult> {
+  printedOn: string = lagosDay(new Date()),
+): Promise<KindsExportResult> {
   if (!hasPermission(actor.subject, "reports.export")) return failure("forbidden");
   const kinds = checkKinds(input.kinds);
   if (!Array.isArray(kinds)) return kinds;
-  if (input.format === "pdf") return failure("invalid_input", "unsupported_format");
-  if (input.format !== undefined && input.format !== "xlsx") return failure("invalid_input", "invalid_format");
+  if (input.format !== undefined && input.format !== "xlsx" && input.format !== "pdf") {
+    return failure("invalid_input", "invalid_format");
+  }
+  const format: ExportFormat = input.format === "pdf" ? "pdf" : "xlsx";
 
   const dated = kinds.some((k) => DATED_KINDS.has(k));
   const checked = check(
@@ -659,7 +679,7 @@ export async function exportKinds(
     memberId = id;
   }
 
-  return store.transaction(async (tx): Promise<ExportResult> => {
+  return store.transaction(async (tx): Promise<KindsExportResult> => {
     const member = memberId !== undefined ? await visibleMember(tx, actor, memberId) : undefined;
     if (member === null) return failure("not_found");
     const taken = new Set(kinds.flatMap((k) => (KIND_SHEET[k] !== undefined ? [KIND_SHEET[k].toLowerCase()] : [])));
@@ -676,9 +696,12 @@ export async function exportKinds(
         sheets.push(await SHEET_OF[kind](tx, { ...checked.value, category: undefined }));
       }
     }
-    const file = await buildWorkbook(sheets);
-    await appendAudit(tx, actor, detailOf(kinds, checked.value, member?.membershipId));
-    return { ok: true, value: file };
+    const file =
+      format === "pdf"
+        ? await buildPdf(sheets, { cooperative: COOPERATIVE, printedOn })
+        : await buildWorkbook(sheets);
+    await appendAudit(tx, actor, detailOf(kinds, checked.value, member?.membershipId, format));
+    return { ok: true, value: file, format };
   });
 }
 

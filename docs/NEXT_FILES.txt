@@ -4,10 +4,11 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-server/package.json
 server/src/exports.ts
 server/src/exports-routes.ts
+server/src/pdf.ts
+server/src/cooperative.ts
 server/src/workbook.ts
-server/src/money.ts
 server/test/exports.test.ts
 server/test/exports-routes.test.ts
+server/test/helpers/pdf-text.ts

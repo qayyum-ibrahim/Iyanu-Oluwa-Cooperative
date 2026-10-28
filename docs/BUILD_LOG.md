@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.1l (size M, split from L), 2026-10-28: PDF builder `buildPdf` and the cooperative details (D-110 item 7, D-112, A-280)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** 9.1l was L, so it is split (D-112): 9.1l builds the PDF and 9.1l2 wires `format=pdf`. The files are named here. The layout was shown by a rendered sample (A-280 item 8). The ₦ question was settled from pdfkit's font data: there is no glyph, so "NGN" (A-280 item 1). R-23's title now names PDF. The two exports test files were read only by search at the session start; 9.1l2 reads them in full.
+**Read:** `server/node_modules/pdfkit` (`js/data/*.afm`, `encodeText`, `WIN_ANSI_MAP`, the table row measure in `js/pdfkit.node.mjs`); `server/node_modules/@types/pdfkit/index.d.ts` (table and cell options).
+**Changed:** new `server/src/pdf.ts` (`buildPdf`, `pdfText`, `koboToNairaText`, `PdfError`), new `server/src/cooperative.ts` (`COOPERATIVE`, fictional placeholders), new `server/test/pdf.test.ts` (15 tests), new `server/test/helpers/pdf-text.ts` (reads the text runs back). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-280), DECISIONS (D-112), PHASE_PLAN (9.1l split, 9.1l2), TRACEABILITY (R-23), NEXT_FILES.
+**Works (verified in this session):** `npx vitest run test/pdf.test.ts`: 15 passed (after one wrong expected value in the test was corrected: "Egbe Test", A-280 item 1). `npm run check` (server): "Test Files 57 passed (57)", "Tests 2255 passed (2255)". Sample PDF: "bytes 12402 header %PDF-1.3 pages 3"; first page rendered and looked at.
+**Not verified:** the PDF opened in a reader app; the PDF through the route (9.1l2). No live check (the step has none). Break-on-purpose for the PDF money cells is at 9.10 (D-90).
+
+---
+
 ## Step 9.1k (size S), 2026-10-28: PDF library `pdfkit` 0.20.2 (D-110 item 7, D-111, A-279)
 
 The owner said "fix Inconsistencies and go", then "yes, install both".

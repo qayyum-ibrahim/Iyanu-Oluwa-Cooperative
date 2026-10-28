@@ -84,6 +84,7 @@ import {
   expenseCount,
   expenseListMessage,
   expenseMessage,
+  expenseMonths,
   isChangeable,
   savedExpenseMessage,
   type ExpenseFormInput,
@@ -2166,6 +2167,24 @@ describe("expense list helpers", () => {
     expect(expenseCount(1)).toBe("1 expense");
     expect(expenseCount(2)).toBe("2 expenses");
   });
+
+  it("groups rows by the month of the day spent, in the order they come", () => {
+    const row = (id: string, spentOn: string) => expense(id, spentOn, "1.00");
+    expect(expenseMonths([])).toEqual([]);
+    const a = row("a", "2026-10-31");
+    const b = row("b", "2026-10-01");
+    const c = row("c", "2026-09-30");
+    const d = row("d", "2025-10-15");
+    expect(expenseMonths([a, b, c, d])).toEqual([
+      { month: "2026-10", expenses: [a, b] },
+      { month: "2026-09", expenses: [c] },
+      { month: "2025-10", expenses: [d] },
+    ]);
+    expect(expenseMonths([c, a, b])).toEqual([
+      { month: "2026-09", expenses: [c] },
+      { month: "2026-10", expenses: [a, b] },
+    ]);
+  });
 });
 
 const EXPENSE_VIEWER: Me = { ...ME, user: { ...ME.user, role: "STAFF" }, permissions: ["expenses.view"] };
@@ -2228,6 +2247,47 @@ describe("expenses page (jsdom)", () => {
     expect(rowTexts()[0]).toBe("20 Oct 2026OthersGenerator · Repair₦250,000.50Bank transfer");
     expect(rowTexts()[1]).toBe("1 Oct 2026ExpensesStationery₦1,000.00Cash");
     expect(el(".expense-total").textContent).toBe("2 expensesTotal ₦251,000.50");
+    expect(Array.from(document.querySelectorAll(".expense-month h3"), (h) => h.textContent)).toEqual(["Oct 2026"]);
+  });
+
+  it("shows one card per month, newest month first, with no month subtotal", async () => {
+    await mount(
+      fakeApi({
+        restore: EXPENSE_VIEWER,
+        expenses: {
+          ok: true,
+          value: {
+            expenses: [
+              expense("e1", "2025-12-31", "100.00"),
+              expense("e2", "2026-09-30", "200.00"),
+              expense("e3", "2026-10-01", "300.00"),
+              expense("e4", "2026-10-15", "400.00"),
+            ],
+            total: "1000.00",
+          },
+        },
+      }),
+    );
+    await openExpenses();
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(".expense-month"));
+    expect(cards.map((c) => c.querySelector("h3")?.textContent)).toEqual(["Oct 2026", "Sep 2026", "Dec 2025"]);
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual(["Oct 2026", "Sep 2026", "Dec 2025"]);
+    expect(cards.map((c) => Array.from(c.querySelectorAll("tbody tr"), (r) => r.textContent))).toEqual([
+      ["15 Oct 2026Expenses—₦400.00Cash", "1 Oct 2026Expenses—₦300.00Cash"],
+      ["30 Sep 2026Expenses—₦200.00Cash"],
+      ["31 Dec 2025Expenses—₦100.00Cash"],
+    ]);
+    expect(cards.map((c) => c.querySelectorAll("thead th").length)).toEqual([5, 5, 5]);
+    expect(document.querySelectorAll(".expense-total")).toHaveLength(1);
+    expect(el(".expense-total").textContent).toBe("4 expensesTotal ₦1,000.00");
+    expect(text()).not.toContain("₦700.00");
+  });
+
+  it("has no month card when no expense is found", async () => {
+    await mount(fakeApi({ restore: EXPENSE_VIEWER, expenses: { ok: true, value: { expenses: [], total: "0.00" } } }));
+    await openExpenses();
+    expect(text()).toContain("No expenses found.");
+    expect(document.querySelector(".expense-month")).toBeNull();
   });
 
   it("shows a dash for an expense with no description or narration", async () => {

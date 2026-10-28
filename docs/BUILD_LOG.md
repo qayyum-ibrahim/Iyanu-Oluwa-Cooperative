@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1g (size S), 2026-10-28: the Expenses list in month cards (D-110, A-275)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** (1) D-110 item 2 said the heading is "<Month> <Year>"; the only month helper, `formatMonth` in `web/src/Dashboard.tsx`, gives "Oct 2026". It is imported unchanged (no edit outside the step), and D-110 item 2 now carries a "Changed at 9.1g" note (A-275 item 1). (2) `web/src/api.ts` was in NEXT_FILES but not in the step's files; it was read only, not changed.
+**Changed:** `web/src/Expenses.tsx` (`expenseMonths`, `ExpenseMonth`; one `.expense-month` section per month with an `h3` and its own table), `web/src/styles.css` (`.expense-month` and its `h3`), `web/test/app.test.tsx` (1 helper test, 2 page tests, 1 line in the newest-first test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-275), DECISIONS (D-110), PHASE_PLAN (9.1g done), TRACEABILITY (R-40), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): exit code 0, "Test Files 4 passed (4)", "Tests 370 passed (370)". `npm run check` (server): exit code 0, "Test Files 56 passed (56)", "Tests 2201 passed (2201)". `git diff --stat` (code): "3 files changed, 160 insertions(+), 54 deletions(-)" (most of `Expenses.tsx` is the row block indented one level deeper).
+**Not verified:** the page was not opened in a browser; the card look was not seen. No live check (the step has none). Display code only: no break-on-purpose (D-90).
+
+---
+
 ## Step 9.1f (size M), 2026-10-28: the "On loan" badge on the Members list (D-110, A-274)
 
 The owner said "fix Inconsistencies and go".

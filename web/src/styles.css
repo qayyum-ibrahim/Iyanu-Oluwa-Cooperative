@@ -519,6 +519,20 @@ td.amount {
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
+/* One card per month (9.1g) */
+.expense-month {
+  margin: 14px 19px;
+  border: 1px solid #e2e8e5;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.expense-month h3 {
+  margin: 0;
+  padding: 11px 15px;
+  font-size: 14px;
+  background: #f5f7f6;
+  border-bottom: 1px solid #e2e8e5;
+}
 
 /* Expense edit and delete (U.6e); the delete button in the colours of Sign out */
 .row-actions {

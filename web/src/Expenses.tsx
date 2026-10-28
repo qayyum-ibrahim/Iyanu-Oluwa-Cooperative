@@ -5,6 +5,7 @@
 // Membership Withdrawal rows, as the system sets them; the server still refuses with a 409.
 // Expenses are running costs only (D-106, D-107): the server lists no Loan or Membership
 // Withdrawal row, and the category filter offers the running costs alone.
+// One card per month of the day spent, newest month first (9.1g, D-110 item 2); no month subtotal.
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   Api,
@@ -18,6 +19,7 @@ import type {
   PaymentMethod,
   UpdateExpenseResult,
 } from "./api.ts";
+import { formatMonth } from "./Dashboard.tsx";
 import {
   METHOD_LABELS,
   formatDay,
@@ -103,6 +105,33 @@ export function expenseListMessage(reason: CallFailure): string | null {
 /** "1 expense", "3 expenses". */
 export function expenseCount(n: number): string {
   return `${n} ${n === 1 ? "expense" : "expenses"}`;
+}
+
+export interface ExpenseMonth {
+  /** "YYYY-MM" of the day spent. */
+  month: string;
+  expenses: Expense[];
+}
+
+/**
+ * Groups the rows by the month of the day spent, as saved (a calendar day, D-94). Months come in
+ * the order of their first row, and rows keep their order, so newest-first rows give the newest
+ * month first.
+ */
+export function expenseMonths(rows: Expense[]): ExpenseMonth[] {
+  const months: ExpenseMonth[] = [];
+  const byMonth = new Map<string, ExpenseMonth>();
+  for (const row of rows) {
+    const month = row.spentOn.slice(0, 7);
+    let group = byMonth.get(month);
+    if (group === undefined) {
+      group = { month, expenses: [] };
+      byMonth.set(month, group);
+      months.push(group);
+    }
+    group.expenses.push(row);
+  }
+  return months;
 }
 
 // Expense form helpers (U.6d, R-10). The form is ExpenseForm below.
@@ -718,61 +747,64 @@ export default function Expenses({ api, canCreate, canEdit, canDelete }: Expense
         {list.kind === "loaded" && rows.length === 0 && (
           <p className="panel-note">No expenses found.</p>
         )}
-        {rows.length > 0 && (
-          <div className="table-wrap">
-            <table className="expenses">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Category</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Method</th>
-                  {actions && <th>Action</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((e) => (
-                  <tr key={e.id}>
-                    <td>{formatDay(e.spentOn)}</td>
-                    <td>{e.category}</td>
-                    <td>{[e.description, e.narration].filter((t) => t !== "").join(" · ") || "—"}</td>
-                    <td className="amount">{formatNaira(e.amount)}</td>
-                    <td>{METHOD_LABELS[e.method]}</td>
-                    {actions && (
-                      <td className="row-actions">
-                        {open === null && isChangeable(e) && (
-                          <>
-                            {canEdit && (
-                              <button
-                                type="button"
-                                className="secondary"
-                                aria-label={`Edit ${expenseSummary(e)}`}
-                                onClick={() => openPanel({ kind: "edit", expense: e })}
-                              >
-                                Edit
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                type="button"
-                                className="secondary"
-                                aria-label={`Delete ${expenseSummary(e)}`}
-                                onClick={() => openPanel({ kind: "delete", expense: e })}
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </td>
-                    )}
+        {expenseMonths(rows).map((group) => (
+          <section key={group.month} className="expense-month" aria-label={formatMonth(group.month)}>
+            <h3>{formatMonth(group.month)}</h3>
+            <div className="table-wrap">
+              <table className="expenses">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    {actions && <th>Action</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {group.expenses.map((e) => (
+                    <tr key={e.id}>
+                      <td>{formatDay(e.spentOn)}</td>
+                      <td>{e.category}</td>
+                      <td>{[e.description, e.narration].filter((t) => t !== "").join(" · ") || "—"}</td>
+                      <td className="amount">{formatNaira(e.amount)}</td>
+                      <td>{METHOD_LABELS[e.method]}</td>
+                      {actions && (
+                        <td className="row-actions">
+                          {open === null && isChangeable(e) && (
+                            <>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  aria-label={`Edit ${expenseSummary(e)}`}
+                                  onClick={() => openPanel({ kind: "edit", expense: e })}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  aria-label={`Delete ${expenseSummary(e)}`}
+                                  onClick={() => openPanel({ kind: "delete", expense: e })}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
       </section>
     </>
   );

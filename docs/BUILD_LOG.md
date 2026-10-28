@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.1j (size M), 2026-10-28: `GET /exports?kinds=`, several kinds in one workbook (D-110 item 4, A-278)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** (1) Each exporter built its own file and wrote its own audit entry. Each kind's sheet building is now its own function (`membersSheet`, `transactionsSheet`, `expensesSheet`, `cashflowSheet`, `categorySheet`, `memberSheet`), used by both the single-kind exports and `exportKinds`. The single-kind exports behave as before; their tests are unchanged and pass. (2) The choices that were not settled (`format=pdf`, the kinds codes, the audit detail, the file name, which parts of the query are checked) are chosen and recorded in A-278. (3) The DR-11 names were read in `server/src/expense-categories.ts` (read in this session, not changed): all fit Excel's sheet name rules, but "Expenses" clashes with the expenses sheet, so next to it the category sheet is named "Expenses (category)".
+**Bug found by the new tests and fixed:** the category also filtered the other sheets when the category kind was ticked (two tests failed: the Transactions sheet held only Shares lines, and the Expenses sheet total was 400, not 500). The other sheets now get no category, as the single-kind exports (A-256). After the fix the file passed: "Tests 80 passed (80)".
+**Changed:** `server/src/exports.ts` (`EXPORT_KINDS`, `KindsExportInput`, `exportKinds`, `detailOf`, `checkMemberId`, `visibleMember`, the sheet functions), `server/src/exports-routes.ts` (`GET /exports`), `server/test/exports.test.ts` (10 tests, 1 Prisma test), `server/test/exports-routes.test.ts` (18 tests; the "/exports alone answers 404" check removed, because `/exports` is now the new route and answers 400 `missing_kinds`). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-278), DECISIONS (D-110 note), PHASE_PLAN (9.1j done), TRACEABILITY (R-23), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): exit code 0 (generate, typecheck, lint, test), "Test Files 56 passed (56)", "Tests 2240 passed (2240)". `git diff --stat` (code): "4 files changed, 690 insertions(+), 154 deletions(-)".
+**Not verified:** no live check (the step has none; the live check script does not call `GET /exports`). The file was not opened in a spreadsheet program. The web is unchanged. The 8.7a break-on-purpose script may no longer apply some of its `exports.ts` find texts (inference, not run). Break-on-purpose for `GET /exports` is planned at 9.10.
+
+---
+
 ## Step 9.1i (size M), 2026-10-28: the `member` export kind (D-110 item 5, A-277)
 
 The owner said "fix Inconsistencies and go".

@@ -1,4 +1,5 @@
-// Export routes (steps 8.4 and 9.1i; D-104, D-110, A-253, A-277). Thin: all rules live in exports.ts.
+// Export routes (steps 8.4, 9.1i and 9.1j; D-104, D-110, A-253, A-277, A-278). Thin: all rules live
+// in exports.ts. GET /exports?kinds= gives several kinds in one file; GET /exports/:kind gives one.
 // Guards run first (401, then 403), then the kind, then the query. The reply is an .xlsx file,
 // or JSON on a refusal. Never log a query.
 
@@ -8,6 +9,7 @@ import {
   exportCategory,
   exportExpenses,
   exportMember,
+  exportKinds,
   exportMembers,
   exportTransactions,
   type CategoryExportInput,
@@ -63,6 +65,33 @@ function sendFailure(res: Response, f: ExportFailureResult): void {
 export function createExportsRouter(deps: GuardDeps): Router {
   const router = Router();
   router.use(requireAuth(deps));
+
+  router.get("/", requirePermission("reports.export"), async (req, res) => {
+    const actor = actorOf(res);
+    if (actor === null) {
+      sendUnauthorized(res);
+      return;
+    }
+    const q = req.query;
+    const result = await exportKinds(deps.store, actor, {
+      kinds: q["kinds"],
+      format: q["format"],
+      fromDay: q["fromDay"],
+      toDay: q["toDay"],
+      category: q["category"],
+      createdById: q["createdById"],
+      memberId: q["memberId"],
+    });
+    if (!result.ok) {
+      sendFailure(res, result);
+      return;
+    }
+    // The name holds only today's Lagos day: no kind list, no category text, no person, no member.
+    res.status(200);
+    res.set("Content-Type", XLSX_TYPE);
+    res.set("Content-Disposition", `attachment; filename="export-${lagosDay(deps.now())}.xlsx"`);
+    res.send(result.value);
+  });
 
   router.get("/:kind", requirePermission("reports.export"), async (req, res) => {
     const actor = actorOf(res);

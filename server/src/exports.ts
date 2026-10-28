@@ -1,7 +1,9 @@
-// Export logic (steps 8.2, 8.3 and 9.1i; D-104, D-110, A-249, A-251, A-252, A-277, DR-13). Rules over the Store: no HTTP here.
+// Export logic (steps 8.2, 8.3, 9.1i and 9.1j; D-104, D-110, A-249, A-251, A-252, A-277, A-278, DR-13).
+// Rules over the Store: no HTTP here.
 // Each export reads its rows, builds one .xlsx file (workbook.ts) and writes one audit entry
 // "export.created", all in one store transaction: a file that cannot be built writes no entry.
-// The audit detail holds the kind, the scope, the days and the category: no name, no phone.
+// exportKinds puts several kinds in one file, one sheet per kind, with one entry naming them all.
+// The audit detail holds the kinds, the scope, the days and the category: no name, no phone.
 
 import { memberBalances } from "./balances.js";
 import { isPaymentCategory } from "./categories.js";
@@ -9,7 +11,7 @@ import { isExpenseCategory, isSystemOnlyExpenseCategory } from "./expense-catego
 import { loanOutstanding } from "./loans.js";
 import { lagosDay, isCalendarDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
-import type { MemberStatus, PaymentMethod, Store } from "./store.js";
+import type { MemberRecord, MemberStatus, PaymentMethod, Store } from "./store.js";
 import { buildWorkbook, type Sheet, type SheetColumn, type SheetRow } from "./workbook.js";
 
 /** Longest createdById filter accepted (as USER_FILTER_MAX in members.ts and expenses.ts). */
@@ -22,6 +24,19 @@ export interface ExportActor {
 }
 
 export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category" | "member";
+
+/** The sheet order in one workbook (D-110 item 4), whatever order the kinds were asked in. */
+export const EXPORT_KINDS: readonly ExportKind[] = Object.freeze([
+  "members",
+  "transactions",
+  "expenses",
+  "cashflow",
+  "category",
+  "member",
+]);
+
+/** The kinds that read fromDay and toDay. */
+const DATED_KINDS: ReadonlySet<ExportKind> = new Set(["transactions", "expenses", "cashflow", "category"]);
 
 export type ExportFailure = "forbidden" | "invalid_input" | "not_found";
 
@@ -132,13 +147,22 @@ function run(
 ): Promise<ExportResult> {
   return store.transaction(async (tx): Promise<ExportResult> => {
     const file = await buildWorkbook([await sheetOf(tx)]);
-    const days =
-      kind === "members" ? "" : ` from_day=${checked.fromDay ?? "none"} to_day=${checked.toDay ?? "none"}`;
-    // Last, because a category name may hold spaces.
-    const category = checked.category !== undefined ? ` category=${checked.category}` : "";
-    await appendAudit(tx, actor, `kind=${kind} scope=${checked.scopeId ?? "all"}${days}${category}`);
+    await appendAudit(tx, actor, detailOf([kind], checked));
     return { ok: true, value: file };
   });
+}
+
+/**
+ * "kind=<k1,k2> scope=<id|all>", then the days when a kind reads them, then the Membership ID for
+ * the member kind, then the category for the category kind: last, because a name may hold spaces.
+ */
+function detailOf(kinds: readonly ExportKind[], checked: Checked, membershipId?: string): string {
+  const days = kinds.some((k) => DATED_KINDS.has(k))
+    ? ` from_day=${checked.fromDay ?? "none"} to_day=${checked.toDay ?? "none"}`
+    : "";
+  const member = membershipId !== undefined ? ` membership_id=${membershipId}` : "";
+  const category = checked.category !== undefined ? ` category=${checked.category}` : "";
+  return `kind=${kinds.join(",")} scope=${checked.scopeId ?? "all"}${days}${member}${category}`;
 }
 
 function appendAudit(tx: Store, actor: ExportActor, detail: string): Promise<unknown> {
@@ -166,25 +190,27 @@ export async function exportMembers(
 ): Promise<ExportResult> {
   const checked = check(actor, { createdById: input.createdById });
   if (!checked.ok) return checked;
-  const { scopeId } = checked.value;
 
-  return run(store, actor, "members", checked.value, async (tx) => {
-    const nameOf = await namesOf(tx);
-    const members = await tx.members.list(scopeId !== undefined ? { createdById: scopeId } : {});
-    return {
-      name: "Members",
-      columns: MEMBER_COLUMNS,
-      rows: members.map((m) => ({
-        name: m.fullName,
-        membershipId: m.membershipId,
-        phone: m.phone,
-        occupation: m.occupation,
-        status: STATUS_LABEL[m.status],
-        joined: lagosDay(m.createdAt),
-        recordedBy: nameOf(m.createdById),
-      })),
-    };
-  });
+  return run(store, actor, "members", checked.value, (tx) => membersSheet(tx, checked.value));
+}
+
+async function membersSheet(tx: Store, checked: Checked): Promise<Sheet> {
+  const { scopeId } = checked;
+  const nameOf = await namesOf(tx);
+  const members = await tx.members.list(scopeId !== undefined ? { createdById: scopeId } : {});
+  return {
+    name: "Members",
+    columns: MEMBER_COLUMNS,
+    rows: members.map((m) => ({
+      name: m.fullName,
+      membershipId: m.membershipId,
+      phone: m.phone,
+      occupation: m.occupation,
+      status: STATUS_LABEL[m.status],
+      joined: lagosDay(m.createdAt),
+      recordedBy: nameOf(m.createdById),
+    })),
+  };
 }
 
 const TRANSACTION_COLUMNS: readonly SheetColumn[] = [
@@ -212,12 +238,14 @@ export async function exportTransactions(
   const checked = check(actor, input);
   if (!checked.ok) return checked;
 
-  return run(store, actor, "transactions", checked.value, async (tx) => ({
-    name: "Transactions",
-    columns: TRANSACTION_COLUMNS,
-    rows: (await linesOf(tx, checked.value)).map(transactionRow),
-  }));
+  return run(store, actor, "transactions", checked.value, (tx) => transactionsSheet(tx, checked.value));
 }
+
+const transactionsSheet = async (tx: Store, checked: Checked): Promise<Sheet> => ({
+  name: "Transactions",
+  columns: TRANSACTION_COLUMNS,
+  rows: (await linesOf(tx, checked)).map(transactionRow),
+});
 
 /** One payment line with what its row shows. */
 interface LineRow {
@@ -289,14 +317,16 @@ export async function exportExpenses(
   const checked = check(actor, input);
   if (!checked.ok) return checked;
 
-  return run(store, actor, "expenses", checked.value, async (tx) => ({
-    name: "Expenses",
-    columns: EXPENSE_COLUMNS,
-    rows: (await expensesOf(tx, checked.value))
-      .filter((e) => !isExpenseCategory(e.category) || !isSystemOnlyExpenseCategory(e.category))
-      .map(expenseRow),
-  }));
+  return run(store, actor, "expenses", checked.value, (tx) => expensesSheet(tx, checked.value));
 }
+
+const expensesSheet = async (tx: Store, checked: Checked): Promise<Sheet> => ({
+  name: "Expenses",
+  columns: EXPENSE_COLUMNS,
+  rows: (await expensesOf(tx, checked))
+    .filter((e) => !isExpenseCategory(e.category) || !isSystemOnlyExpenseCategory(e.category))
+    .map(expenseRow),
+});
 
 /** One expense with what its row shows. */
 interface OutRow {
@@ -365,50 +395,52 @@ export async function exportCashflow(
   const checked = check(actor, input);
   if (!checked.ok) return checked;
 
-  return run(store, actor, "cashflow", checked.value, async (tx) => {
-    const ins: SheetRow[] = (await linesOf(tx, checked.value)).map((l) => ({
-      day: l.paidOn,
-      flow: "In",
-      category: l.category,
-      membershipId: l.membershipId,
-      member: l.member,
-      description: null,
-      narration: null,
-      in: l.amount,
-      out: null,
-      method: l.method,
-      recordedBy: l.recordedBy,
-    }));
-    const outs: SheetRow[] = (await expensesOf(tx, checked.value)).map((e) => ({
-      day: e.spentOn,
-      flow: "Out",
-      category: e.category,
-      membershipId: null,
-      member: null,
-      description: e.description,
-      narration: e.narration,
-      in: null,
-      out: e.amount,
-      method: e.method,
-      recordedBy: e.recordedBy,
-    }));
-    // Both lists are in day order; merge them, In first on the same day.
-    const rows: SheetRow[] = [];
-    let i = 0;
-    let o = 0;
-    while (i < ins.length || o < outs.length) {
-      const nextIn = ins[i];
-      const nextOut = outs[o];
-      if (nextIn !== undefined && (nextOut === undefined || (nextIn.day as string) <= (nextOut.day as string))) {
-        rows.push(nextIn);
-        i += 1;
-      } else if (nextOut !== undefined) {
-        rows.push(nextOut);
-        o += 1;
-      }
+  return run(store, actor, "cashflow", checked.value, (tx) => cashflowSheet(tx, checked.value));
+}
+
+async function cashflowSheet(tx: Store, checked: Checked): Promise<Sheet> {
+  const ins: SheetRow[] = (await linesOf(tx, checked)).map((l) => ({
+    day: l.paidOn,
+    flow: "In",
+    category: l.category,
+    membershipId: l.membershipId,
+    member: l.member,
+    description: null,
+    narration: null,
+    in: l.amount,
+    out: null,
+    method: l.method,
+    recordedBy: l.recordedBy,
+  }));
+  const outs: SheetRow[] = (await expensesOf(tx, checked)).map((e) => ({
+    day: e.spentOn,
+    flow: "Out",
+    category: e.category,
+    membershipId: null,
+    member: null,
+    description: e.description,
+    narration: e.narration,
+    in: null,
+    out: e.amount,
+    method: e.method,
+    recordedBy: e.recordedBy,
+  }));
+  // Both lists are in day order; merge them, In first on the same day.
+  const rows: SheetRow[] = [];
+  let i = 0;
+  let o = 0;
+  while (i < ins.length || o < outs.length) {
+    const nextIn = ins[i];
+    const nextOut = outs[o];
+    if (nextIn !== undefined && (nextOut === undefined || (nextIn.day as string) <= (nextOut.day as string))) {
+      rows.push(nextIn);
+      i += 1;
+    } else if (nextOut !== undefined) {
+      rows.push(nextOut);
+      o += 1;
     }
-    return { name: "Cashflow", columns: CASHFLOW_COLUMNS, rows };
-  });
+  }
+  return { name: "Cashflow", columns: CASHFLOW_COLUMNS, rows };
 }
 
 /**
@@ -426,13 +458,17 @@ export async function exportCategory(
 ): Promise<ExportResult> {
   const checked = check(actor, input, true);
   if (!checked.ok) return checked;
+
   const category = checked.value.category as string;
 
-  return run(store, actor, "category", checked.value, async (tx) =>
-    isPaymentCategory(category)
-      ? { name: category, columns: TRANSACTION_COLUMNS, rows: (await linesOf(tx, checked.value)).map(transactionRow) }
-      : { name: category, columns: EXPENSE_COLUMNS, rows: (await expensesOf(tx, checked.value)).map(expenseRow) },
-  );
+  return run(store, actor, "category", checked.value, (tx) => categorySheet(tx, checked.value, category));
+}
+
+/** The category's rows; the sheet takes the name given (exportKinds may change it). */
+async function categorySheet(tx: Store, checked: Checked, name: string): Promise<Sheet> {
+  return isPaymentCategory(checked.category)
+    ? { name, columns: TRANSACTION_COLUMNS, rows: (await linesOf(tx, checked)).map(transactionRow) }
+    : { name, columns: EXPENSE_COLUMNS, rows: (await expensesOf(tx, checked)).map(expenseRow) };
 }
 
 /** Longest memberId accepted (as USER_FILTER_MAX). */
@@ -470,77 +506,196 @@ export async function exportMember(
   input: MemberExportInput,
 ): Promise<ExportResult> {
   if (!hasPermission(actor.subject, "reports.export")) return failure("forbidden");
-  const memberId = input.memberId;
-  if (memberId === undefined) return failure("invalid_input", "missing_member_id");
-  if (typeof memberId !== "string" || memberId.length === 0 || memberId.length > MEMBER_ID_MAX) {
-    return failure("invalid_input", "invalid_member_id");
-  }
+  const memberId = checkMemberId(input.memberId);
+  if (typeof memberId !== "string") return memberId;
   const seesAll = actor.subject.role === "SUPER_ADMIN";
 
   return store.transaction(async (tx): Promise<ExportResult> => {
-    const member = await tx.members.findById(memberId);
+    const member = await visibleMember(tx, actor, memberId);
     if (member === null) return failure("not_found");
-    if (!seesAll && member.createdById !== actor.id) return failure("not_found");
-
-    const nameOf = await namesOf(tx);
-    const payments = await tx.payments.listByMember(member.id);
-    const balances = memberBalances(payments, await tx.payOffs.listByMember(member.id));
-    const loans = await tx.loans.listByMember(member.id);
-    const row = (values: Record<string, string | bigint>): SheetRow => ({ ...EMPTY_MEMBER_ROW, ...values });
-
-    const details: [string, string][] = [
-      ["Name", member.fullName],
-      ["Membership ID", member.membershipId],
-      ["Phone", member.phone],
-      ["Address", member.address],
-      ["Occupation", member.occupation],
-      ["Status", STATUS_LABEL[member.status]],
-      ["Date joined", lagosDay(member.createdAt)],
-      ["Recorded by", nameOf(member.createdById)],
-    ];
-    const rows: SheetRow[] = [
-      ...details.map(([item, value]) => row({ section: "Details", item, value })),
-      ...balances.categories.map((c) =>
-        row({
-          section: "Balance",
-          item: c.category,
-          value: c.refundable ? "Refundable" : "Not refundable",
-          balance: c.balance,
-        }),
-      ),
-      // A stable sort: payments of the same day keep the store's order (time recorded).
-      ...[...payments]
-        .sort((x, y) => (x.paidOn < y.paidOn ? -1 : x.paidOn > y.paidOn ? 1 : 0))
-        .flatMap((p) =>
-          p.lines.map((l) =>
-            row({
-              section: "Payment",
-              item: l.category,
-              day: p.paidOn,
-              method: METHOD_LABEL[p.method],
-              paid: l.amount,
-              recordedBy: nameOf(p.createdById),
-            }),
-          ),
-        ),
-      ...loans.map((loan) => {
-        const outstanding = loanOutstanding(loan, payments);
-        return row({
-          section: "Loan",
-          item: "Loan",
-          value: outstanding > 0n ? "Active" : "Fully repaid",
-          day: loan.givenOn,
-          principal: loan.principal,
-          repaid: loan.principal - outstanding,
-          outstanding,
-          recordedBy: nameOf(loan.createdById),
-        });
-      }),
-    ];
-
-    const file = await buildWorkbook([{ name: "Member", columns: MEMBER_KIND_COLUMNS, rows }]);
+    const file = await buildWorkbook([await memberSheet(tx, member)]);
     const scope = seesAll ? "all" : actor.id;
     await appendAudit(tx, actor, `kind=member scope=${scope} membership_id=${member.membershipId}`);
     return { ok: true, value: file };
   });
 }
+
+/** The member id, or missing_member_id or invalid_member_id. */
+function checkMemberId(memberId: unknown): string | ExportFailureResult {
+  if (memberId === undefined) return failure("invalid_input", "missing_member_id");
+  if (typeof memberId !== "string" || memberId.length === 0 || memberId.length > MEMBER_ID_MAX) {
+    return failure("invalid_input", "invalid_member_id");
+  }
+  return memberId;
+}
+
+/** The member, or null when it is unknown or Staff did not record it (DR-13, as getMember). */
+async function visibleMember(tx: Store, actor: ExportActor, memberId: string): Promise<MemberRecord | null> {
+  const member = await tx.members.findById(memberId);
+  if (member === null) return null;
+  if (actor.subject.role !== "SUPER_ADMIN" && member.createdById !== actor.id) return null;
+  return member;
+}
+
+async function memberSheet(tx: Store, member: MemberRecord): Promise<Sheet> {
+  const nameOf = await namesOf(tx);
+  const payments = await tx.payments.listByMember(member.id);
+  const balances = memberBalances(payments, await tx.payOffs.listByMember(member.id));
+  const loans = await tx.loans.listByMember(member.id);
+  const row = (values: Record<string, string | bigint>): SheetRow => ({ ...EMPTY_MEMBER_ROW, ...values });
+
+  const details: [string, string][] = [
+    ["Name", member.fullName],
+    ["Membership ID", member.membershipId],
+    ["Phone", member.phone],
+    ["Address", member.address],
+    ["Occupation", member.occupation],
+    ["Status", STATUS_LABEL[member.status]],
+    ["Date joined", lagosDay(member.createdAt)],
+    ["Recorded by", nameOf(member.createdById)],
+  ];
+  const rows: SheetRow[] = [
+    ...details.map(([item, value]) => row({ section: "Details", item, value })),
+    ...balances.categories.map((c) =>
+      row({
+        section: "Balance",
+        item: c.category,
+        value: c.refundable ? "Refundable" : "Not refundable",
+        balance: c.balance,
+      }),
+    ),
+    // A stable sort: payments of the same day keep the store's order (time recorded).
+    ...[...payments]
+      .sort((x, y) => (x.paidOn < y.paidOn ? -1 : x.paidOn > y.paidOn ? 1 : 0))
+      .flatMap((p) =>
+        p.lines.map((l) =>
+          row({
+            section: "Payment",
+            item: l.category,
+            day: p.paidOn,
+            method: METHOD_LABEL[p.method],
+            paid: l.amount,
+            recordedBy: nameOf(p.createdById),
+          }),
+        ),
+      ),
+    ...loans.map((loan) => {
+      const outstanding = loanOutstanding(loan, payments);
+      return row({
+        section: "Loan",
+        item: "Loan",
+        value: outstanding > 0n ? "Active" : "Fully repaid",
+        day: loan.givenOn,
+        principal: loan.principal,
+        repaid: loan.principal - outstanding,
+        outstanding,
+        recordedBy: nameOf(loan.createdById),
+      });
+    }),
+  ];
+  return { name: "Member", columns: MEMBER_KIND_COLUMNS, rows };
+}
+
+/** Raw values from the query string for GET /exports (D-110 item 4). */
+export interface KindsExportInput extends CategoryExportInput, MemberExportInput {
+  /** The kinds, comma separated, each once, for example "members,cashflow". Required. */
+  kinds?: unknown;
+  /** "xlsx" or none. "pdf" is planned at 9.1l. */
+  format?: unknown;
+}
+
+/** Longest kinds text accepted; all six kinds take 54 characters. */
+const KINDS_MAX = 100;
+
+/** The kinds in sheet order, or missing_kinds or invalid_kinds (empty, unknown or repeated). */
+function checkKinds(value: unknown): ExportKind[] | ExportFailureResult {
+  if (value === undefined) return failure("invalid_input", "missing_kinds");
+  if (typeof value !== "string" || value.length === 0 || value.length > KINDS_MAX) {
+    return failure("invalid_input", "invalid_kinds");
+  }
+  const asked = value.split(",");
+  const known = new Set<string>(EXPORT_KINDS);
+  if (asked.some((k) => !known.has(k)) || new Set(asked).size !== asked.length) {
+    return failure("invalid_input", "invalid_kinds");
+  }
+  return EXPORT_KINDS.filter((k) => asked.includes(k));
+}
+
+/**
+ * Several kinds in one .xlsx file, one sheet per kind in the order of EXPORT_KINDS, and one audit
+ * entry naming every kind (D-110 item 4, A-278). Each kind reads its rows as its own export does.
+ * Order: permission, kinds, format, then as the kinds ticked: createdById (a kind other than
+ * member), category (category kind), fromDay, toDay and range (a kind with days), memberId (member
+ * kind); inside the transaction, not_found for the member. The member sheet ignores createdById. The category sheet is named after the category, or
+ * "<name> (category)" when that is another sheet's name ("Expenses" with the expenses kind).
+ */
+export async function exportKinds(
+  store: Store,
+  actor: ExportActor,
+  input: KindsExportInput,
+): Promise<ExportResult> {
+  if (!hasPermission(actor.subject, "reports.export")) return failure("forbidden");
+  const kinds = checkKinds(input.kinds);
+  if (!Array.isArray(kinds)) return kinds;
+  if (input.format === "pdf") return failure("invalid_input", "unsupported_format");
+  if (input.format !== undefined && input.format !== "xlsx") return failure("invalid_input", "invalid_format");
+
+  const dated = kinds.some((k) => DATED_KINDS.has(k));
+  const checked = check(
+    actor,
+    {
+      // The member kind does not read createdById, as exportMember (A-277).
+      ...(kinds.some((k) => k !== "member") ? { createdById: input.createdById } : {}),
+      category: input.category,
+      ...(dated ? { fromDay: input.fromDay, toDay: input.toDay } : {}),
+    },
+    kinds.includes("category"),
+  );
+  if (!checked.ok) return checked;
+  let memberId: string | undefined;
+  if (kinds.includes("member")) {
+    const id = checkMemberId(input.memberId);
+    if (typeof id !== "string") return id;
+    memberId = id;
+  }
+
+  return store.transaction(async (tx): Promise<ExportResult> => {
+    const member = memberId !== undefined ? await visibleMember(tx, actor, memberId) : undefined;
+    if (member === null) return failure("not_found");
+    const taken = new Set(kinds.flatMap((k) => (KIND_SHEET[k] !== undefined ? [KIND_SHEET[k].toLowerCase()] : [])));
+    const sheets: Sheet[] = [];
+    for (const kind of kinds) {
+      if (kind === "member") {
+        sheets.push(await memberSheet(tx, member as MemberRecord));
+      } else if (kind === "category") {
+        const category = checked.value.category as string;
+        const name = taken.has(category.toLowerCase()) ? `${category} (category)` : category;
+        sheets.push(await categorySheet(tx, checked.value, name));
+      } else {
+        // Only the category sheet reads the category (A-256).
+        sheets.push(await SHEET_OF[kind](tx, { ...checked.value, category: undefined }));
+      }
+    }
+    const file = await buildWorkbook(sheets);
+    await appendAudit(tx, actor, detailOf(kinds, checked.value, member?.membershipId));
+    return { ok: true, value: file };
+  });
+}
+
+/** The fixed sheet name of each kind; the category sheet takes the category's name. */
+const KIND_SHEET: Partial<Record<ExportKind, string>> = {
+  members: "Members",
+  transactions: "Transactions",
+  expenses: "Expenses",
+  cashflow: "Cashflow",
+  member: "Member",
+};
+
+type SheetOf = (tx: Store, checked: Checked) => Promise<Sheet>;
+
+const SHEET_OF: Record<"members" | "transactions" | "expenses" | "cashflow", SheetOf> = {
+  members: membersSheet,
+  transactions: transactionsSheet,
+  expenses: expensesSheet,
+  cashflow: cashflowSheet,
+};

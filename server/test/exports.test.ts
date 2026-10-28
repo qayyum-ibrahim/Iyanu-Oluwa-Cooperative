@@ -5,6 +5,7 @@ import {
   exportCashflow,
   exportCategory,
   exportExpenses,
+  exportKinds,
   exportMember,
   exportMembers,
   exportTransactions,
@@ -897,6 +898,219 @@ describe("exportMember (9.1i)", () => {
 
 type MemberExportInputLoose = Parameters<typeof exportMember>[2];
 
+/** Every sheet of a workbook by name, in the workbook's order; an empty cell reads null. */
+async function sheetsOf(file: Buffer): Promise<Map<string, unknown[][]>> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(file as unknown as ExcelJS.Buffer);
+  const out = new Map<string, unknown[][]>();
+  for (const sheet of workbook.worksheets) {
+    const rows: unknown[][] = [];
+    for (let r = 1; r <= sheet.rowCount; r += 1) {
+      const row = sheet.getRow(r);
+      const cells: unknown[] = [];
+      for (let c = 1; c <= sheet.columnCount; c += 1) cells.push(row.getCell(c).value ?? null);
+      rows.push(cells);
+    }
+    out.set(sheet.name, rows);
+  }
+  return out;
+}
+
+/** The one sheet of a single-kind file, empty cells as null, to compare with exportKinds. */
+const onlySheet = async (r: ExportResult) => [...(await sheetsOf(must(r))).values()][0];
+
+describe("exportKinds (9.1j)", () => {
+  const invalid = (code: string) => ({ ok: false, reason: "invalid_input", code });
+
+  it("refuses Staff without reports.export and an inactive Super Admin, before the kinds", async () => {
+    const { store, admin, noExport } = await build();
+    const inactive: ExportActor = { id: admin.id, subject: { ...subjectOf(admin), isActive: false } };
+    for (const actor of [actorOf(noExport), inactive]) {
+      expect(await exportKinds(store, actor, {})).toEqual({ ok: false, reason: "forbidden" });
+      expect(await exportKinds(store, actor, { kinds: "members" })).toEqual({ ok: false, reason: "forbidden" });
+    }
+    expect(await exportsAudit(store)).toEqual([]);
+  });
+
+  it("answers missing_kinds, then invalid_kinds for an empty, unknown, repeated or too long list", async () => {
+    const { store, admin } = await build();
+    const actor = actorOf(admin);
+    expect(await exportKinds(store, actor, { format: "bad" })).toEqual(invalid("missing_kinds"));
+    for (const kinds of ["", 5, null, ["members"], "nope", "Members", "members,", ",members", "members,,cashflow",
+      "members,members", "members, cashflow", "toString", "x".repeat(101)]) {
+      expect(await exportKinds(store, actor, { kinds, format: "bad" })).toEqual(invalid("invalid_kinds"));
+    }
+    expect(await exportsAudit(store)).toEqual([]);
+  });
+
+  it("answers unsupported_format for pdf and invalid_format for anything but xlsx, before the other input", async () => {
+    const { store, admin } = await build();
+    const actor = actorOf(admin);
+    expect(await exportKinds(store, actor, { kinds: "transactions", format: "pdf", fromDay: "bad" })).toEqual(
+      invalid("unsupported_format"),
+    );
+    for (const format of ["", "XLSX", "xls", ["xlsx"], 1]) {
+      expect(await exportKinds(store, actor, { kinds: "transactions", format, fromDay: "bad" })).toEqual(
+        invalid("invalid_format"),
+      );
+    }
+    expect((await exportKinds(store, actor, { kinds: "members", format: "xlsx" })).ok).toBe(true);
+  });
+
+  it("checks each part only when a ticked kind reads it", async () => {
+    const { store, admin, a } = await build();
+    const ok = async (input: Parameters<typeof exportKinds>[2]) => (await exportKinds(store, actorOf(admin), input)).ok;
+    // Days: only transactions, expenses, cashflow and category read them.
+    expect(await ok({ kinds: "members", fromDay: "bad", toDay: "bad" })).toBe(true);
+    expect(await exportKinds(store, actorOf(admin), { kinds: "members,cashflow", fromDay: "bad" })).toEqual(
+      invalid("invalid_from_day"),
+    );
+    expect(
+      await exportKinds(store, actorOf(admin), { kinds: "expenses", fromDay: "2026-10-02", toDay: "2026-10-01" }),
+    ).toEqual(invalid("invalid_range"));
+    // Category: only the category kind reads it.
+    expect(await ok({ kinds: "transactions", category: "nope" })).toBe(true);
+    expect(await exportKinds(store, actorOf(admin), { kinds: "members,category" })).toEqual(invalid("invalid_category"));
+    // memberId: only the member kind reads it.
+    expect(await ok({ kinds: "members", memberId: "" })).toBe(true);
+    expect(await exportKinds(store, actorOf(admin), { kinds: "members,member" })).toEqual(invalid("missing_member_id"));
+    expect(await exportKinds(store, actorOf(admin), { kinds: "member", memberId: "" })).toEqual(
+      invalid("invalid_member_id"),
+    );
+    // createdById: every kind but member reads it.
+    const m = await store.members.create({ fullName: "Ada Test", phone: "08000000001", address: "", occupation: "Trader", createdById: a.id });
+    expect(await ok({ kinds: "member", memberId: m.id, createdById: "" })).toBe(true);
+    expect(await exportKinds(store, actorOf(admin), { kinds: "member,members", memberId: m.id, createdById: "" })).toEqual(
+      invalid("invalid_created_by_id"),
+    );
+    // Order: createdById, then category, then the days, then memberId.
+    expect(
+      await exportKinds(store, actorOf(admin), { kinds: "category,member", createdById: "", fromDay: "bad" }),
+    ).toEqual(invalid("invalid_created_by_id"));
+    expect(await exportKinds(store, actorOf(admin), { kinds: "category,member", fromDay: "bad" })).toEqual(
+      invalid("invalid_category"),
+    );
+    expect(
+      await exportKinds(store, actorOf(admin), { kinds: "category,member", category: "Shares", fromDay: "bad" }),
+    ).toEqual(invalid("invalid_from_day"));
+    expect(await exportKinds(store, actorOf(admin), { kinds: "category,member", category: "Shares" })).toEqual(
+      invalid("missing_member_id"),
+    );
+  });
+
+  it("answers not_found for an unknown member or one Staff did not record, and writes no entry", async () => {
+    const { store, admin, b, ma } = await withLoans();
+    expect(await exportKinds(store, actorOf(admin), { kinds: "members,member", memberId: "nope" })).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(await exportKinds(store, actorOf(b), { kinds: "members,member", memberId: ma.id })).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(await exportsAudit(store)).toEqual([]);
+  });
+
+  it("gives one sheet per kind in the fixed order, each the same as its own export", async () => {
+    const { store, admin, a, ma, spend } = await withLoans();
+    await spend(a.id, "2026-10-07", "Allowances", 30_000n);
+    await spend(admin.id, "2026-10-08", "Others", 20_000n);
+    const days = { fromDay: "2026-10-01", toDay: "2026-10-31" };
+    for (const u of [admin, a]) {
+      const actor = actorOf(u);
+      const file = await sheetsOf(
+        must(
+          await exportKinds(store, actor, {
+            kinds: "member,category,cashflow,expenses,transactions,members",
+            category: "Shares",
+            memberId: ma.id,
+            ...days,
+          }),
+        ),
+      );
+      expect([...file.keys()]).toEqual(["Members", "Transactions", "Expenses", "Cashflow", "Shares", "Member"]);
+      expect(file.get("Members")).toEqual(await onlySheet(await exportMembers(store, actor, {})));
+      expect(file.get("Transactions")).toEqual(await onlySheet(await exportTransactions(store, actor, days)));
+      expect(file.get("Expenses")).toEqual(await onlySheet(await exportExpenses(store, actor, days)));
+      expect(file.get("Cashflow")).toEqual(await onlySheet(await exportCashflow(store, actor, days)));
+      expect(file.get("Shares")).toEqual(
+        await onlySheet(await exportCategory(store, actor, { category: "Shares", ...days })),
+      );
+      expect(file.get("Member")).toEqual(await onlySheet(await exportMember(store, actor, { memberId: ma.id })));
+    }
+  });
+
+  it("names the Expenses category sheet \"Expenses (category)\" only next to the expenses sheet", async () => {
+    const { store, admin, spend } = await build();
+    await spend(admin.id, "2026-10-07", "Expenses", 40_000n);
+    await spend(admin.id, "2026-10-07", "Allowances", 10_000n);
+    const both = await sheetsOf(must(await exportKinds(store, actorOf(admin), { kinds: "expenses,category", category: "Expenses" })));
+    expect([...both.keys()]).toEqual(["Expenses", "Expenses (category)"]);
+    expect(both.get("Expenses")?.at(-1)?.[4]).toBe(500);
+    expect(both.get("Expenses (category)")?.at(-1)?.[4]).toBe(400);
+    const alone = await sheetsOf(must(await exportKinds(store, actorOf(admin), { kinds: "category", category: "Expenses" })));
+    expect([...alone.keys()]).toEqual(["Expenses"]);
+  });
+
+  it("scopes every sheet as its own export: Staff their own, a Staff createdById ignored; the Super Admin one user's", async () => {
+    const { store, admin, a, b, ma } = await withLoans();
+    const shares = async (u: UserRecord, createdById?: string) => {
+      const file = await sheetsOf(
+        must(await exportKinds(store, actorOf(u), { kinds: "transactions,members", ...(createdById ? { createdById } : {}) })),
+      );
+      return [file.get("Transactions")?.at(-1)?.[4], file.get("Members")?.slice(1).map((r) => r[0])];
+    };
+    expect(await shares(a)).toEqual([62500, ["Ada Test"]]);
+    expect(await shares(a, b.id)).toEqual([62500, ["Ada Test"]]);
+    expect(await shares(admin, b.id)).toEqual([0, ["Bola Test"]]);
+    // The member sheet does not read createdById: the Super Admin still gets Ada.
+    const file = await sheetsOf(
+      must(await exportKinds(store, actorOf(admin), { kinds: "members,member", memberId: ma.id, createdById: b.id })),
+    );
+    expect(file.get("Member")?.[1]?.slice(0, 3)).toEqual(["Details", "Name", "Ada Test"]);
+  });
+
+  it("writes one audit entry naming every kind in sheet order, with the days, the Membership ID and the category, no name", async () => {
+    const { store, admin, a, ma } = await withLoans();
+    must(await exportKinds(store, actorOf(admin), { kinds: "members", fromDay: "2026-10-01" }));
+    must(await exportKinds(store, actorOf(a), {
+      kinds: "member,category,members",
+      memberId: ma.id,
+      category: "Special Savings",
+      fromDay: "2026-10-01",
+    }));
+    must(await exportKinds(store, actorOf(admin), { kinds: "member", memberId: ma.id, toDay: "2026-10-31" }));
+    expect((await exportsAudit(store)).reverse()).toEqual([
+      { actorId: admin.id, entityType: "Export", entityId: null, detail: "kind=members scope=all" },
+      {
+        actorId: a.id,
+        entityType: "Export",
+        entityId: null,
+        detail: `kind=members,category,member scope=${a.id} from_day=2026-10-01 to_day=none membership_id=${ma.membershipId} category=Special Savings`,
+      },
+      { actorId: admin.id, entityType: "Export", entityId: null, detail: `kind=member scope=all membership_id=${ma.membershipId}` },
+    ]);
+    expect((await exportsAudit(store)).map((e) => e.detail ?? "").join(" ")).not.toContain("Ada");
+  });
+
+  it("writes no entry when one sheet cannot be built, and gives no file when the audit write fails", async () => {
+    const { store, admin, a, ma, pay } = await withLoans();
+    const failing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({ ...tx, audit: { ...tx.audit, append: () => Promise.reject(new Error("audit down")) } }),
+        ),
+    };
+    await expect(exportKinds(failing, actorOf(admin), { kinds: "members,cashflow" })).rejects.toThrow("audit down");
+    await pay(ma.id, "2026-10-20", [["Savings", 10n ** 15n]], a.id);
+    // Members alone would build; the transactions sheet cannot, so there is no file and no entry.
+    expect((await exportKinds(store, actorOf(admin), { kinds: "members" })).ok).toBe(true);
+    await expect(exportKinds(store, actorOf(admin), { kinds: "members,transactions" })).rejects.toThrow(WorkbookError);
+    expect((await exportsAudit(store)).map((e) => e.detail)).toEqual(["kind=members scope=all"]);
+  });
+});
+
 describe("exports on the Prisma store (real SQLite)", () => {
   let tmp: TempDb;
   let store: Store;
@@ -961,6 +1175,22 @@ describe("exports on the Prisma store (real SQLite)", () => {
         `kind=expenses scope=${b.id} from_day=none to_day=none`,
       ].sort(),
     );
+  });
+
+  it("gives one workbook of several kinds and one audit entry read back from the database (9.1j)", async () => {
+    const { a, ma } = await withLoans(store);
+    const actor = actorOf(a);
+    const days = { fromDay: "2026-10-01", toDay: "2026-10-31" };
+    const file = await sheetsOf(
+      must(await exportKinds(store, actor, { kinds: "member,cashflow,members", memberId: ma.id, ...days })),
+    );
+    expect([...file.keys()]).toEqual(["Members", "Cashflow", "Member"]);
+    expect(file.get("Cashflow")).toEqual(await onlySheet(await exportCashflow(store, actor, days)));
+    expect(file.get("Member")?.at(-1)).toEqual(["Total", null, null, null, null, 62500, 62500, 330000, 50000, 280000, null]);
+    const entries = (await store.audit.listByActor(a.id)).filter((e) => e.detail?.startsWith("kind=members,"));
+    expect(entries.map((e) => e.detail)).toEqual([
+      `kind=members,cashflow,member scope=${a.id} from_day=2026-10-01 to_day=2026-10-31 membership_id=${ma.membershipId}`,
+    ]);
   });
 
   it("gives the same member file and audit entry read back from the database (9.1i)", async () => {

@@ -91,6 +91,22 @@ async function open(file: Buffer): Promise<{ names: string[]; rows: unknown[][] 
   return { names: workbook.worksheets.map((w) => w.name), rows };
 }
 
+/** Every sheet's name and rows, header first, in the workbook's order. */
+async function openAll(file: Buffer): Promise<[string, unknown[][]][]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(file as unknown as ExcelJS.Buffer);
+  return workbook.worksheets.map((sheet) => {
+    const rows: unknown[][] = [];
+    for (let r = 1; r <= sheet.rowCount; r += 1) {
+      const row = sheet.getRow(r);
+      const cells: unknown[] = [];
+      for (let c = 1; c <= sheet.columnCount; c += 1) cells.push(row.getCell(c).value);
+      rows.push(cells);
+    }
+    return [sheet.name, rows];
+  });
+}
+
 /** The last row (Total) of the first sheet. */
 const totalRow = async (file: Buffer) => (await open(file)).rows.at(-1);
 
@@ -119,7 +135,7 @@ describe("GET /exports/:kind (8.4)", () => {
     }
   });
 
-  it("answers 404 as JSON for an unknown kind, and for /exports alone", async () => {
+  it("answers 404 as JSON for an unknown kind", async () => {
     const { app, store, admin, bearer } = await build();
     for (const kind of ["nope", "Members", "toString", "__proto__"]) {
       const res = await request(app).get(`/exports/${kind}`).set("Authorization", bearer(admin));
@@ -127,7 +143,6 @@ describe("GET /exports/:kind (8.4)", () => {
       expect(res.body).toEqual({ error: "not_found" });
       expect(res.headers["cache-control"]).toBe("no-store");
     }
-    expect((await request(app).get("/exports").set("Authorization", bearer(admin))).status).toBe(404);
     expect(await store.audit.listByActor(admin.id)).toEqual([]);
   });
 
@@ -370,6 +385,113 @@ describe("GET /exports/:kind (8.4)", () => {
       expect(res.headers["content-disposition"]).toBeUndefined();
       // WorkbookError does not set its own name, so the log reads "Error" (no message, no data).
       expect(log).toHaveBeenCalledWith("request failed:", "Error");
+    } finally {
+      log.mockRestore();
+    }
+    expect(await store.audit.listByActor(admin.id)).toEqual([]);
+  });
+});
+
+describe("GET /exports?kinds= (9.1j)", () => {
+  it("answers 401 without a token or with a bad token, and 403 to Staff without reports.export, before the query", async () => {
+    const { app, store, noExport, bearer } = await build();
+    for (const res of [
+      await request(app).get("/exports?kinds=members"),
+      await request(app).get("/exports").set("Authorization", "Bearer not.a.token"),
+    ]) {
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: "unauthorized" });
+    }
+    for (const path of ["/exports", "/exports?kinds=nope", "/exports?kinds=members&format=pdf"]) {
+      const res = await request(app).get(path).set("Authorization", bearer(noExport));
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: "forbidden" });
+      expect(res.headers["cache-control"]).toBe("no-store");
+    }
+    expect(await store.audit.listByActor(noExport.id)).toEqual([]);
+  });
+
+  it("answers 200 with one .xlsx file named export-<day>.xlsx, one sheet per kind in the fixed order", async () => {
+    const { app, admin, ma, bearer } = await build();
+    const res = await download(
+      app,
+      `/exports?kinds=member,category,cashflow,expenses,transactions,members&category=Shares&memberId=${ma.id}&format=xlsx`,
+      bearer(admin),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe(XLSX_TYPE);
+    expect(res.headers["content-disposition"]).toBe('attachment; filename="export-2026-10-21.xlsx"');
+    expect(res.headers["cache-control"]).toBe("no-store");
+    const sheets = await openAll(res.body as Buffer);
+    expect(sheets.map(([name]) => name)).toEqual(["Members", "Transactions", "Expenses", "Cashflow", "Shares", "Member"]);
+    const total = (name: string) => sheets.find(([n]) => n === name)?.[1].at(-1);
+    expect(total("Transactions")).toEqual(["Total", null, null, null, 12005.5, null, null]);
+    expect(total("Shares")).toEqual(["Total", null, null, null, 12005, null, null]);
+    expect(total("Expenses")).toEqual(["Total", null, null, null, 1000, null, null]);
+  });
+
+  it("gives Staff their own rows on every sheet, and the days from the query", async () => {
+    const { app, a, b, bearer } = await build();
+    const res = await download(app, `/exports?kinds=transactions,members&createdById=${b.id}&fromDay=2026-10-01`, bearer(a));
+    const sheets = await openAll(res.body as Buffer);
+    expect(sheets[0]?.[1].map((r) => r[0])).toEqual(["Name", "Member A"]);
+    expect(sheets[1]?.[1].at(-1)).toEqual(["Total", null, null, null, 10000.5, null, null]);
+  });
+
+  it.each([
+    ["", "missing_kinds"],
+    ["?kinds=", "invalid_kinds"],
+    ["?kinds=nope", "invalid_kinds"],
+    ["?kinds=members,members", "invalid_kinds"],
+    ["?kinds=members&kinds=cashflow", "invalid_kinds"],
+    ["?kinds=members&format=pdf", "unsupported_format"],
+    ["?kinds=members&format=csv", "invalid_format"],
+    ["?kinds=members&format=xlsx&format=xlsx", "invalid_format"],
+    ["?kinds=cashflow&fromDay=bad", "invalid_from_day"],
+    ["?kinds=category", "invalid_category"],
+    ["?kinds=members,member", "missing_member_id"],
+    ["?kinds=members&createdById=", "invalid_created_by_id"],
+  ])("answers 400 as JSON for /exports%s, with no audit entry", async (query, code) => {
+    const { app, store, admin, bearer } = await build();
+    const res = await request(app).get(`/exports${query}`).set("Authorization", bearer(admin));
+    expect(res.status).toBe(400);
+    expect(res.headers["content-type"]).toMatch(/^application\/json/);
+    expect(res.body).toEqual({ error: "invalid_input", code });
+    expect(res.headers["content-disposition"]).toBeUndefined();
+    expect(await store.audit.listByActor(admin.id)).toEqual([]);
+  });
+
+  it("answers 404 for an unknown member or one Staff did not record, with no audit entry", async () => {
+    const { app, store, admin, a, mb, bearer } = await build();
+    for (const [path, u] of [
+      ["/exports?kinds=members,member&memberId=nope", admin],
+      [`/exports?kinds=member&memberId=${mb.id}`, a],
+    ] as const) {
+      const res = await request(app).get(path).set("Authorization", bearer(u));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "not_found" });
+    }
+    expect(await store.audit.listByActor(admin.id)).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
+  });
+
+  it("writes one audit entry naming every kind", async () => {
+    const { app, store, a, ma, bearer } = await build();
+    await download(app, `/exports?kinds=cashflow,member,members&memberId=${ma.id}&toDay=2026-10-31`, bearer(a));
+    expect((await store.audit.listByActor(a.id)).map((e) => [e.action, e.detail])).toEqual([
+      ["export.created", `kind=members,cashflow,member scope=${a.id} from_day=none to_day=2026-10-31 membership_id=${ma.membershipId}`],
+    ]);
+  });
+
+  it("answers 500 as JSON, and writes no audit entry, when one sheet cannot be built", async () => {
+    const { app, store, admin, a, ma, pay, bearer } = await build();
+    await pay(ma.id, "2026-10-09", [["Shares", 10n ** 15n]], a.id);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const res = await request(app).get("/exports?kinds=members,transactions").set("Authorization", bearer(admin));
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: "server_error" });
+      expect(res.headers["content-disposition"]).toBeUndefined();
     } finally {
       log.mockRestore();
     }

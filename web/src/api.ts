@@ -50,6 +50,12 @@ export interface Member {
   createdAt: string;
 }
 
+/** A member list row as GET /members sends it (MemberListView in server/src/members.ts, D-110). */
+export interface MemberListRow extends Member {
+  /** True while the member has a loan with anything outstanding (DR-08). */
+  onLoan: boolean;
+}
+
 export interface NewMember {
   fullName: string;
   phone: string;
@@ -451,7 +457,7 @@ export interface Api {
   me(): Promise<Me | null>;
   logout(): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<ChangePasswordResult>;
-  listMembers(status: MemberStatusFilter): Promise<CallResult<Member[]>>;
+  listMembers(status: MemberStatusFilter): Promise<CallResult<MemberListRow[]>>;
   getMember(id: string): Promise<CallResult<Member>>;
   createMember(input: NewMember): Promise<CallResult<Member>>;
   memberBalances(id: string): Promise<CallResult<MemberBalances>>;
@@ -544,6 +550,12 @@ function memberOf(value: unknown): Member | null {
     createdById: v.createdById,
     createdAt: v.createdAt,
   };
+}
+
+function memberListRowOf(value: unknown): MemberListRow | null {
+  const member = memberOf(value);
+  if (member === null || !isObject(value) || typeof value["onLoan"] !== "boolean") return null;
+  return { ...member, onLoan: value["onLoan"] };
 }
 
 /** Naira as koboToNairaString (server/src/payments.ts) writes it: never negative, two decimals. */
@@ -1255,8 +1267,8 @@ export function createApi(deps: ApiDeps): Api {
     listMembers(status) {
       return call(`/members?status=${status}`, {}, 200, "members", (value) => {
         if (!Array.isArray(value)) return null;
-        const members = value.map(memberOf);
-        return members.every((m) => m !== null) ? (members as Member[]) : null;
+        const members = value.map(memberListRowOf);
+        return members.every((m) => m !== null) ? (members as MemberListRow[]) : null;
       });
     },
 

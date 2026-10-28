@@ -448,6 +448,9 @@ const MEMBER = {
   createdAt: "2026-10-23T09:00:00.000Z",
 };
 
+/** MEMBER as a GET /members row (D-110). */
+const ROW = { ...MEMBER, onLoan: false };
+
 const BALANCES = {
   memberId: "m1",
   categories: [
@@ -466,8 +469,8 @@ function signedIn(handler: Handler) {
 
 describe("member calls", () => {
   it("lists members with the status filter and the access token", async () => {
-    const { api, calls } = signedIn(() => json(200, { members: [MEMBER] }));
-    expect(await api.listMembers("inactive")).toEqual({ ok: true, value: [MEMBER] });
+    const { api, calls } = signedIn(() => json(200, { members: [ROW] }));
+    expect(await api.listMembers("inactive")).toEqual({ ok: true, value: [ROW] });
     expect(calls).toEqual([
       { path: "/api/members?status=inactive", method: "GET", auth: "Bearer acc1", body: null },
     ]);
@@ -524,9 +527,14 @@ describe("member calls", () => {
       null,
       {},
       { members: "x" },
-      { members: [{ ...MEMBER, status: "GONE" }] },
-      { members: [{ ...MEMBER, fullName: 1 }] },
-      { members: [MEMBER, null] },
+      { members: [{ ...ROW, status: "GONE" }] },
+      { members: [{ ...ROW, fullName: 1 }] },
+      { members: [ROW, null] },
+      { members: [MEMBER] },
+      { members: [{ ...ROW, onLoan: "true" }] },
+      { members: [{ ...ROW, onLoan: 1 }] },
+      { members: [{ ...ROW, onLoan: null }] },
+      { members: [ROW, MEMBER] },
     ];
     for (const body of bad) {
       const { api } = signedIn(() => json(200, body));
@@ -537,9 +545,17 @@ describe("member calls", () => {
   });
 
   it("keeps each member field as sent, an Inactive status too", async () => {
-    const inactive = { ...MEMBER, status: "INACTIVE", phone: "08000000001", address: "1 Test Road" };
+    const inactive = { ...ROW, status: "INACTIVE", phone: "08000000001", address: "1 Test Road" };
     const { api } = signedIn(() => json(200, { members: [inactive] }));
     expect(await api.listMembers("inactive")).toEqual({ ok: true, value: [inactive] });
+  });
+
+  it("keeps onLoan as sent on each list row, and member detail has no onLoan", async () => {
+    const lent = { ...ROW, id: "m2", onLoan: true };
+    const list = signedIn(() => json(200, { members: [ROW, lent] }));
+    expect(await list.api.listMembers("all")).toEqual({ ok: true, value: [ROW, lent] });
+    const one = signedIn(() => json(200, { member: { ...MEMBER, onLoan: true } }));
+    expect(await one.api.getMember("m1")).toEqual({ ok: true, value: MEMBER });
   });
 
   it("refuses balances whose amounts are not naira strings with two decimals", async () => {

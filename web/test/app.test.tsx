@@ -40,6 +40,7 @@ import type {
   Me,
   Member,
   MemberBalances,
+  MemberListRow,
   MemberStatusFilter,
   NewExpense,
   NewLoan,
@@ -313,10 +314,13 @@ const ACTIVE_ONE = member("m1", "IO-001", "Test Member One");
 const ACTIVE_TWO = member("m2", "IO-002", "Sample Person Two");
 const INACTIVE_ONE = member("m3", "IO-003", "Example Inactive", "INACTIVE");
 
-/** Members the fake server holds, answered by status filter as GET /members does. */
-function byStatus(members: Member[], status: MemberStatusFilter): Member[] {
-  if (status === "all") return members;
-  return members.filter((m) => m.status === (status === "active" ? "ACTIVE" : "INACTIVE"));
+/** Members the fake server holds, answered by status filter as GET /members does (D-110). */
+function byStatus(members: Member[], status: MemberStatusFilter, onLoan: string[]): MemberListRow[] {
+  const kept =
+    status === "all"
+      ? members
+      : members.filter((m) => m.status === (status === "active" ? "ACTIVE" : "INACTIVE"));
+  return kept.map((m) => ({ ...m, onLoan: onLoan.includes(m.id) }));
 }
 
 function fakeApi(
@@ -325,7 +329,9 @@ function fakeApi(
     login?: LoginResult;
     change?: ChangePasswordResult;
     members?: Member[];
-    list?: CallResult<Member[]>;
+    /** Ids of the members GET /members marks onLoan. */
+    onLoan?: string[];
+    list?: CallResult<MemberListRow[]>;
     create?: CallResult<Member>;
     balances?: CallResult<MemberBalances>;
     payments?: CallResult<Payment[]>;
@@ -426,7 +432,9 @@ function fakeApi(
       },
       listMembers: async (status) => {
         calls.push(`list ${status}`);
-        return opts.list ?? { ok: true, value: byStatus(opts.members ?? [], status) };
+        return (
+          opts.list ?? { ok: true, value: byStatus(opts.members ?? [], status, opts.onLoan ?? []) }
+        );
       },
       getMember: async (id) => {
         calls.push(`get ${id}`);
@@ -810,6 +818,32 @@ describe("members screen (jsdom)", () => {
     expect(api.calls.at(-1)).toBe("list all");
     expect(rowTexts()).toHaveLength(3);
     expect(el("section h2").textContent).toBe("3 members");
+  });
+
+  it("shows the On loan badge only on the rows the server marks onLoan", async () => {
+    const api = await mount(
+      fakeApi({
+        restore: VIEWER,
+        members: [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE],
+        onLoan: ["m2", "m3"],
+      }),
+    );
+    await openMembers();
+    const badges = () =>
+      Array.from(container?.querySelectorAll("tbody tr") ?? []).map(
+        (r) => r.querySelector(".loan")?.textContent ?? null,
+      );
+    expect(rowTexts()).toHaveLength(2);
+    expect(badges()).toEqual([null, "On loan"]);
+    expect(rowTexts()[1]).toContain("Active On loan");
+
+    await click(button("All"));
+    expect(badges()).toEqual([null, "On loan", "On loan"]);
+    expect(rowTexts()[2]).toContain("Inactive On loan");
+
+    await type(el("input[type=search]"), "io-001");
+    expect(badges()).toEqual([null]);
+    expect(api.calls).toEqual(["list active", "list all"]);
   });
 
   it("filters the list in the browser by search text", async () => {

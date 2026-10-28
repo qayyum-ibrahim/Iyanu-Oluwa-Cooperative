@@ -2,7 +2,7 @@
 // from member detail (U.4e2, R-04, R-06, D-89), the first payment after adding a member (U.4f,
 // R-03), give a loan from member detail (U.5b, R-08, D-91), the pay-off confirmation at the
 // bottom of member detail (U.7a, R-12, R-13, DR-05), reactivating an Inactive member (U.7b, R-35,
-// D-80). Search by name or Membership ID runs in the browser over the list the server sent
+// D-80), the "On loan" badge on each list row (9.1f, D-110). Search by name or Membership ID runs in the browser over the list the server sent
 // (A-191 item 2). The server checks every field again.
 // Amounts stay the naira strings the server sent (A-18); the browser only adds the naira sign and
 // thousands commas. The one sum is the payment form's breakdown check, in whole kobo as BigInt
@@ -18,6 +18,7 @@ import type {
   Loan,
   Member,
   MemberBalances,
+  MemberListRow,
   MemberStatusFilter,
   NewLoan,
   NewMember,
@@ -39,7 +40,7 @@ export const FILTERS: { value: MemberStatusFilter; label: string }[] = [
 ];
 
 /** Members whose name or Membership ID contains the search text, ignoring case. */
-export function searchMembers(members: Member[], search: string): Member[] {
+export function searchMembers<T extends Member>(members: T[], search: string): T[] {
   const needle = search.trim().toLowerCase();
   if (needle === "") return members;
   return members.filter(
@@ -526,7 +527,7 @@ const EMPTY: NewMember = { fullName: "", phone: "", address: "", occupation: "" 
 
 type ListState =
   | { kind: "loading" }
-  | { kind: "loaded"; members: Member[] }
+  | { kind: "loaded"; members: MemberListRow[] }
   | { kind: "failed"; message: string | null };
 
 type DetailApi = Pick<
@@ -725,6 +726,12 @@ export default function Members({
                       <span className={m.status === "ACTIVE" ? "pill" : "status-inactive"}>
                         {m.status === "ACTIVE" ? "Active" : "Inactive"}
                       </span>
+                      {m.onLoan && (
+                        <>
+                          {" "}
+                          <span className="loan">On loan</span>
+                        </>
+                      )}
                     </td>
                     <td>
                       <button

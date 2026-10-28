@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1f (size M), 2026-10-28: the "On loan" badge on the Members list (D-110, A-274)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistency fixed:** D-110 item 1 still said `onLoan` comes from `store.loans.list` alone and means "status ACTIVE"; a "Changed at 9.1e" note now points to A-273 (loans and payments read, outstanding above ₦0).
+**Changed:** `web/src/api.ts` (`MemberListRow`, `memberListRowOf`; `listMembers` answers rows with `onLoan`), `web/src/Members.tsx` (badge in the Status cell; `searchMembers` keeps the row type), `web/test/api.test.ts` (1 new test, 5 more wrong shapes), `web/test/app.test.tsx` (1 new test; the fake `listMembers` sends `onLoan`). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-274), DECISIONS (D-110), PHASE_PLAN (9.1f done), TRACEABILITY (R-40), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): exit code 0, "Test Files 56 passed (56)", "Tests 2201 passed (2201)". `npm run check` (web): typecheck and lint with no error, "Test Files 4 passed (4)", "Tests 367 passed (367)". `git diff --stat` (code): "4 files changed, 87 insertions(+), 18 deletions(-)".
+**Not verified:** the page was not opened in a browser; the badge spacing (one space, the existing `.loan` style) was not seen. No live check (the step has none). Break-on-purpose for `onLoan` is planned at 9.10.
+
+---
+
 ## Step 9.1e (size M), 2026-10-28: `onLoan` on the member list (D-110, A-273)
 
 The owner said "fix Inconsistencies and go".

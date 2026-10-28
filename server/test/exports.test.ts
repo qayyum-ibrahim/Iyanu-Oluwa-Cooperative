@@ -5,6 +5,7 @@ import {
   exportCashflow,
   exportCategory,
   exportExpenses,
+  exportMember,
   exportMembers,
   exportTransactions,
   type CategoryExportInput,
@@ -13,6 +14,7 @@ import {
   type ExportResult,
 } from "../src/exports.js";
 import { subjectOf } from "../src/guards.js";
+import { lagosDay } from "../src/payments.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { createPrismaStore } from "../src/prisma-store.js";
 import { getCategoryReport } from "../src/reports.js";
@@ -690,6 +692,211 @@ describe("exports: the audit entry", () => {
   });
 });
 
+const MEMBER_KIND_HEADER = [
+  "Section",
+  "Item",
+  "Value",
+  "Date",
+  "Method",
+  "Balance (₦)",
+  "Paid (₦)",
+  "Loan given (₦)",
+  "Repaid (₦)",
+  "Outstanding (₦)",
+  "Recorded by",
+];
+// DR-04 order; the refundable ones are DR-03.
+const DR04 = [
+  "Shares",
+  "Savings",
+  "Special Savings",
+  "Development Levy",
+  "Loan Repaid",
+  "Loan Interest",
+  "Entrance Fee",
+  "Stationeries",
+  "Empowerment Repaid",
+  "Committee Gift",
+  "Special Deposit",
+  "Investment Repaid",
+  "Investment Income",
+  "Building Funds",
+];
+const REFUNDABLE = new Set(["Shares", "Savings", "Special Savings", "Special Deposit", "Building Funds"]);
+
+/** Every row of the Member sheet, header first; an empty cell reads null. */
+const memberSheet = async (r: ExportResult) =>
+  (await table(must(r), "Member")).map((row) => row.map((c) => c ?? null));
+
+/**
+ * Member Ada (recorded by Staff A) with payments on three days, a loan fully repaid and an active
+ * loan (both given by the Super Admin). Member Bola is Staff B's.
+ */
+async function withLoans(store: Store = createMemoryStore()) {
+  const base = await build(store);
+  const { admin, a, b, pay } = base;
+  const ma = await store.members.create({
+    fullName: "Ada Test",
+    phone: "08000000001",
+    address: "1 Test Street",
+    occupation: "Trader",
+    createdById: a.id,
+  });
+  const mb = await base.addMember(b.id, "Bola Test");
+  const repaid = await store.loans.create({ memberId: ma.id, principal: 3_000_000n, givenOn: "2026-08-01", createdById: admin.id });
+  const active = await store.loans.create({ memberId: ma.id, principal: 30_000_000n, givenOn: "2026-10-10", createdById: admin.id });
+  await pay(ma.id, "2026-10-05", [["Shares", 1_000_000n], ["Savings", 50_000n]], a.id);
+  await pay(ma.id, "2026-09-30", [["Entrance Fee", 200_000n]], admin.id, "BANK_TRANSFER");
+  const repay = (loanId: string, paidOn: string, amount: bigint) =>
+    store.payments.create({
+      memberId: ma.id,
+      method: "CASH",
+      paidOn,
+      total: amount,
+      lines: [{ category: "Loan Repaid", amount, loanId }],
+      createdById: a.id,
+    });
+  await repay(repaid.id, "2026-10-06", 3_000_000n);
+  await repay(active.id, "2026-10-12", 2_000_000n);
+  return { ...base, ma, mb };
+}
+
+describe("exportMember (9.1i)", () => {
+  it("refuses Staff without reports.export and an inactive Super Admin, before the input", async () => {
+    const { store, admin, noExport, ma } = await withLoans();
+    const inactive: ExportActor = { id: admin.id, subject: { ...subjectOf(admin), isActive: false } };
+    for (const actor of [actorOf(noExport), inactive]) {
+      expect(await exportMember(store, actor, {})).toEqual({ ok: false, reason: "forbidden" });
+      expect(await exportMember(store, actor, { memberId: ma.id })).toEqual({ ok: false, reason: "forbidden" });
+    }
+  });
+
+  it("answers missing_member_id, invalid_member_id and not_found, and writes no audit entry", async () => {
+    const { store, admin, a, b, ma } = await withLoans();
+    for (const u of [admin, a]) {
+      expect(await exportMember(store, actorOf(u), {})).toEqual({
+        ok: false,
+        reason: "invalid_input",
+        code: "missing_member_id",
+      });
+      for (const memberId of ["", 5, null, [ma.id], "x".repeat(101)]) {
+        expect(await exportMember(store, actorOf(u), { memberId })).toEqual({
+          ok: false,
+          reason: "invalid_input",
+          code: "invalid_member_id",
+        });
+      }
+      for (const memberId of ["nope", "x".repeat(100)]) {
+        expect(await exportMember(store, actorOf(u), { memberId })).toEqual({ ok: false, reason: "not_found" });
+      }
+    }
+    // Staff B did not record Ada: the same answer as an unknown member (DR-13).
+    expect(await exportMember(store, actorOf(b), { memberId: ma.id })).toEqual({ ok: false, reason: "not_found" });
+    expect(await exportsAudit(store)).toEqual([]);
+  });
+
+  it("gives details, every balance in DR-04 order, payment lines by day paid and loans, with a Total per part", async () => {
+    const { store, a, ma } = await withLoans();
+    const balance: Record<string, number> = { Shares: 10000, Savings: 500, "Loan Repaid": 50000, "Entrance Fee": 2000 };
+    const details = (item: string, value: string) => ["Details", item, value, ...Array(8).fill(null)];
+    const payment = (item: string, day: string, method: string, paid: number, by: string) =>
+      ["Payment", item, null, day, method, null, paid, null, null, null, by];
+    expect(await memberSheet(await exportMember(store, actorOf(a), { memberId: ma.id }))).toEqual([
+      MEMBER_KIND_HEADER,
+      details("Name", "Ada Test"),
+      details("Membership ID", ma.membershipId),
+      details("Phone", "08000000001"),
+      details("Address", "1 Test Street"),
+      details("Occupation", "Trader"),
+      details("Status", "Active"),
+      details("Date joined", lagosDay(ma.createdAt)),
+      details("Recorded by", "Staff A"),
+      ...DR04.map((c) => [
+        "Balance",
+        c,
+        REFUNDABLE.has(c) ? "Refundable" : "Not refundable",
+        null,
+        null,
+        balance[c] ?? 0,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]),
+      payment("Entrance Fee", "2026-09-30", "Bank transfer", 2000, "Admin Test"),
+      payment("Shares", "2026-10-05", "Cash", 10000, "Staff A"),
+      payment("Savings", "2026-10-05", "Cash", 500, "Staff A"),
+      payment("Loan Repaid", "2026-10-06", "Cash", 30000, "Staff A"),
+      payment("Loan Repaid", "2026-10-12", "Cash", 20000, "Staff A"),
+      ["Loan", "Loan", "Fully repaid", "2026-08-01", null, null, null, 30000, 30000, 0, "Admin Test"],
+      ["Loan", "Loan", "Active", "2026-10-10", null, null, null, 300000, 20000, 280000, "Admin Test"],
+      ["Total", null, null, null, null, 62500, 62500, 330000, 50000, 280000, null],
+    ]);
+  });
+
+  it("shows balances after a pay-off; the payment lines stay, so Paid is above Balance (A-277)", async () => {
+    const { store, admin, b, mb, pay } = await withLoans();
+    await pay(mb.id, "2026-10-01", [["Shares", 500_000n], ["Development Levy", 100_000n]], b.id);
+    await store.payOffs.create({
+      memberId: mb.id,
+      method: "CASH",
+      total: 500_000n,
+      lines: [{ category: "Shares", amount: 500_000n }],
+      createdById: admin.id,
+    });
+    await store.members.setStatus(mb.id, "INACTIVE");
+    const rows = await memberSheet(await exportMember(store, actorOf(b), { memberId: mb.id }));
+    expect(rows.find((r) => r[1] === "Status")?.[2]).toBe("Inactive");
+    expect(rows.filter((r) => r[0] === "Balance" && r[5] !== 0).map((r) => [r[1], r[5]])).toEqual([
+      ["Development Levy", 1000],
+    ]);
+    expect(rows.filter((r) => r[0] === "Loan")).toEqual([]);
+    expect(rows.at(-1)).toEqual(["Total", null, null, null, null, 1000, 6000, 0, 0, 0, null]);
+  });
+
+  it("gives Staff their own member and the Super Admin any member; days and createdById are not read", async () => {
+    const { store, admin, a, ma, mb } = await withLoans();
+    const input = { memberId: ma.id, fromDay: "bad", toDay: "bad", createdById: "" } as MemberExportInputLoose;
+    expect((await exportMember(store, actorOf(a), input)).ok).toBe(true);
+    const bola = await memberSheet(await exportMember(store, actorOf(admin), { memberId: mb.id }));
+    expect(bola[1]).toEqual(["Details", "Name", "Bola Test", ...Array(8).fill(null)]);
+    // A member with no payment and no loan: the details, the balances at ₦0 and a Total of 0.
+    expect(bola.filter((r) => r[0] === "Payment" || r[0] === "Loan")).toEqual([]);
+    expect(bola.at(-1)).toEqual(["Total", null, null, null, null, 0, 0, 0, 0, 0, null]);
+  });
+
+  it("writes one audit entry with the scope and the Membership ID, no name", async () => {
+    const { store, admin, a, ma, mb } = await withLoans();
+    must(await exportMember(store, actorOf(a), { memberId: ma.id }));
+    must(await exportMember(store, actorOf(admin), { memberId: mb.id }));
+    expect((await exportsAudit(store)).reverse()).toEqual([
+      { actorId: a.id, entityType: "Export", entityId: null, detail: `kind=member scope=${a.id} membership_id=${ma.membershipId}` },
+      { actorId: admin.id, entityType: "Export", entityId: null, detail: `kind=member scope=all membership_id=${mb.membershipId}` },
+    ]);
+    const details = (await exportsAudit(store)).map((e) => e.detail ?? "").join(" ");
+    expect(details).not.toContain("Ada");
+    expect(details).not.toContain("Bola");
+  });
+
+  it("writes no entry when the file cannot be built, and gives no file when the audit write fails", async () => {
+    const { store, admin, ma, pay, a } = await withLoans();
+    const failing: Store = {
+      ...store,
+      transaction: (fn) =>
+        store.transaction((tx) =>
+          fn({ ...tx, audit: { ...tx.audit, append: () => Promise.reject(new Error("audit down")) } }),
+        ),
+    };
+    await expect(exportMember(failing, actorOf(admin), { memberId: ma.id })).rejects.toThrow("audit down");
+    await pay(ma.id, "2026-10-20", [["Savings", 10n ** 15n]], a.id);
+    await expect(exportMember(store, actorOf(admin), { memberId: ma.id })).rejects.toThrow(WorkbookError);
+    expect(await exportsAudit(store)).toEqual([]);
+  });
+});
+
+type MemberExportInputLoose = Parameters<typeof exportMember>[2];
+
 describe("exports on the Prisma store (real SQLite)", () => {
   let tmp: TempDb;
   let store: Store;
@@ -754,5 +961,24 @@ describe("exports on the Prisma store (real SQLite)", () => {
         `kind=expenses scope=${b.id} from_day=none to_day=none`,
       ].sort(),
     );
+  });
+
+  it("gives the same member file and audit entry read back from the database (9.1i)", async () => {
+    const { a, ma } = await withLoans(store);
+    const rows = await memberSheet(await exportMember(store, actorOf(a), { memberId: ma.id }));
+    expect(rows.filter((r) => r[0] === "Loan").map((r) => [r[2], r[3], r[7], r[8], r[9], r[10]])).toEqual([
+      ["Fully repaid", "2026-08-01", 30000, 30000, 0, "Admin Test"],
+      ["Active", "2026-10-10", 300000, 20000, 280000, "Admin Test"],
+    ]);
+    expect(rows.filter((r) => r[0] === "Payment").map((r) => [r[1], r[3]])).toEqual([
+      ["Entrance Fee", "2026-09-30"],
+      ["Shares", "2026-10-05"],
+      ["Savings", "2026-10-05"],
+      ["Loan Repaid", "2026-10-06"],
+      ["Loan Repaid", "2026-10-12"],
+    ]);
+    expect(rows.at(-1)).toEqual(["Total", null, null, null, null, 62500, 62500, 330000, 50000, 280000, null]);
+    const entries = (await store.audit.listByActor(a.id)).filter((e) => e.detail?.startsWith("kind=member "));
+    expect(entries.map((e) => e.detail)).toEqual([`kind=member scope=${a.id} membership_id=${ma.membershipId}`]);
   });
 });

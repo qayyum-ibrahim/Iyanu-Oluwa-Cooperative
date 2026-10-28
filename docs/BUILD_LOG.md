@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1i (size M), 2026-10-28: the `member` export kind (D-110 item 5, A-277)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** (1) `ExportFailure` had no `not_found` and the route no 404; both added in the step's files. (2) `buildWorkbook` makes one table per sheet (`server/src/workbook.ts`, read in this session, not changed), and D-110 item 4 wants one sheet per kind; the member kind is one sheet "Member" with a Section column and one money column per part, so the Total row stays right (A-277 item 1). (3) `server/src/balances.ts` was read only (`memberBalances`), not changed. (4) Days, permission and audit detail were not settled; chosen and recorded in A-277.
+**Changed:** `server/src/exports.ts` (`ExportKind` gains `member`, `ExportFailure` gains `not_found`, `MemberExportInput`, `exportMember`, `appendAudit` shared with `run`), `server/src/exports-routes.ts` (`member` in `EXPORTERS`, `memberId` from the query, 404 for `not_found`), `server/test/exports.test.ts` (7 tests, 1 Prisma test), `server/test/exports-routes.test.ts` (2 tests; `member` added to the 401 and 403 kinds). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-277), DECISIONS (D-110), PHASE_PLAN (9.1i done), TRACEABILITY (R-23), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): exit code 0 (generate, typecheck, lint, test), "Test Files 56 passed (56)", "Tests 2211 passed (2211)". `git diff --stat` (code): "4 files changed, 406 insertions(+), 16 deletions(-)".
+**Not verified:** no live check (the step has none; the live check script does not call the member kind). The file was not opened in a spreadsheet program. The web is unchanged. Break-on-purpose for the member kind is planned at 9.10.
+
+---
+
 ## Step 9.1h (size S), 2026-10-28: "You" as the start of the staff filter (D-110, A-276)
 
 The owner said "fix Inconsistencies and go".

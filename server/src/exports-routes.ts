@@ -1,4 +1,4 @@
-// Export routes (step 8.4; D-104, A-253). Thin: all rules live in exports.ts.
+// Export routes (steps 8.4 and 9.1i; D-104, D-110, A-253, A-277). Thin: all rules live in exports.ts.
 // Guards run first (401, then 403), then the kind, then the query. The reply is an .xlsx file,
 // or JSON on a refusal. Never log a query.
 
@@ -7,6 +7,7 @@ import {
   exportCashflow,
   exportCategory,
   exportExpenses,
+  exportMember,
   exportMembers,
   exportTransactions,
   type CategoryExportInput,
@@ -15,6 +16,7 @@ import {
   type ExportFailureResult,
   type ExportKind,
   type ExportResult,
+  type MemberExportInput,
 } from "./exports.js";
 import { getAuth, requireAuth, requirePermission, sendUnauthorized, type GuardDeps } from "./guards.js";
 import { lagosDay } from "./payments.js";
@@ -25,18 +27,21 @@ const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const STATUS: Record<ExportFailure, number> = {
   forbidden: 403,
   invalid_input: 400,
+  not_found: 404,
 };
 
-// Each kind reads only its own fields: members ignores the days, the four others ignore category (A-253).
+// Each kind reads only its own fields: members ignores the days, the four others ignore category
+// (A-253); only member reads memberId, and it reads nothing else (A-277).
 const EXPORTERS: Record<
   ExportKind,
-  (store: Store, actor: ExportActor, input: CategoryExportInput) => Promise<ExportResult>
+  (store: Store, actor: ExportActor, input: CategoryExportInput & MemberExportInput) => Promise<ExportResult>
 > = {
   members: exportMembers,
   transactions: exportTransactions,
   expenses: exportExpenses,
   cashflow: exportCashflow,
   category: exportCategory,
+  member: exportMember,
 };
 
 function isKind(value: string): value is ExportKind {
@@ -76,12 +81,13 @@ export function createExportsRouter(deps: GuardDeps): Router {
       toDay: q["toDay"],
       category: q["category"],
       createdById: q["createdById"],
+      memberId: q["memberId"],
     });
     if (!result.ok) {
       sendFailure(res, result);
       return;
     }
-    // The name holds only the kind and today's Lagos day: no category text, no person.
+    // The name holds only the kind and today's Lagos day: no category text, no person, no member.
     res.status(200);
     res.set("Content-Type", XLSX_TYPE);
     res.set("Content-Disposition", `attachment; filename="${kind}-${lagosDay(deps.now())}.xlsx"`);

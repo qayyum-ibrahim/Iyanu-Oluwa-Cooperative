@@ -11,7 +11,7 @@ const SECRET = "test-only-secret-for-exports-routes-0123";
 // 10:00 UTC is 11:00 in Lagos, so today's Lagos day is 2026-10-21.
 const T0 = new Date("2026-10-21T10:00:00.000Z");
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const KINDS = ["members", "transactions", "expenses", "cashflow", "category"] as const;
+const KINDS = ["members", "transactions", "expenses", "cashflow", "category", "member"] as const;
 
 /** Staff a and b each record one member, payments and one expense. The clock is T0 unless given. */
 async function build(now: Date = T0) {
@@ -60,7 +60,7 @@ async function build(now: Date = T0) {
   await pay(mb.id, "2026-10-06", [["Shares", 200_000n]], b.id);
   await spend(a.id, "2026-10-07", "Allowances", 30_000n);
   await spend(b.id, "2026-10-08", "Allowances", 70_000n);
-  return { store, app, admin, a, b, noExport, bearer, ma, pay };
+  return { store, app, admin, a, b, noExport, bearer, ma, mb, pay };
 }
 
 /** Reads a reply body as raw bytes, whatever its content type. */
@@ -314,6 +314,49 @@ describe("GET /exports/:kind (8.4)", () => {
     ]);
     expect(await details(admin.id)).toEqual([["export.created", "kind=members scope=all"]]);
     expect(await details(noExport.id)).toEqual([]);
+  });
+
+  it("answers 200 with a member file, named member-<day>.xlsx, and one audit entry (9.1i)", async () => {
+    const { app, store, a, ma, bearer } = await build();
+    const res = await download(app, `/exports/member?memberId=${ma.id}&fromDay=bad&category=nope`, bearer(a));
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe(XLSX_TYPE);
+    expect(res.headers["content-disposition"]).toBe('attachment; filename="member-2026-10-21.xlsx"');
+    expect(res.headers["cache-control"]).toBe("no-store");
+    const { names, rows } = await open(res.body as Buffer);
+    expect(names).toEqual(["Member"]);
+    expect(rows[1]?.slice(0, 3)).toEqual(["Details", "Name", "Member A"]);
+    // Shares 10,000.00 + 5.00 and Savings 0.50 from the two payments.
+    expect(rows.at(-1)?.slice(5, 7)).toEqual([10005.5, 10005.5]);
+    expect((await store.audit.listByActor(a.id)).map((e) => e.detail)).toEqual([
+      `kind=member scope=${a.id} membership_id=${ma.membershipId}`,
+    ]);
+  });
+
+  it("answers 400 for a missing or empty memberId, and 404 for an unknown member or one Staff did not record (9.1i)", async () => {
+    const { app, store, admin, a, mb, bearer } = await build();
+    const get = (path: string, u: { id: string }) => request(app).get(path).set("Authorization", bearer(u));
+    for (const [path, code] of [
+      ["/exports/member", "missing_member_id"],
+      ["/exports/member?memberId=", "invalid_member_id"],
+      ["/exports/member?memberId=a&memberId=b", "invalid_member_id"],
+    ] as const) {
+      const res = await get(path, admin);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "invalid_input", code });
+    }
+    for (const [path, u] of [
+      ["/exports/member?memberId=nope", admin],
+      [`/exports/member?memberId=${mb.id}`, a],
+    ] as const) {
+      const res = await get(path, u);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "not_found" });
+      expect(res.headers["content-disposition"]).toBeUndefined();
+      expect(res.headers["cache-control"]).toBe("no-store");
+    }
+    expect(await store.audit.listByActor(admin.id)).toEqual([]);
+    expect(await store.audit.listByActor(a.id)).toEqual([]);
   });
 
   it("answers 500 as JSON, and writes no audit entry, when the file cannot be built", async () => {

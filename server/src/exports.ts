@@ -1,10 +1,12 @@
-// Export logic (steps 8.2 and 8.3; D-104, A-249, A-251, A-252, DR-13). Rules over the Store: no HTTP here.
+// Export logic (steps 8.2, 8.3 and 9.1i; D-104, D-110, A-249, A-251, A-252, A-277, DR-13). Rules over the Store: no HTTP here.
 // Each export reads its rows, builds one .xlsx file (workbook.ts) and writes one audit entry
 // "export.created", all in one store transaction: a file that cannot be built writes no entry.
 // The audit detail holds the kind, the scope, the days and the category: no name, no phone.
 
+import { memberBalances } from "./balances.js";
 import { isPaymentCategory } from "./categories.js";
 import { isExpenseCategory, isSystemOnlyExpenseCategory } from "./expense-categories.js";
+import { loanOutstanding } from "./loans.js";
 import { lagosDay, isCalendarDay } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
 import type { MemberStatus, PaymentMethod, Store } from "./store.js";
@@ -19,9 +21,9 @@ export interface ExportActor {
   subject: PermissionSubject;
 }
 
-export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category";
+export type ExportKind = "members" | "transactions" | "expenses" | "cashflow" | "category" | "member";
 
-export type ExportFailure = "forbidden" | "invalid_input";
+export type ExportFailure = "forbidden" | "invalid_input" | "not_found";
 
 export interface ExportFailureResult {
   ok: false;
@@ -52,6 +54,11 @@ export interface DayExportInput extends MembersExportInput {
 export interface CategoryExportInput extends DayExportInput {
   /** One payment category (DR-04) or one expense category (DR-11). Required. */
   category?: unknown;
+}
+
+export interface MemberExportInput {
+  /** The member's id. Required. */
+  memberId?: unknown;
 }
 
 interface Checked {
@@ -129,15 +136,13 @@ function run(
       kind === "members" ? "" : ` from_day=${checked.fromDay ?? "none"} to_day=${checked.toDay ?? "none"}`;
     // Last, because a category name may hold spaces.
     const category = checked.category !== undefined ? ` category=${checked.category}` : "";
-    await tx.audit.append({
-      actorId: actor.id,
-      action: "export.created",
-      entityType: "Export",
-      entityId: null,
-      detail: `kind=${kind} scope=${checked.scopeId ?? "all"}${days}${category}`,
-    });
+    await appendAudit(tx, actor, `kind=${kind} scope=${checked.scopeId ?? "all"}${days}${category}`);
     return { ok: true, value: file };
   });
+}
+
+function appendAudit(tx: Store, actor: ExportActor, detail: string): Promise<unknown> {
+  return tx.audit.append({ actorId: actor.id, action: "export.created", entityType: "Export", entityId: null, detail });
 }
 
 const MEMBER_COLUMNS: readonly SheetColumn[] = [
@@ -428,4 +433,114 @@ export async function exportCategory(
       ? { name: category, columns: TRANSACTION_COLUMNS, rows: (await linesOf(tx, checked.value)).map(transactionRow) }
       : { name: category, columns: EXPENSE_COLUMNS, rows: (await expensesOf(tx, checked.value)).map(expenseRow) },
   );
+}
+
+/** Longest memberId accepted (as USER_FILTER_MAX). */
+const MEMBER_ID_MAX = 100;
+
+const MEMBER_KIND_COLUMNS: readonly SheetColumn[] = [
+  { key: "section", header: "Section", kind: "text" },
+  { key: "item", header: "Item", kind: "text", width: 24 },
+  { key: "value", header: "Value", kind: "text", width: 30 },
+  { key: "day", header: "Date", kind: "text" },
+  { key: "method", header: "Method", kind: "text" },
+  { key: "balance", header: "Balance (₦)", kind: "money" },
+  { key: "paid", header: "Paid (₦)", kind: "money" },
+  { key: "principal", header: "Loan given (₦)", kind: "money" },
+  { key: "repaid", header: "Repaid (₦)", kind: "money" },
+  { key: "outstanding", header: "Outstanding (₦)", kind: "money" },
+  { key: "recordedBy", header: "Recorded by", kind: "text", width: 24 },
+];
+
+const EMPTY_MEMBER_ROW: SheetRow = Object.fromEntries(MEMBER_KIND_COLUMNS.map((c) => [c.key, null]));
+
+/**
+ * One member on one sheet "Member" (D-110 item 5, A-277): Details rows (Item and Value), then one
+ * Balance row per payment category in DR-04 order (as getMemberBalances), then one Payment row per
+ * payment line by day paid, then one Loan row per loan, oldest first, with what is outstanding now.
+ * Each part has its own money column, so the Total row gives the balances, the lines paid, and the
+ * loans given, repaid and outstanding. All time: no day filter; createdById is not read.
+ * Order: permission (reports.export), memberId, then inside the transaction find the member and
+ * check who may see it: an unknown member and a member Staff did not record both answer not_found,
+ * as getMember (DR-13). The audit detail holds the Membership ID, no name.
+ */
+export async function exportMember(
+  store: Store,
+  actor: ExportActor,
+  input: MemberExportInput,
+): Promise<ExportResult> {
+  if (!hasPermission(actor.subject, "reports.export")) return failure("forbidden");
+  const memberId = input.memberId;
+  if (memberId === undefined) return failure("invalid_input", "missing_member_id");
+  if (typeof memberId !== "string" || memberId.length === 0 || memberId.length > MEMBER_ID_MAX) {
+    return failure("invalid_input", "invalid_member_id");
+  }
+  const seesAll = actor.subject.role === "SUPER_ADMIN";
+
+  return store.transaction(async (tx): Promise<ExportResult> => {
+    const member = await tx.members.findById(memberId);
+    if (member === null) return failure("not_found");
+    if (!seesAll && member.createdById !== actor.id) return failure("not_found");
+
+    const nameOf = await namesOf(tx);
+    const payments = await tx.payments.listByMember(member.id);
+    const balances = memberBalances(payments, await tx.payOffs.listByMember(member.id));
+    const loans = await tx.loans.listByMember(member.id);
+    const row = (values: Record<string, string | bigint>): SheetRow => ({ ...EMPTY_MEMBER_ROW, ...values });
+
+    const details: [string, string][] = [
+      ["Name", member.fullName],
+      ["Membership ID", member.membershipId],
+      ["Phone", member.phone],
+      ["Address", member.address],
+      ["Occupation", member.occupation],
+      ["Status", STATUS_LABEL[member.status]],
+      ["Date joined", lagosDay(member.createdAt)],
+      ["Recorded by", nameOf(member.createdById)],
+    ];
+    const rows: SheetRow[] = [
+      ...details.map(([item, value]) => row({ section: "Details", item, value })),
+      ...balances.categories.map((c) =>
+        row({
+          section: "Balance",
+          item: c.category,
+          value: c.refundable ? "Refundable" : "Not refundable",
+          balance: c.balance,
+        }),
+      ),
+      // A stable sort: payments of the same day keep the store's order (time recorded).
+      ...[...payments]
+        .sort((x, y) => (x.paidOn < y.paidOn ? -1 : x.paidOn > y.paidOn ? 1 : 0))
+        .flatMap((p) =>
+          p.lines.map((l) =>
+            row({
+              section: "Payment",
+              item: l.category,
+              day: p.paidOn,
+              method: METHOD_LABEL[p.method],
+              paid: l.amount,
+              recordedBy: nameOf(p.createdById),
+            }),
+          ),
+        ),
+      ...loans.map((loan) => {
+        const outstanding = loanOutstanding(loan, payments);
+        return row({
+          section: "Loan",
+          item: "Loan",
+          value: outstanding > 0n ? "Active" : "Fully repaid",
+          day: loan.givenOn,
+          principal: loan.principal,
+          repaid: loan.principal - outstanding,
+          outstanding,
+          recordedBy: nameOf(loan.createdById),
+        });
+      }),
+    ];
+
+    const file = await buildWorkbook([{ name: "Member", columns: MEMBER_KIND_COLUMNS, rows }]);
+    const scope = seesAll ? "all" : actor.id;
+    await appendAudit(tx, actor, `kind=member scope=${scope} membership_id=${member.membershipId}`);
+    return { ok: true, value: file };
+  });
 }

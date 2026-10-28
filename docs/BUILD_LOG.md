@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.1k (size S), 2026-10-28: PDF library `pdfkit` 0.20.2 (D-110 item 7, D-111, A-279)
+
+The owner said "fix Inconsistencies and go", then "yes, install both".
+**Inconsistencies fixed:** `server/package.json` read in full (no PDF library before the step). The 8.7a script note stays for 9.10.
+**Read:** npm registry (`npm view`) for pdfkit, pdfmake, pdf-lib, @types/pdfkit and @types/pdfmake; the pdfkit docs (table, text, getting started, CHANGELOG). URLs in D-111 and A-279.
+**Changed:** `server/package.json` (`pdfkit` 0.20.2 in dependencies, `@types/pdfkit` 0.17.7 in devDependencies, both exact), `server/package-lock.json`. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-279), DECISIONS (D-111), PHASE_PLAN (9.1k done), TRACEABILITY (R-23), NEXT_FILES.
+**Works (verified in this session):** `npm ls pdfkit @types/pdfkit`: "@types/pdfkit@0.17.7", "pdfkit@0.20.2". `npm run check` (server): "Test Files 56 passed (56)", "Tests 2240 passed (2240)" (the tests run only after generate, typecheck and lint pass). `npm audit`: "2 moderate severity vulnerabilities" (`uuid` through `exceljs`, as at 9.1c). Smoke run: "bytes 1412 header %PDF-1.3". `git diff --stat` (code): "2 files changed, 169 insertions(+), 4 deletions(-)".
+**Not verified:** the type file against pdfkit 0.20 calls; the ₦ glyph in the standard fonts; the smoke PDF was not opened in a reader. No live check (the step has none).
+
+---
+
 ## Step 9.1j (size M), 2026-10-28: `GET /exports?kinds=`, several kinds in one workbook (D-110 item 4, A-278)
 
 The owner said "fix Inconsistencies and go".

@@ -5,4 +5,9 @@ docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
 server/package.json
-server/package-lock.json
+server/src/exports.ts
+server/src/exports-routes.ts
+server/src/workbook.ts
+server/src/money.ts
+server/test/exports.test.ts
+server/test/exports-routes.test.ts

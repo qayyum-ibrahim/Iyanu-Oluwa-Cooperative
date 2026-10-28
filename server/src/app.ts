@@ -34,6 +34,23 @@ function clientErrorStatus(err: unknown): number | null {
   return null;
 }
 
+/**
+ * Security headers on every reply (OWASP REST Security and HTTP Headers cheat sheets, read at 9.2).
+ * No HSTS until hosting is known (OQ-01). X-XSS-Protection is left unset on purpose.
+ */
+export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  "Cache-Control": "no-store",
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+};
+
+const securityHeaders: express.RequestHandler = (_req, res, next) => {
+  res.set(SECURITY_HEADERS);
+  next();
+};
+
 const errorHandler: express.ErrorRequestHandler = (err, _req, res, next) => {
   if (res.headersSent) {
     next(err);
@@ -56,6 +73,7 @@ const errorHandler: express.ErrorRequestHandler = (err, _req, res, next) => {
 export function createApp(deps?: AppDeps): express.Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use(securityHeaders);
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
@@ -79,6 +97,10 @@ export function createApp(deps?: AppDeps): express.Express {
     app.use("/reports", createReportsRouter({ store: deps.store, tokenSecret, now }));
     app.use("/exports", createExportsRouter({ store: deps.store, tokenSecret, now }));
   }
+  // Our own 404: Express's default one replaces the Content-Security-Policy set above.
+  app.use((_req, res) => {
+    res.status(404).json({ error: "not_found" });
+  });
   app.use(errorHandler);
   return app;
 }

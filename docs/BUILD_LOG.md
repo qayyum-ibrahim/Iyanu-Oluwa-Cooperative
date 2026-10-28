@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.2 (size S), 2026-10-28: security headers on every API reply (R-37, A-283)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** the STATUS brief named only `server/src/app.ts` for 9.2 while PHASE_PLAN also named `server/test/headers.test.ts`; the step followed PHASE_PLAN. The STATUS roadmap still said "Next: step 9.1m"; it now names 9.3.
+**Sources:** https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html and https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html (read through a fetch agent).
+**Changed:** `server/src/app.ts` (`SECURITY_HEADERS` and a middleware before every route: `Cache-Control: no-store`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; a JSON 404 `not_found` for an unknown route, because Express's default 404 replaced the CSP), new `server/test/headers.test.ts` (8 tests: the constant, `/health`, unknown route, 200, 401, 400 and 413 from the error handler, an .xlsx download; no `X-XSS-Protection`, `X-Powered-By`, `Server` or HSTS). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-283), PHASE_PLAN, TRACEABILITY (R-37), NEXT_FILES. No new decision.
+**Works (verified in this session):** first run of `npx vitest run test/headers.test.ts`: 1 failed (unknown route: received `default-src 'none'`), fixed with the JSON 404. Then `npm run check` (server): typecheck and lint with no error, "Test Files 58 passed (58)", "Tests 2270 passed (2270)".
+**Not verified:** the headers through the Vite dev proxy or in a browser. No live check (the step has none). Break-on-purpose for this code is at 9.10 (D-90).
+
+---
+
 ## Step 9.1m (size M), 2026-10-28: the Exports page with tick boxes, a member choice and Excel or PDF (D-110 item 6, A-282)
 
 The owner said "fix Inconsistencies and go".

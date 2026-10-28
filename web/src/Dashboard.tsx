@@ -43,6 +43,14 @@ export function checkDashboardFilter(
   };
 }
 
+/**
+ * The staff filter a page starts on and Clear goes back to: the signed-in user when the filter is
+ * offered, else everyone (D-110 item 3). "All staff" stays a choice.
+ */
+export function startStaffId(me: User, canFilterStaff: boolean): string {
+  return canFilterStaff ? me.id : "";
+}
+
 /** The message for a failed read. Null for signed_out: the sign-in screen already shows. */
 export function dashboardMessage(reason: CallFailure): string | null {
   switch (reason) {
@@ -90,12 +98,14 @@ export interface DashboardProps {
 
 /**
  * The first read sends no month, so the server gives this Lagos month; the picker starts there.
- * "Apply" sends the month and the staff filter; "Clear" goes back to this month and everyone.
- * The staff list is read once; if it fails, there is no staff filter (A-241 item 3).
+ * "Apply" sends the month and the staff filter; "Clear" goes back to this month and the start staff.
+ * The staff list is read once; if it fails, there is no staff filter (A-241 item 3) and the page
+ * goes back to everyone, so no hidden filter stays (A-276).
  */
 export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
-  const [form, setForm] = useState<DashboardFilterInput>(() => ({ month: lagosMonth(), staffId: "" }));
-  const [query, setQuery] = useState<DashboardQuery>({});
+  const [startStaff, setStartStaff] = useState(() => startStaffId(me, canFilterStaff));
+  const [form, setForm] = useState<DashboardFilterInput>(() => ({ month: lagosMonth(), staffId: startStaff }));
+  const [query, setQuery] = useState<DashboardQuery>(() => (startStaff !== "" ? { createdById: startStaff } : {}));
   const [view, setView] = useState<ViewState>({ kind: "loading" });
   const [error, setError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffAccount[] | null>(null);
@@ -104,7 +114,15 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
     if (!canFilterStaff) return;
     let active = true;
     api.listStaff().then((result) => {
-      if (active && result.ok) setStaff(result.value);
+      if (!active) return;
+      if (result.ok) {
+        setStaff(result.value);
+        return;
+      }
+      setStartStaff("");
+      setForm((f) => ({ ...f, staffId: "" }));
+      setView({ kind: "loading" });
+      setQuery((q) => (q.month !== undefined ? { month: q.month } : {}));
     });
     return () => {
       active = false;
@@ -139,10 +157,10 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
   }
 
   function clear() {
-    setForm({ month: lagosMonth(), staffId: "" });
+    setForm({ month: lagosMonth(), staffId: startStaff });
     setError(null);
     setView({ kind: "loading" });
-    setQuery({});
+    setQuery(startStaff !== "" ? { createdById: startStaff } : {});
   }
 
   const dashboard = view.kind === "loaded" ? view.dashboard : null;

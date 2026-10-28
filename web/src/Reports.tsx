@@ -5,6 +5,7 @@
 // Title and subtitle from legacy-prototype/src/App.jsx (Categories), with the server's rows (A-244).
 import { useEffect, useState, type FormEvent } from "react";
 import { actorNames } from "./Audit.tsx";
+import { startStaffId } from "./Dashboard.tsx";
 import type { Api, CallFailure, CategoryReport, CategoryReportQuery, StaffAccount, User } from "./api.ts";
 import { formatDay, formatNaira, isCalendarDay } from "./Members.tsx";
 
@@ -75,12 +76,16 @@ export interface ReportsProps {
 
 /**
  * The first read sends no days, so the report covers all days. "Apply" sends the days and the
- * staff filter; "Clear" goes back to all days and everyone. The staff list is read once; if it
- * fails, there is no staff filter (as the Dashboard, A-241 item 3).
+ * staff filter; "Clear" goes back to all days and the start staff (D-110 item 3). The staff list
+ * is read once; if it fails, there is no staff filter and the page goes back to everyone (as the
+ * Dashboard, A-241 item 3, A-276).
  */
 export default function Reports({ api, me, canFilterStaff }: ReportsProps) {
-  const [form, setForm] = useState<ReportFilterInput>(NO_REPORT_FILTER);
-  const [query, setQuery] = useState<CategoryReportQuery>({});
+  const [startStaff, setStartStaff] = useState(() => startStaffId(me, canFilterStaff));
+  const [form, setForm] = useState<ReportFilterInput>(() => ({ ...NO_REPORT_FILTER, staffId: startStaff }));
+  const [query, setQuery] = useState<CategoryReportQuery>(() =>
+    startStaff !== "" ? { createdById: startStaff } : {},
+  );
   const [view, setView] = useState<ViewState>({ kind: "loading" });
   const [error, setError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffAccount[] | null>(null);
@@ -89,7 +94,18 @@ export default function Reports({ api, me, canFilterStaff }: ReportsProps) {
     if (!canFilterStaff) return;
     let active = true;
     api.listStaff().then((result) => {
-      if (active && result.ok) setStaff(result.value);
+      if (!active) return;
+      if (result.ok) {
+        setStaff(result.value);
+        return;
+      }
+      setStartStaff("");
+      setForm((f) => ({ ...f, staffId: "" }));
+      setView({ kind: "loading" });
+      setQuery((q) => ({
+        ...(q.fromDay !== undefined ? { fromDay: q.fromDay } : {}),
+        ...(q.toDay !== undefined ? { toDay: q.toDay } : {}),
+      }));
     });
     return () => {
       active = false;
@@ -124,10 +140,10 @@ export default function Reports({ api, me, canFilterStaff }: ReportsProps) {
   }
 
   function clear() {
-    setForm(NO_REPORT_FILTER);
+    setForm({ ...NO_REPORT_FILTER, staffId: startStaff });
     setError(null);
     setView({ kind: "loading" });
-    setQuery({});
+    setQuery(startStaff !== "" ? { createdById: startStaff } : {});
   }
 
   const report = view.kind === "loaded" ? view.report : null;

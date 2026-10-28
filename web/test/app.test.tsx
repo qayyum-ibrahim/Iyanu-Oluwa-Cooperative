@@ -69,6 +69,7 @@ import {
   dashboardMessage,
   formatMonth,
   lagosMonth,
+  startStaffId,
 } from "../src/Dashboard.tsx";
 import {
   EXPENSE_CATEGORIES,
@@ -4020,6 +4021,11 @@ describe("dashboard helpers", () => {
     });
   });
 
+  it("starts the staff filter on the signed-in user only when it is offered", () => {
+    expect(startStaffId(ME.user, true)).toBe("u1");
+    expect(startStaffId(ME.user, false)).toBe("");
+  });
+
   it("has a message for every failure, none for signed_out", () => {
     expect(dashboardMessage("invalid_input")).toBe("The month or staff filter was refused. Press Clear and try again.");
     expect(dashboardMessage("forbidden")).toBe("You do not have permission to do this.");
@@ -4119,7 +4125,7 @@ describe("dashboard (jsdom)", () => {
     expect(cardTexts()).toHaveLength(10);
   });
 
-  it("offers the staff filter to the Super Admin and sends createdById; Clear goes back", async () => {
+  it("starts the Super Admin on You, sends the chosen createdById and All staff; Clear goes back to You", async () => {
     const api = await mount(
       fakeApi({
         restore: DASHBOARD_OWNER,
@@ -4130,17 +4136,25 @@ describe("dashboard (jsdom)", () => {
     expect(api.calls).toContain("staff");
     const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
     expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
+    expect(select("staffId").value).toBe("u1");
     await type(el("input[name=month]"), "2026-09");
     await choose(select("staffId"), "s1");
     await click(button("Apply"));
+    await choose(select("staffId"), "");
+    await click(button("Apply"));
     await click(button("Clear"));
-    expect(api.dashboardQueries).toEqual([{}, { month: "2026-09", createdById: "s1" }, {}]);
-    expect(select("staffId").value).toBe("");
+    expect(api.dashboardQueries).toEqual([
+      { createdById: "u1" },
+      { month: "2026-09", createdById: "s1" },
+      { month: "2026-09" },
+      { createdById: "u1" },
+    ]);
+    expect(select("staffId").value).toBe("u1");
     expect(el<HTMLInputElement>("input[name=month]").value).toBe(lagosMonth());
   });
 
-  it("shows no staff filter when the staff list cannot be read", async () => {
-    await mount(
+  it("shows no staff filter and goes back to everyone when the staff list cannot be read", async () => {
+    const api = await mount(
       fakeApi({
         restore: DASHBOARD_OWNER,
         staffList: { ok: false, reason: "server" },
@@ -4149,6 +4163,8 @@ describe("dashboard (jsdom)", () => {
     );
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
     expect(cardTexts()).toHaveLength(10);
+    await click(button("Clear"));
+    expect(api.dashboardQueries).toEqual([{ createdById: "u1" }, {}, {}]);
   });
 
   it("shows the message and no cards when the dashboard cannot be read", async () => {
@@ -4268,7 +4284,7 @@ describe("categories report (jsdom)", () => {
     expect(rowTexts()).toHaveLength(2);
   });
 
-  it("offers the staff filter to the Super Admin and sends createdById; Clear goes back", async () => {
+  it("starts the Super Admin on You, sends the chosen createdById and All staff; Clear goes back to You", async () => {
     const api = await mount(
       fakeApi({ restore: REPORT_OWNER, staff: [staffAccount("s1", "Staff One")], report: [{ ok: true, value: REPORT }] }),
     );
@@ -4276,22 +4292,32 @@ describe("categories report (jsdom)", () => {
     expect(api.calls).toContain("staff");
     const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
     expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
+    expect(select("staffId").value).toBe("u1");
     await type(el("input[name=fromDay]"), "2026-10-01");
     await choose(select("staffId"), "s1");
     await click(button("Apply"));
+    await choose(select("staffId"), "");
+    await click(button("Apply"));
     await click(button("Clear"));
-    expect(api.reportQueries).toEqual([{}, { fromDay: "2026-10-01", createdById: "s1" }, {}]);
-    expect(select("staffId").value).toBe("");
+    expect(api.reportQueries).toEqual([
+      { createdById: "u1" },
+      { fromDay: "2026-10-01", createdById: "s1" },
+      { fromDay: "2026-10-01" },
+      { createdById: "u1" },
+    ]);
+    expect(select("staffId").value).toBe("u1");
     expect(el<HTMLInputElement>("input[name=fromDay]").value).toBe("");
   });
 
-  it("shows no staff filter when the staff list cannot be read", async () => {
-    await mount(
+  it("shows no staff filter and goes back to everyone when the staff list cannot be read", async () => {
+    const api = await mount(
       fakeApi({ restore: REPORT_OWNER, staffList: { ok: false, reason: "server" }, report: [{ ok: true, value: REPORT }] }),
     );
     await openReports();
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
     expect(rowTexts()).toHaveLength(2);
+    await click(button("Clear"));
+    expect(api.reportQueries).toEqual([{ createdById: "u1" }, {}, {}]);
   });
 
   it("shows the message and no table when the report cannot be read", async () => {
@@ -4439,7 +4465,7 @@ describe("exports page (jsdom)", () => {
     expect(api.exportCalls).toEqual([]);
   });
 
-  it("offers the staff filter to the Super Admin and sends createdById; Clear empties the form", async () => {
+  it("starts the Super Admin on You, sends the chosen createdById and All staff; Clear goes back to You", async () => {
     const api = await mount(
       fakeApi({ restore: EXPORT_OWNER, staff: [staffAccount("s1", "Staff One")], exports: [{ ok: true, value: XLSX_FILE }] }),
       () => undefined,
@@ -4448,22 +4474,40 @@ describe("exports page (jsdom)", () => {
     expect(api.calls).toEqual(["staff"]);
     const options = Array.from(select("staffId").options).map((o) => `${o.value}:${o.textContent}`);
     expect(options).toEqual([":All staff", "u1:You (Ada Test)", "s1:Staff One"]);
+    expect(select("staffId").value).toBe("u1");
+    await click(button("Export Full Members List"));
     await type(el("input[name=toDay]"), "2026-10-31");
     await choose(select("staffId"), "s1");
     await click(button("Export Filtered Expenses"));
-    expect(api.exportCalls).toEqual([{ kind: "expenses", query: { toDay: "2026-10-31", createdById: "s1" } }]);
+    await choose(select("staffId"), "");
+    await click(button("Export Cashflow"));
+    expect(api.exportCalls).toEqual([
+      { kind: "members", query: { createdById: "u1" } },
+      { kind: "expenses", query: { toDay: "2026-10-31", createdById: "s1" } },
+      { kind: "cashflow", query: { toDay: "2026-10-31" } },
+    ]);
     await click(button("Clear"));
-    expect(select("staffId").value).toBe("");
+    expect(select("staffId").value).toBe("u1");
     expect(select("category").value).toBe("");
     expect(el<HTMLInputElement>("input[name=toDay]").value).toBe("");
     expect(container?.querySelector("[role=status]")).toBeNull();
   });
 
-  it("shows no staff filter when the staff list cannot be read", async () => {
-    await mount(fakeApi({ restore: EXPORT_OWNER, staffList: { ok: false, reason: "server" } }));
+  it("shows no staff filter and sends no staff when the staff list cannot be read", async () => {
+    const api = await mount(
+      fakeApi({ restore: EXPORT_OWNER, staffList: { ok: false, reason: "server" }, exports: [{ ok: true, value: XLSX_FILE }] }),
+      () => undefined,
+    );
     await click(button("Exports"));
     expect(container?.querySelector("select[name=staffId]")).toBeNull();
     expect(button("Export Cashflow").disabled).toBe(false);
+    await click(button("Export Cashflow"));
+    await click(button("Clear"));
+    await click(button("Export Full Members List"));
+    expect(api.exportCalls).toEqual([
+      { kind: "cashflow", query: {} },
+      { kind: "members", query: {} },
+    ]);
   });
 
   it("shows the server's refusal and saves nothing", async () => {

@@ -5,6 +5,7 @@
 // Title, subtitle and button labels from legacy-prototype/src/App.jsx (Exports), without CSV (A-255).
 import { useEffect, useState } from "react";
 import { actorNames } from "./Audit.tsx";
+import { startStaffId } from "./Dashboard.tsx";
 import type { Api, DownloadExportResult, ExportFile, ExportKind, ExportQuery, StaffAccount, User } from "./api.ts";
 import { EXPENSE_CATEGORIES } from "./Expenses.tsx";
 import { PAYMENT_CATEGORIES, isCalendarDay } from "./Members.tsx";
@@ -103,10 +104,13 @@ export interface ExportsProps {
 
 /**
  * Nothing is read until a button is pressed. One export runs at a time; the buttons wait meanwhile.
- * The staff list is read once; if it fails, there is no staff filter (as the Dashboard, A-241 item 3).
+ * The staff filter starts on the signed-in user and Clear goes back to it (D-110 item 3). The staff
+ * list is read once; if it fails, there is no staff filter and the form goes back to everyone (as
+ * the Dashboard, A-241 item 3, A-276).
  */
 export default function Exports({ api, me, canFilterStaff, saveFile }: ExportsProps) {
-  const [form, setForm] = useState<ExportFilterInput>(NO_EXPORT_FILTER);
+  const [startStaff, setStartStaff] = useState(() => startStaffId(me, canFilterStaff));
+  const [form, setForm] = useState<ExportFilterInput>(() => ({ ...NO_EXPORT_FILTER, staffId: startStaff }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -116,7 +120,13 @@ export default function Exports({ api, me, canFilterStaff, saveFile }: ExportsPr
     if (!canFilterStaff) return;
     let active = true;
     api.listStaff().then((result) => {
-      if (active && result.ok) setStaff(result.value);
+      if (!active) return;
+      if (result.ok) {
+        setStaff(result.value);
+        return;
+      }
+      setStartStaff("");
+      setForm((f) => ({ ...f, staffId: "" }));
     });
     return () => {
       active = false;
@@ -143,7 +153,7 @@ export default function Exports({ api, me, canFilterStaff, saveFile }: ExportsPr
   }
 
   function clear() {
-    setForm(NO_EXPORT_FILTER);
+    setForm({ ...NO_EXPORT_FILTER, staffId: startStaff });
     setError(null);
     setSaved(null);
   }

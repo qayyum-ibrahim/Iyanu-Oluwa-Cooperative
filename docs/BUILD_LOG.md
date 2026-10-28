@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1h (size S), 2026-10-28: "You" as the start of the staff filter (D-110, A-276)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistencies fixed:** (1) Dashboard and Categories sent `{}` on the first read; the first read now sends the signed-in user's `createdById`, so the figures match the "You" shown (A-276 item 1). (2) "You" applies only when the filter is offered, and a failed staff list goes back to everyone, so no hidden filter stays (A-276 items 2 and 3; D-110 note). (3) `web/src/Audit.tsx` was in NEXT_FILES but not in the step; read only. (4) The old tests that expected a first read with no `createdById` were changed in `web/test/app.test.tsx`.
+**Changed:** `web/src/Dashboard.tsx` (`startStaffId`; start form and query; Clear; a failed staff list drops the start staff), `web/src/Reports.tsx` and `web/src/Exports.tsx` (the same, from `startStaffId`), `web/test/app.test.tsx` (1 helper test; the three owner tests now check "You" first, "All staff" and Clear back to "You"; the three failed-staff-list tests check that no `createdById` is sent). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-276), DECISIONS (D-110), PHASE_PLAN (9.1h done), TRACEABILITY (R-40), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): typecheck and lint with no error, "Test Files 4 passed (4)", "Tests 371 passed (371)". `npm run check` (server): "Test Files 56 passed (56)", "Tests 2201 passed (2201)". `git diff --stat` (code): "4 files changed, 121 insertions(+), 33 deletions(-)".
+**Not verified:** the pages were not opened in a browser. No live check (the step has none). Display code only: no break-on-purpose (D-90).
+
+---
+
 ## Step 9.1g (size S), 2026-10-28: the Expenses list in month cards (D-110, A-275)
 
 The owner said "fix Inconsistencies and go".

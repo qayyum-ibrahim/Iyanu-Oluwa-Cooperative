@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step 9.1e (size M), 2026-10-28: `onLoan` on the member list (D-110, A-273)
+
+The owner said "fix Inconsistencies and go".
+**Inconsistency fixed:** A-272 item 6 said "one extra loan list read". A loan's status is not stored (`isLoanActive` in `server/src/loans.ts`, read in this session), so payments are read too; item 6 corrected.
+**Changed:** `server/src/members.ts` (`MemberListView`; `listMembers` reads members, loans and payments in one transaction and sets `onLoan`), `server/test/members.test.ts` (9 tests), `server/test/members-routes.test.ts` (1 test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-272, A-273), PHASE_PLAN (9.1e done), TRACEABILITY (R-40), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): typecheck and lint with no error, "Test Files 56 passed (56)", "Tests 2201 passed (2201)". `git diff --stat` (code): "3 files changed, 140 insertions(+), 6 deletions(-)".
+**Not verified:** the live check was not run (the step has none). The web was not checked; `memberOf` ignores the new field (read, not run). The new tests use the memory store only; `listMembers` on the Prisma store is not tested here. Break-on-purpose for `onLoan` is planned at 9.10.
+
+---
+
 ## Step 9.1d (size S), 2026-10-28: plan for the client's update of 2026-10-27 (D-110, A-272)
 
 The owner said "fix Inconsistencies and go".

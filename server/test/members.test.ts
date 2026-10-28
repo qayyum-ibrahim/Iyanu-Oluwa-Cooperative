@@ -263,6 +263,105 @@ describe("listMembers", () => {
   });
 });
 
+describe("listMembers onLoan (D-110)", () => {
+  const loan = (store: Store, memberId: string, createdById: string, principal: bigint) =>
+    store.loans.create({ memberId, principal, givenOn: "2026-10-20", createdById });
+  const pay = (
+    store: Store,
+    memberId: string,
+    createdById: string,
+    lines: { category: string; amount: bigint; loanId?: string }[],
+  ) =>
+    store.payments.create({
+      memberId,
+      method: "CASH",
+      total: lines.reduce((t, l) => t + l.amount, 0n),
+      paidOn: "2026-10-21",
+      lines,
+      createdById,
+    });
+  const flags = (r: MemberResult<{ fullName: string; onLoan: boolean }[]>) =>
+    must(r).map((m) => [m.fullName, m.onLoan]);
+
+  it("is false for a member with no loan", async () => {
+    const { store, a } = await seeded();
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", false]]);
+  });
+
+  it("is true while a loan is not repaid, partly repaid, and false once fully repaid", async () => {
+    const { store, a, a1 } = await seeded();
+    const l = await loan(store, a1.id, a.id, 30_000_000n);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", true]]);
+    await pay(store, a1.id, a.id, [{ category: "Loan Repaid", amount: 2_000_000n, loanId: l.id }]);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", true]]);
+    await pay(store, a1.id, a.id, [{ category: "Loan Repaid", amount: 27_999_999n, loanId: l.id }]);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", true]]);
+    await pay(store, a1.id, a.id, [{ category: "Loan Repaid", amount: 1n, loanId: l.id }]);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", false]]);
+  });
+
+  it("is not changed by lines that are not linked to the loan (DR-09)", async () => {
+    const { store, a, a1 } = await seeded();
+    await loan(store, a1.id, a.id, 1_000_000n);
+    await pay(store, a1.id, a.id, [{ category: "Savings", amount: 1_000_000n }]);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", true]]);
+  });
+
+  it("is true for a fully repaid loan plus a newer active one, and only for that member", async () => {
+    const { store, admin, a, a1 } = await seeded();
+    const old = await loan(store, a1.id, a.id, 500_000n);
+    await pay(store, a1.id, a.id, [{ category: "Loan Repaid", amount: 500_000n, loanId: old.id }]);
+    await loan(store, a1.id, a.id, 700_000n);
+    expect(flags(await listMembers(store, actorOf(admin), {}))).toEqual([
+      ["A One", true],
+      ["B One", false],
+    ]);
+  });
+
+  it("counts only the member's own payments against their loan", async () => {
+    const { store, admin, a, b, a1, b1 } = await seeded();
+    const lb = await loan(store, b1.id, b.id, 400_000n);
+    await pay(store, a1.id, a.id, [{ category: "Loan Repaid", amount: 400_000n, loanId: lb.id }]);
+    expect(flags(await listMembers(store, actorOf(admin), {}))).toEqual([
+      ["A One", false],
+      ["B One", true],
+    ]);
+  });
+
+  it("shows Staff the loan the Super Admin gave to their member, and nothing of other members", async () => {
+    const { store, admin, a, b, a1, b1 } = await seeded();
+    await loan(store, a1.id, admin.id, 1_000_000n);
+    await loan(store, b1.id, b.id, 1_000_000n);
+    expect(flags(await listMembers(store, actorOf(a), {}))).toEqual([["A One", true]]);
+    expect(flags(await listMembers(store, actorOf(a), { createdById: b.id }))).toEqual([
+      ["A One", true],
+    ]);
+  });
+
+  it("keeps the flag right under the Super Admin's createdById filter", async () => {
+    const { store, admin, b, b1 } = await seeded();
+    await loan(store, b1.id, b.id, 1_000_000n);
+    expect(flags(await listMembers(store, actorOf(admin), { createdById: b.id }))).toEqual([
+      ["B One", true],
+    ]);
+  });
+
+  it("is false for every row when a list has members but no loans, with status=all", async () => {
+    const { store, admin } = await seeded();
+    expect(flags(await listMembers(store, actorOf(admin), { status: "all" }))).toEqual([
+      ["A One", false],
+      ["A Two", false],
+      ["B One", false],
+    ]);
+  });
+
+  it("is not added to getMember (D-110)", async () => {
+    const { store, a, a1 } = await seeded();
+    await loan(store, a1.id, a.id, 1_000_000n);
+    expect(must(await getMember(store, actorOf(a), a1.id))).not.toHaveProperty("onLoan");
+  });
+});
+
 describe("getMember", () => {
   it("shows Staff a member they recorded", async () => {
     const { store, a, a1 } = await seeded();

@@ -3,9 +3,10 @@
 // Audit details hold the Membership ID only, never a name or phone.
 
 import { memberBalances } from "./balances.js";
+import { isLoanActive } from "./loans.js";
 import { koboToNairaString } from "./payments.js";
 import { hasPermission, type PermissionSubject } from "./permissions.js";
-import type { MemberRecord, MemberStatus, Store } from "./store.js";
+import type { MemberRecord, MemberStatus, PaymentRecord, Store } from "./store.js";
 
 /** Longest full name accepted (A-82: my choice, same as a display name). */
 export const FULL_NAME_MAX = 100;
@@ -30,6 +31,11 @@ export interface MemberView {
   status: MemberStatus;
   createdById: string;
   createdAt: string;
+}
+
+/** A member list row: the member plus whether they have an active loan (DR-08, D-110). */
+export interface MemberListView extends MemberView {
+  onLoan: boolean;
 }
 
 export type MemberFailure = "forbidden" | "invalid_input" | "not_found" | "already_active";
@@ -149,23 +155,36 @@ export interface MemberListInput {
  * Members in Membership ID order. Status defaults to Active.
  * Staff: always only their own members, and a `createdById` filter is checked but ignored.
  * Super Admin: all members, or the ones recorded by `createdById`.
+ * Each row has `onLoan`: true while the member has a loan with anything outstanding (DR-08, D-110).
+ * Members, loans and payments are read in one transaction, with the same member scope.
  */
 export async function listMembers(
   store: Store,
   actor: MemberActor,
   input: MemberListInput,
-): Promise<MemberResult<MemberView[]>> {
+): Promise<MemberResult<MemberListView[]>> {
   if (!hasPermission(actor.subject, "members.view")) return failure("forbidden");
   const status = parseStatus(input.status);
   const userFilter = parseUserFilter(input.createdById);
   if (!status.ok || !userFilter.ok) return failure("invalid_input");
 
   const createdById = seesAll(actor) ? userFilter.value : actor.id;
-  const rows = await store.members.list({
-    ...(createdById !== undefined ? { createdById } : {}),
-    ...(status.value !== undefined ? { status: status.value } : {}),
+  const memberScope = createdById !== undefined ? { memberCreatedById: createdById } : {};
+  return store.transaction(async (tx): Promise<MemberResult<MemberListView[]>> => {
+    const rows = await tx.members.list({
+      ...(createdById !== undefined ? { createdById } : {}),
+      ...(status.value !== undefined ? { status: status.value } : {}),
+    });
+    const loans = await tx.loans.list(memberScope);
+    const payments = await tx.payments.list(memberScope);
+
+    const byMember = new Map<string, PaymentRecord[]>();
+    for (const p of payments) byMember.set(p.memberId, [...(byMember.get(p.memberId) ?? []), p]);
+    const onLoan = new Set(
+      loans.filter((l) => isLoanActive(l, byMember.get(l.memberId) ?? [])).map((l) => l.memberId),
+    );
+    return { ok: true, value: rows.map((m) => ({ ...toView(m), onLoan: onLoan.has(m.id) })) };
   });
-  return { ok: true, value: rows.map(toView) };
 }
 
 /**

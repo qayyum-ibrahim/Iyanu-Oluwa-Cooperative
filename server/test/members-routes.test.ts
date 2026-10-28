@@ -246,6 +246,22 @@ describe("GET /members", () => {
     expect(all.body.members).toHaveLength(2);
   });
 
+  it("sends onLoan on each row, and not on GET /members/:id (D-110)", async () => {
+    const { app, store, a, bearer, addMember } = await build();
+    const one = await addMember(a.id, "A One");
+    await addMember(a.id, "A Two");
+    await store.loans.create({ memberId: one.id, principal: 1_000_000n, givenOn: "2026-10-18", createdById: a.id });
+    const res = await request(app).get("/members").set("Authorization", bearer(a));
+    expect(res.status).toBe(200);
+    expect((res.body.members as { fullName: string; onLoan: unknown }[]).map((m) => [m.fullName, m.onLoan])).toEqual([
+      ["A One", true],
+      ["A Two", false],
+    ]);
+    const detail = await request(app).get(`/members/${one.id}`).set("Authorization", bearer(a));
+    expect(detail.status).toBe(200);
+    expect(detail.body.member).not.toHaveProperty("onLoan");
+  });
+
   it("answers 400 invalid_input for a bad status", async () => {
     const { app, admin, bearer } = await build();
     const res = await request(app)

@@ -4,7 +4,7 @@
 | ID | Question | Who answers | Needed by | Default until answered |
 |---|---|---|---|---|
 | OQ-00 | Mr. Aro to sign off the money rules in DOMAIN_RULES with real figures. Answered 2026-10-22: "money rules are good to go"; the owner will say if a change is needed (D-71, A-179). | Owner / Mr. Aro | Closed | n/a |
-| OQ-01 | Where is it hosted, who runs it, and which production database? | Owner | Phase 10 | SQLite for dev only |
+| OQ-01 | Where is it hosted, who runs it, and which production database? Answered for client testing 2026-10-29 (D-116): Render free web service and Neon free PostgreSQL, both Frankfurt, UptimeRobot pinging `/health`. Go-live hosting still open. | Owner | Phase 10 | Test deploy per D-116; SQLite for dev until E.2 |
 | OQ-02 | Owner's email for the Super Admin account | Owner | Phase 2 | Entered when the setup script runs. Never in git. |
 | OQ-03 | Owner's OS and Node version. Answered 2026-10-13: macOS, Node v22.14.0, npm 11.21.0 | Owner | Closed | n/a |
 | OQ-04 | Deadline, definition of done, credit situation. Needed by moved to Phase 10 at 9.0 (A-268): built on the default; the owner confirms or changes it at acceptance. | Owner | Phase 10 | Lean mode, no deadline |

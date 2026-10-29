@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.0 (size S), 2026-10-29: plan for the earliest test deploy (R-41, D-115, D-116, A-289)
+
+The owner said "keep both on Render. go for E.0 and we can use uptimerobot for the ping".
+**Inconsistencies fixed:** none in the docs. A conflict was named before the plan: client testing with real data would break D-08; the owner kept fictional data. OQ-01 said "SQLite for dev only"; it is now answered for testing only.
+**Sources:** Render, Neon and Prisma docs read through fetch agents (URLs and quotes in A-289). npm pages for the adapters answered 403. UptimeRobot docs not read.
+**Changed:** docs only: STATUS, BUILD_LOG, DECISIONS (D-115, D-116), ASSUMPTIONS (A-04 updated, A-289 new), OPEN_QUESTIONS (OQ-01), PHASE_PLAN (Phase E row and steps E.0 to E.9), TRACEABILITY (R-41), SOURCES, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server, no code change): "Test Files 60 passed (60)", "Tests 2299 passed (2299)".
+**Not verified:** the A-289 "Not checked" list (adapter versions, Neon compute size, the 90-day deletion scope, Render's proxy headers, UptimeRobot's free plan).
+
+---
+
 ## Step 9.4c (size S), 2026-10-29: minimum password length 6 (R-37, D-114, A-288)
 
 The owner said "fix inconsistencies and go".

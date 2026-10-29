@@ -14,6 +14,7 @@ Sizes: S one change, M several files, L split it. You say "continue" to start ea
 | 7 | Dashboard and reports; Lagos month-end tests | Totals match lists |
 | 8 | Excel exports | Files open as .xlsx; filters and permissions verified |
 | 9 | Hardening: security review, backups, accessibility | Review items closed |
+| E | Earliest test deploy on Render and Neon, fictional data (D-115, D-116); runs after 9.4c, before 9.5 | The client signs in on the hosted address; live check passes there |
 | 10 | Release: acceptance sign-off, go-live checklist, parallel running | Checklist passed |
 
 ## Phase 1 steps (first look)
@@ -219,3 +220,16 @@ Goal: hardening (security review, backups, accessibility). Exit "Review items cl
 - 9.9 (M) Accessibility fixes from 9.8; split per screen if L. Display code: no break-on-purpose.
 - 9.10 (M) Break-on-purpose for the Phase 9 security and data-loss code (headers, sign-in limit, backup), D-90; gaps get a test step and a rerun. Also the 9.1e to 9.1m money and scope code (`onLoan` in `listMembers`, the member kind, `GET /exports`, `buildPdf` and its PDF money cells (`pdfText`, `koboToNairaText`, the Total), the web reply check and query), added at 9.1d (D-110).
 - 9.11 (S) Walk-through on the owner's machine: the live check (owner's word; owed since 8.11, with the export 403 part), the A-267 check with one fictional Fuel expense, the sign-in limit, a keyboard-only pass of sign-in and recording a payment. Exit check: every review item closed or moved to Phase 10. Also the client's update (D-110): the loan tag, the month cards, the "You" default, one export with two kinds in Excel and in PDF, one member file.
+
+## Phase E steps (earliest test deploy, planned at E.0, D-115, D-116; first look, sizes checked when each starts)
+Goal: the client tests the app on Render with fictional data (D-08) before Phase 9 ends. Exit: the client signs in on the hosted address and the live check passes there. Phase 9 resumes at 9.5 after E.9.
+- E.0 (S) Plan, docs only (D-115, D-116, A-289). Done.
+- E.1 (S) Choose and pin the Prisma PostgreSQL adapter (`@prisma/adapter-pg` or `@prisma/adapter-neon`) and the `pg` driver if needed: `npm view` for versions and dates, the Prisma and Neon docs; owner's word before the install; `npm run check` and `npm audit`. Files: `server/package.json`, `server/package-lock.json`.
+- E.2 (M) Schema and migrations for PostgreSQL: `provider` in `server/prisma/schema.prisma`, new migrations, `server/prisma.config.ts` (direct URL for the CLI), `server/src/db.ts` (the adapter, pooled URL). The dev database becomes PostgreSQL. Files confirmed at the step.
+- E.3 (M) The store contract and the Prisma tests on PostgreSQL (`server/test/helpers/temp-db.ts`); fix the differences found (text matching, case, ordering, BigInt). Owner's word on where the test database runs. May split.
+- E.4 (M) The server serves the built web pages from `web/dist/` on the same address, with page security headers; unknown API routes still answer 404 JSON. Files: `server/src/app.ts`, `server/src/server.ts`, a test.
+- E.5 (S) Twilio: read the official docs, name the settings, choose plain HTTPS or Twilio's library (owner's word before any install). Docs only, or `server/package.json` if a library.
+- E.6 (M) Twilio adapter behind `SmsProvider` in `server/src/sms.ts`; the fake provider stays the default; test numbers only (D-08).
+- E.7 (M) Render settings: build both folders from the repo root, `migrate deploy` with the direct URL before `npm start`, `NODE_VERSION`, the client address behind Render's proxy (`trust proxy`, tested on Render), HSTS. Files named at the step.
+- E.8 (S) `docs/DEPLOY.md`; the owner deploys, runs `setup:owner` against Neon and the live check on the hosted address; UptimeRobot on `/health` every 5 minutes (its docs read at the step).
+- E.9 (S) Hand-over: fictional test accounts for the client, what to test, how to report.

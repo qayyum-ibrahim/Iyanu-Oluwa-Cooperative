@@ -25,6 +25,11 @@ describe("hashPassword", () => {
     expect(a).not.toBe(b);
   }, SLOW);
 
+  it("has the length limits 6 to 128 (D-114)", () => {
+    expect(PASSWORD_MIN_LENGTH).toBe(6);
+    expect(PASSWORD_MAX_LENGTH).toBe(128);
+  });
+
   it("rejects a password shorter than the minimum", async () => {
     await expect(hashPassword("a".repeat(PASSWORD_MIN_LENGTH - 1))).rejects.toBeInstanceOf(PasswordPolicyError);
   });

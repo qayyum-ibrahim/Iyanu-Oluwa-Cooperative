@@ -64,7 +64,7 @@ export function changePasswordMessage(result: ChangePasswordResult): string | nu
     case "wrong_password":
       return "The current password is wrong.";
     case "invalid_input":
-      return "The new password was refused. Use 12 to 128 characters, different from the current one.";
+      return "The new password was refused. Use 6 to 128 characters, different from the current one.";
     case "signed_out":
       return SESSION_ENDED;
     case "network":

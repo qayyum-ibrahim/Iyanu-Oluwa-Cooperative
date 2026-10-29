@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 // The server's limits (server/src/password.ts). The server checks again.
-export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MIN_LENGTH = 6;
 export const PASSWORD_MAX_LENGTH = 128;
 
 /** A message for the new password, or null if it may be sent. */

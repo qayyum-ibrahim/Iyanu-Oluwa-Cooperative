@@ -224,13 +224,13 @@ describe("ChangePassword", () => {
   });
 
   it("checks the new password before sending it", () => {
-    expect(checkNewPassword("current pass", "short", "short")).toMatch(/12 to 128/);
-    expect(checkNewPassword("x", "a".repeat(129), "a".repeat(129))).toMatch(/12 to 128/);
+    expect(checkNewPassword("current pass", "short", "short")).toMatch(/6 to 128/);
+    expect(checkNewPassword("x", "a".repeat(129), "a".repeat(129))).toMatch(/6 to 128/);
     expect(checkNewPassword("same password", "same password", "same password")).toMatch(/differ/);
     expect(checkNewPassword("current pass", "new password 1", "new password 2")).toMatch(
       /do not match/,
     );
-    expect(checkNewPassword("current pass", "a".repeat(12), "a".repeat(12))).toBeNull();
+    expect(checkNewPassword("current pass", "a".repeat(6), "a".repeat(6))).toBeNull();
     expect(checkNewPassword("current pass", "a".repeat(128), "a".repeat(128))).toBeNull();
   });
 });
@@ -263,7 +263,7 @@ describe("messages", () => {
 
   it("maps each change-password failure", () => {
     expect(changePasswordMessage({ ok: false, reason: "wrong_password" })).toMatch(/current password is wrong/);
-    expect(changePasswordMessage({ ok: false, reason: "invalid_input" })).toMatch(/12 to 128/);
+    expect(changePasswordMessage({ ok: false, reason: "invalid_input" })).toMatch(/6 to 128/);
     expect(changePasswordMessage({ ok: false, reason: "signed_out" })).toBe(SESSION_ENDED);
     expect(changePasswordMessage({ ok: true })).toBeNull();
     expect(PASSWORD_CHANGED).toMatch(/sign in/);
@@ -3420,11 +3420,11 @@ describe("staff helpers", () => {
       expect(refused({ email, password: "" })).toBe("Enter a valid email address.");
     }
     expect(refused({ email: `${"a".repeat(241)}@example.test` })).toBeNull();
-    expect(refused({ password: "a".repeat(11), confirm: "a".repeat(11), displayName: "" })).toBe(
-      "The password must be 12 to 128 characters.",
+    expect(refused({ password: "a".repeat(5), confirm: "a".repeat(5), displayName: "" })).toBe(
+      "The password must be 6 to 128 characters.",
     );
-    expect(refused({ password: "a".repeat(129), confirm: "a".repeat(129) })).toMatch(/12 to 128/);
-    expect(refused({ password: "a".repeat(12), confirm: "a".repeat(12) })).toBeNull();
+    expect(refused({ password: "a".repeat(129), confirm: "a".repeat(129) })).toMatch(/6 to 128/);
+    expect(refused({ password: "a".repeat(6), confirm: "a".repeat(6) })).toBeNull();
     expect(refused({ password: "a".repeat(128), confirm: "a".repeat(128) })).toBeNull();
     expect(refused({ confirm: "a long password", displayName: "" })).toBe("The two passwords do not match.");
     expect(refused({ displayName: "   ", permissions: ["users.manage"] })).toBe("Enter the full name.");
@@ -3697,16 +3697,16 @@ describe("staff status and password helpers", () => {
   });
 
   it("checks the new password's length, then that both match", () => {
-    expect(checkResetPassword("a".repeat(11), "a".repeat(11))).toBe("The password must be 12 to 128 characters.");
-    expect(checkResetPassword("a".repeat(129), "a".repeat(129))).toBe("The password must be 12 to 128 characters.");
-    expect(checkResetPassword("a".repeat(12), "a".repeat(13))).toBe("The two passwords do not match.");
-    expect(checkResetPassword("a".repeat(12), "a".repeat(12))).toBeNull();
+    expect(checkResetPassword("a".repeat(5), "a".repeat(5))).toBe("The password must be 6 to 128 characters.");
+    expect(checkResetPassword("a".repeat(129), "a".repeat(129))).toBe("The password must be 6 to 128 characters.");
+    expect(checkResetPassword("a".repeat(6), "a".repeat(7))).toBe("The two passwords do not match.");
+    expect(checkResetPassword("a".repeat(6), "a".repeat(6))).toBeNull();
     expect(checkResetPassword("a".repeat(128), "a".repeat(128))).toBeNull();
   });
 
   it("gives a message for each refused password reset, and a notice without the password", () => {
     expect(resetPasswordMessage("not_found")).toBe("This staff account was not found. Reload the page.");
-    expect(resetPasswordMessage("invalid_input")).toBe("The password was refused. It must be 12 to 128 characters.");
+    expect(resetPasswordMessage("invalid_input")).toBe("The password was refused. It must be 6 to 128 characters.");
     expect(resetPasswordMessage("forbidden")).toMatch(/permission/);
     expect(resetPasswordMessage("signed_out")).toBeNull();
     expect(resetPasswordMessage("network")).toBe("Cannot reach the server. Try again.");
@@ -3786,10 +3786,10 @@ describe("staff deactivate, reactivate and reset password (jsdom)", () => {
     await openStaff();
     await rowButton("Reset password for Staff Two");
     expect(el(".form-title").textContent).toBe("Reset password for Staff Two");
-    await type(el("input[name=password]"), "too short");
-    await type(el("input[name=confirm]"), "too short");
+    await type(el("input[name=password]"), "short");
+    await type(el("input[name=confirm]"), "short");
     await click(button("Reset password"));
-    expect(el("[role=alert]").textContent).toBe("The password must be 12 to 128 characters.");
+    expect(el("[role=alert]").textContent).toBe("The password must be 6 to 128 characters.");
     await type(el("input[name=password]"), "a new long password");
     await click(button("Reset password"));
     expect(el("[role=alert]").textContent).toBe("The two passwords do not match.");
@@ -3821,7 +3821,7 @@ describe("staff deactivate, reactivate and reset password (jsdom)", () => {
     await type(el("input[name=password]"), "a new long password");
     await type(el("input[name=confirm]"), "a new long password");
     await click(button("Reset password"));
-    expect(el("[role=alert]").textContent).toBe("The password was refused. It must be 12 to 128 characters.");
+    expect(el("[role=alert]").textContent).toBe("The password was refused. It must be 6 to 128 characters.");
     expect(el<HTMLInputElement>("input[name=password]").value).toBe("a new long password");
     expect(api.calls).toEqual(["staff", "reset s1"]);
   });

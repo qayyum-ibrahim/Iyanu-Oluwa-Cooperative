@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.4c (size S), 2026-10-29: minimum password length 6 (R-37, D-114, A-288)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN spoke of the "12 to 128 characters" texts on the web, but the web has its own `PASSWORD_MIN_LENGTH = 12` in `web/src/ChangePassword.tsx`, which the change-password and staff checks use; it is now 6. `web/src/Staff.tsx` reads that constant, so it was read, not changed. `server/src/setup-owner.ts` and `server/src/reset-owner-password.ts` print the server constant, so they were read, not changed. The web reset test typed "too short" (9 characters), which 6 allows; it now types "short". STATUS item 11 named D-55 to D-112 for the mirror; now D-55 to D-114.
+**Sources:** none read on the web this step. The OWASP advice is from 9.4 (A-286).
+**Changed:** `server/src/password.ts` (`PASSWORD_MIN_LENGTH` 6), `server/test/password.test.ts` (1 test: the limits are 6 and 128), `web/src/ChangePassword.tsx` (`PASSWORD_MIN_LENGTH` 6), `web/src/App.tsx` (the refused-password text says "6 to 128"), `web/test/app.test.tsx` (the texts "6 to 128"; 5 characters refused, 6 allowed, 6 and 7 for the mismatch). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-288), DECISIONS (D-114 built), PHASE_PLAN, TRACEABILITY (R-37), NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2299 passed (2299)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 383 passed (383)".
+**Not verified:** the screens in a browser; `setup:owner` and `reset:owner` with a 6-character password (they touch the dev database). No break-on-purpose run now; the length check joins the 9.10 run (D-90).
+
+---
+
 ## Step 9.4b (size S), 2026-10-29: the password id guards tested on the Prisma store (R-37, A-66, A-287)
 
 The owner said "yes make it a minimum of 6, go with 9.4b".

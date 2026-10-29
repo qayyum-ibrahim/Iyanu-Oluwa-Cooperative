@@ -10,6 +10,7 @@ import App, {
   SIGN_IN_FAILED,
   changePasswordMessage,
   loginMessage,
+  tooManyMessage,
 } from "../src/App";
 import type {
   Api,
@@ -243,6 +244,21 @@ describe("messages", () => {
     expect(loginMessage({ ok: false, reason: "network" })).toMatch(/Cannot reach/);
     expect(loginMessage({ ok: false, reason: "server" })).toMatch(/went wrong/);
     expect(loginMessage({ ok: true, me: { user: { id: "", email: "", displayName: "", role: "" }, permissions: [] } })).toBeNull();
+  });
+
+  it("gives the wait for a 429, never the account wording (A-284, D-26)", () => {
+    expect(tooManyMessage(900)).toBe(
+      "Too many sign-in attempts from this connection. Wait 15 minutes, then try again.",
+    );
+    expect(tooManyMessage(841)).toMatch(/Wait 15 minutes/);
+    expect(tooManyMessage(840)).toMatch(/Wait 14 minutes/);
+    expect(tooManyMessage(60)).toMatch(/Wait 1 minute,/);
+    expect(tooManyMessage(1)).toMatch(/Wait 1 minute,/);
+    expect(tooManyMessage(null)).toMatch(/Wait 15 minutes/);
+    expect(loginMessage({ ok: false, reason: "too_many_requests", retryAfterSeconds: 120 })).toBe(
+      tooManyMessage(120),
+    );
+    expect(tooManyMessage(120)).not.toBe(SIGN_IN_FAILED);
   });
 
   it("maps each change-password failure", () => {
@@ -680,6 +696,16 @@ describe("screens (jsdom)", () => {
     expect(el("[role=alert]").textContent).toBe(SIGN_IN_FAILED);
     expect(el<HTMLInputElement>("input[type=password]").value).toBe("");
     expect(el<HTMLInputElement>("input[type=email]").value).toBe("ada@example.test");
+    expect(button("Sign in").disabled).toBe(false);
+  });
+
+  it("shows the wait when sign-in answers 429 and clears the password", async () => {
+    await mount(fakeApi({ login: { ok: false, reason: "too_many_requests", retryAfterSeconds: 300 } }));
+    await signInWith("ada@example.test", "a password");
+    expect(el("[role=alert]").textContent).toBe(
+      "Too many sign-in attempts from this connection. Wait 5 minutes, then try again.",
+    );
+    expect(el<HTMLInputElement>("input[type=password]").value).toBe("");
     expect(button("Sign in").disabled).toBe(false);
   });
 

@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step 9.3b (size S), 2026-10-29: the sign-in page shows a message for 429 (R-37, A-284, A-285)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** the 9.3b file list named `web/src/SignIn.tsx`, but the sign-in messages are built by `loginMessage` in `web/src/App.tsx`; the step edited `App.tsx` with the owner's word, and PHASE_PLAN now says so. `SignIn.tsx` and `server/src/auth-routes.ts` were read only.
+**Sources:** none read on the web this step. The server side of the 429 is A-284 (RFC 6585 section 4, RFC 9110 section 10.2.3, read at 9.3). Whether a browser exposes Retry-After to the page: not checked.
+**Changed:** `web/src/api.ts` (`LoginResult` gains `too_many_requests` with `retryAfterSeconds`; `login` answers it on 429; new `retryAfterOf`), `web/src/App.tsx` (`loginMessage` handles the new reason; new `tooManyMessage`), `web/test/api.test.ts` (3 tests: `retryAfterOf`, 429 with Retry-After 840 and no `/auth/me` call or tokens, 429 with no header), `web/test/app.test.tsx` (2 tests: the wording and rounding, and the sign-in page showing it with the password cleared). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-285), PHASE_PLAN, TRACEABILITY (R-37), NEXT_FILES. No new decision.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 383 passed (383)". `npm run check` (server, unchanged code): "Test Files 59 passed (59)", "Tests 2288 passed (2288)".
+**Not verified:** the message in a browser against a running server. The session was cut once by a power loss after the code and the web check; both checks were run again before these docs.
+
+---
+
 ## Step 9.3 (size M), 2026-10-28: per-address limit on sign-in (R-37, A-42, A-284)
 
 The owner said "fix Inconsistencies and go".

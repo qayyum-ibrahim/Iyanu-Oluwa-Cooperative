@@ -4,8 +4,13 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-web/src/SignIn.tsx
-web/src/api.ts
-web/test/app.test.tsx
-web/test/api.test.ts
+docs/OPEN_QUESTIONS.md
+docs/SOURCES.md
+server/src/password.ts
+server/src/auth.ts
+server/src/tokens.ts
+server/src/sessions.ts
+server/src/guards.ts
+server/src/account.ts
 server/src/auth-routes.ts
+web/src/session.ts

@@ -45,8 +45,17 @@ export const SIGN_IN_FAILED =
 export function loginMessage(result: LoginResult): string | null {
   if (result.ok) return null;
   if (result.reason === "invalid_credentials") return SIGN_IN_FAILED;
+  if (result.reason === "too_many_requests") return tooManyMessage(result.retryAfterSeconds);
   if (result.reason === "network") return "Cannot reach the server. Try again.";
   return "Something went wrong. Try again.";
+}
+
+/** The per-address limit (A-284). Says nothing about the account, so D-26 is kept. */
+export function tooManyMessage(retryAfterSeconds: number | null): string {
+  const lead = "Too many sign-in attempts from this connection.";
+  if (retryAfterSeconds === null) return `${lead} Wait 15 minutes, then try again.`;
+  const minutes = Math.ceil(retryAfterSeconds / 60);
+  return `${lead} Wait ${minutes} ${minutes === 1 ? "minute" : "minutes"}, then try again.`;
 }
 
 export function changePasswordMessage(result: ChangePasswordResult): string | null {

@@ -3,6 +3,7 @@ import {
   REFRESH_LOCK_NAME,
   browserRefreshLock,
   createApi,
+  retryAfterOf,
   type ExportQuery,
   type LockRequester,
   type RefreshLock,
@@ -93,6 +94,21 @@ function setup(
   return { api, keeper, calls, keys, signedOutCount: () => signedOut };
 }
 
+describe("retryAfterOf", () => {
+  it("reads whole seconds and refuses anything else", () => {
+    expect(retryAfterOf("900")).toBe(900);
+    expect(retryAfterOf(" 1 ")).toBe(1);
+    expect(retryAfterOf(null)).toBeNull();
+    expect(retryAfterOf("")).toBeNull();
+    expect(retryAfterOf("0")).toBeNull();
+    expect(retryAfterOf("-5")).toBeNull();
+    expect(retryAfterOf("1.5")).toBeNull();
+    expect(retryAfterOf("1e3")).toBeNull();
+    expect(retryAfterOf("Wed, 21 Oct 2026 07:28:00 GMT")).toBeNull();
+    expect(retryAfterOf("1234567")).toBeNull();
+  });
+});
+
 describe("login", () => {
   it("saves the tokens, then reads /me with the new access token", async () => {
     const { api, keeper, calls } = setup((call) => {
@@ -130,6 +146,33 @@ describe("login", () => {
     expect(await down.api.login("a@b.test", "x")).toEqual({ ok: false, reason: "network" });
     const broken = setup(() => json(500, { error: "server_error" }));
     expect(await broken.api.login("a@b.test", "x")).toEqual({ ok: false, reason: "server" });
+  });
+
+  it("answers too_many_requests on 429 with Retry-After in seconds, keeps nothing, skips /me", async () => {
+    const { api, keeper, calls } = setup(
+      () =>
+        new Response(JSON.stringify({ error: "too_many_requests" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json", "Retry-After": "840" },
+        }),
+    );
+    expect(await api.login("a@b.test", "x")).toEqual({
+      ok: false,
+      reason: "too_many_requests",
+      retryAfterSeconds: 840,
+    });
+    expect(calls.map((call) => call.path)).toEqual(["/api/auth/login"]);
+    expect(keeper.accessToken()).toBeNull();
+    expect(keeper.refreshToken()).toBeNull();
+  });
+
+  it("answers too_many_requests with null seconds when Retry-After is missing", async () => {
+    const { api } = setup(() => json(429, { error: "too_many_requests" }));
+    expect(await api.login("a@b.test", "x")).toEqual({
+      ok: false,
+      reason: "too_many_requests",
+      retryAfterSeconds: null,
+    });
   });
 
   it("clears the tokens when /me fails after a good login", async () => {

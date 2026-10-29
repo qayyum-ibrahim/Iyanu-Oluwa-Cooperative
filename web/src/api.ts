@@ -31,7 +31,9 @@ export interface Me {
 
 export type LoginResult =
   | { ok: true; me: Me }
-  | { ok: false; reason: "invalid_credentials" | "network" | "server" };
+  | { ok: false; reason: "invalid_credentials" | "network" | "server" }
+  /** 429 from the per-address limit (A-284); seconds from Retry-After, null if missing or bad. */
+  | { ok: false; reason: "too_many_requests"; retryAfterSeconds: number | null };
 
 export type ChangePasswordResult =
   | { ok: true }
@@ -500,6 +502,13 @@ async function readJson(response: Response): Promise<unknown> {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Retry-After as whole seconds (the server sends 1 to 900, A-284). A date or anything else is null. */
+export function retryAfterOf(header: string | null): number | null {
+  if (header === null || !/^\d{1,6}$/.test(header.trim())) return null;
+  const seconds = Number(header.trim());
+  return seconds > 0 ? seconds : null;
 }
 
 function tokensOf(body: unknown): { accessToken: string; refreshToken: string } | null {
@@ -1220,6 +1229,13 @@ export function createApi(deps: ApiDeps): Api {
         return { ok: false, reason: "network" };
       }
       if (response.status === 401) return { ok: false, reason: "invalid_credentials" };
+      if (response.status === 429) {
+        return {
+          ok: false,
+          reason: "too_many_requests",
+          retryAfterSeconds: retryAfterOf(response.headers.get("Retry-After")),
+        };
+      }
       if (response.status !== 200) return { ok: false, reason: "server" };
       const tokens = tokensOf(await readJson(response));
       if (tokens === null) return { ok: false, reason: "server" };

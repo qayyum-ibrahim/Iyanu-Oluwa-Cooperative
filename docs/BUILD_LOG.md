@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.1 (size S), 2026-10-29: Prisma PostgreSQL adapter pinned (R-41, D-117, A-290)
+
+The owner said "go", then "yes, install adapter-pg".
+**Inconsistencies fixed:** none.
+**Sources:** `npm view` for both adapters, `@prisma/client`, `prisma`, `pg` and `@types/pg` (verified in this session). Prisma PostgreSQL and database drivers pages and Neon's Prisma guide read through a fetch agent (URLs in A-290).
+**Changed:** `server/package.json` (`@prisma/adapter-pg` 7.10.1, exact), `server/package-lock.json`. Docs: STATUS, BUILD_LOG, DECISIONS (D-117), ASSUMPTIONS (A-290 new, A-289 item 1 and A-20 updated), PHASE_PLAN (E.1 done), TRACEABILITY (R-41), SOURCES, NEXT_FILES.
+**Works (verified in this session):** `npm ls`: `@prisma/adapter-pg@7.10.1`, `pg@8.23.1`, `@types/pg@8.23.1`. `npm audit`: "2 moderate severity vulnerabilities" (`uuid` with `exceljs`), the same as the previous lock file. `npm run check` (server): "Test Files 60 passed (60)", "Tests 2299 passed (2299)".
+**Not verified:** that adapter-pg works with Neon's pooled address (E.2 or E.7); npm's install-scripts warning (A-271 item 5); no code uses the adapter yet.
+
+---
+
 ## Step E.0 (size S), 2026-10-29: plan for the earliest test deploy (R-41, D-115, D-116, A-289)
 
 The owner said "keep both on Render. go for E.0 and we can use uptimerobot for the ping".

@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 9.4b (size S), 2026-10-29: the password id guards tested on the Prisma store (R-37, A-66, A-287)
+
+The owner said "yes make it a minimum of 6, go with 9.4b".
+**Inconsistencies fixed:** PHASE_PLAN named `server/test/account.test.ts` and `server/test/staff-password.test.ts` for 9.4b, but both build only the memory store; the Prisma store is reached through `server/test/helpers/temp-db.ts`, which NEXT_FILES left out. The cases went into a new file instead (A-287 item 1). The minimum password length: the owner chose 6, which overrules D-23's 12 and D-113 item 2 (D-114); I said before the step that 6 is below the OWASP advice. Built at 9.4c, not here.
+**Changed:** new `server/test/password-ids-prisma.test.ts` (10 tests: `changeOwnPassword` answers `wrong_password` and `resetStaffPassword` answers `not_found` for undefined, null, "", 42 and an object, with the stored hash and the audit unchanged). No source change.
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2298 passed (2298)".
+**Break-on-purpose, by hand (verified in this session):** A15, the `typeof userId` line removed from `account.ts`: "Failed Tests 4", each `PrismaClientValidationError` (undefined, null, a number, an object); caught. R10, the same line removed from `resetStaffPassword` in `staff.ts`: "Failed Tests 4", the same error; caught. Both files copied back from a scratchpad copy; `git status --short` afterwards showed only `?? server/test/password-ids-prisma.test.ts`. The "" case passes with the guard removed (Prisma finds no user), so the empty-text half stays defence in depth.
+**Not verified:** the same guards in `setStaffPermissions` and `setStaffActive` (`staff.ts` lines 160 and 187) on the Prisma store; A-91 (`getMember`) stays with 9.5. Prisma's docs on `undefined` in `where` not read; the behaviour was observed, not looked up.
+
 ## Step 9.4 (size M), 2026-10-29: review of the sign-in and token items (R-37, D-113, A-286)
 
 The owner said "fix inconsistencies and go".

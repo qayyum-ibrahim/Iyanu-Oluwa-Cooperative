@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step 9.4 (size M), 2026-10-29: review of the sign-in and token items (R-37, D-113, A-286)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** NEXT_FILES left out `server/src/email.ts` (A-23), `server/src/staff.ts` and `server/src/prisma-store.ts` (A-66); they were read, not changed. STATUS "Open items" still said A-42 had no per-IP limit; corrected (built at 9.3, A-284).
+**Sources:** read through fetch agents; URLs in A-286. OWASP Password Storage, Authentication and HTML5 Security cheat sheets, RFC 5321, RFC 3696 erratum 1690, RFC 2104, RFC 9110 and RFC 6750: verbatim. Session Management cheat sheet: verbatim up to "Secure Attribute", the rest a summary. JSON Web Token for Java sheet: 404; the general JWT sheet read instead. Node.js timingSafeEqual: summary only.
+**Result:** closed A-23, A-29, A-33, A-37, A-51. Moved to Phase 10: A-22 tuning, A-32 rotation, A-34, A-45, A-50, and a new finding (no absolute session end, A-286 item 5). Owner's choice: minimum password length 12 or 15 (D-113). A-66: test step 9.4b added.
+**Changed:** docs only: STATUS, BUILD_LOG, ASSUMPTIONS (A-22, A-23, A-29, A-32, A-33, A-34, A-37, A-45, A-50, A-51, A-66 updated; A-286 new), DECISIONS (D-113), PHASE_PLAN (9.4 done, 9.4b added), TRACEABILITY (R-37), SOURCES, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server, no code change): "Test Files 59 passed (59)", "Tests 2288 passed (2288)".
+**Not verified:** login timing (A-29) not measured; what Prisma does with an `undefined` id (A-66, for 9.4b).
+
+---
+
 ## Step 9.3b (size S), 2026-10-29: the sign-in page shows a message for 429 (R-37, A-284, A-285)
 
 The owner said "fix inconsistencies and go".

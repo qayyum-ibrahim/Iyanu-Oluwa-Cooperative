@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step E.2c (size S), 2026-10-30: the Neon `dev` branch (R-41, A-293)
+
+The owner said "you can delete server/dev.db when the migration is complete", then "confirmed, go" (Frankfurt and PostgreSQL 18 checked in the Neon console), then "yes" to `npm run db:deploy`.
+**Inconsistencies:** none found in the files read.
+**Sources:** none new; the run outputs are in A-293.
+**Changed:** no source file. `server/dev.db` (git-ignored, never tracked) deleted after the migration. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-293, A-291 item 7 answered), PHASE_PLAN, TRACEABILITY, DEV_SETUP, NEXT_FILES. No new decision.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `npm run check` (server): "Test Files 57 passed (57)", "Tests 2287 passed (2287)". `npm run db:deploy`: "Applying migration `20261030090000_postgres_baseline`", "All migrations have been successfully applied." (host in `eu-central-1`).
+**Works (verified on owner's machine):** `npm run setup:owner`: "Super Admin created: owner@example.test". Live check: "212 passed, 0 failed".
+**Not verified:** Claude did not see the server output for the live check; that it ran on Neon is inferred (no SQLite file, no default address). Concurrent writes on Neon and whether 10 tries suffice there (E.7). Reset steps for the Neon dev database are not written.
+
+---
+
 ## Step E.2b (size L), 2026-10-30: the switch to PostgreSQL (R-41, D-118, D-119, A-292)
 
 The owner said "fix inconsistencies and go", then "Yes, all three" (delete the 18 SQLite migration folders and the 3 migration tests, remove `@prisma/adapter-better-sqlite3`), then "yes, edit prisma-store.ts and go".

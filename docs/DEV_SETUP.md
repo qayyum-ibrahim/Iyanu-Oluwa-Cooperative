@@ -14,7 +14,7 @@ Machine: macOS, Node v22.14.0, npm 11.21.0 (owner, 2026-10-13). The server needs
 | Run | `npm start` (port 3000, or `PORT=3456 npm start`) |
 | Run and reload on change | `npm run dev` |
 | Health route | `curl -i http://localhost:3000/health` |
-| Reset the dev database | the Neon `dev` branch (E.2c); `server/dev.db` is the old SQLite file, no longer used (A-292) |
+| Dev database | the Neon `dev` branch since E.2c (A-293): `npm run db:deploy` applies migrations through `DIRECT_URL`; `server/dev.db` deleted. Reset steps for Neon not written yet |
 | Test database (E.2a, D-118) | from the repo root: `sh scripts/test-db.sh start`, `stop`, `status` or `reset` (local PostgreSQL 18.6, Homebrew `postgresql@18`, 127.0.0.1:54329, no password; used by the tests since E.2b; start it before `npm run check`) |
 
 ## Routes

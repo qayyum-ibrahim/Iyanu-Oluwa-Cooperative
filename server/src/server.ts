@@ -4,11 +4,17 @@
 // SMS goes to the fake provider until the Twilio adapter exists (D-07, D-49).
 
 import "dotenv/config";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { createPrismaClient } from "./db.js";
 import { createPrismaStore } from "./prisma-store.js";
 import { FakeSmsProvider } from "./sms.js";
 import { TokenConfigError, readTokenSecret } from "./tokens.js";
+
+// The built web pages (`npm run build` in web/), served on the same address (D-116, step E.4).
+const WEB_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", "dist");
 
 function start(): void {
   let tokenSecret: string;
@@ -31,11 +37,17 @@ function start(): void {
     return;
   }
 
+  const webDir = existsSync(join(WEB_DIR, "index.html")) ? WEB_DIR : undefined;
+  if (webDir === undefined) {
+    console.log("web pages not found (run npm run build in web/); serving the API only");
+  }
+
   const prisma = createPrismaClient(databaseUrl);
   const app = createApp({
     store: createPrismaStore(prisma),
     tokenSecret,
     sms: new FakeSmsProvider(),
+    webDir,
   });
   const port = Number(process.env["PORT"] ?? 3000);
 

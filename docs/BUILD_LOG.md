@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.4 (size M), 2026-10-30: the server serves the web pages (R-41, D-120, A-294)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** the built web calls the API under `/api` (`web/src/api.ts`), but only the Vite dev proxy removed that prefix, so on one address every call would have been a 404; the API now also answers under `/api` (D-120), and the PHASE_PLAN line says so. The 9.2 headers (`default-src 'none'`, `no-store`) would block the page's script and style; page files now get their own CSP and `no-cache`; `headers.test.ts` needed no change (the API headers are unchanged). The old git-ignored `web/dist` was replaced by a fresh `npm run build`.
+**Sources:** Express 5 API pages and the OWASP CSP and HTTP Headers cheat sheets through fetch agents; `send` 1.2.1 `index.js` read locally (URLs in A-294).
+**Changed:** `server/src/app.ts` (API routes on one router mounted at `/api` and `/`; `webDir` and `PAGE_HEADERS`; `express.static` with `setHeaders`), `server/src/server.ts` (finds `web/dist`, passes `webDir`, logs when it is missing), new `server/test/web-pages.test.ts` (15 tests). Docs: STATUS, BUILD_LOG, DECISIONS (D-120), ASSUMPTIONS (A-294), PHASE_PLAN, TRACEABILITY, SOURCES, DEV_SETUP, NEXT_FILES.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `npm run check` (server): "Test Files 58 passed (58)", "Tests 2302 passed (2302)" (2287 + 15). `npm run build` (web): "dist/assets/index-w34LDBwX.js 322.65 kB", "built in 322ms". Live check, the real server on port 3999 with a fake secret and the local test database (not Neon): "server listening on port 3999"; `GET /` and `GET /assets/index-w34LDBwX.js` "200 OK" with "Cache-Control: no-cache" and the page CSP; `GET /api/health` and `GET /health` "200 OK" with "Cache-Control: no-store" and "default-src 'none'; frame-ancestors 'none'"; `GET /api/nope` and `GET /api/index.html` "404 Not Found" JSON; `GET /api/auth/me` without a token: `{"error":"unauthorized"} 401`; after stop: "port 3999 free".
+**Not verified:** the pages in a browser under the new CSP (no browser run); sign-in through the served page; the Render build (E.7). Break-on-purpose: none now; `server.ts` and the mounts are in the Phase E run (D-90), where `mutate-7.7a.mjs` group A will need new find texts (A-294 item 5).
+
+---
+
 ## Step E.2c (size S), 2026-10-30: the Neon `dev` branch (R-41, A-293)
 
 The owner said "you can delete server/dev.db when the migration is complete", then "confirmed, go" (Frankfurt and PostgreSQL 18 checked in the Neon console), then "yes" to `npm run db:deploy`.

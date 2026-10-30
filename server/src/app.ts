@@ -21,6 +21,8 @@ export interface AppDeps {
   now?: () => Date;
   /** Defaults to a FakeSmsProvider (D-07). server.ts passes it on purpose. */
   sms?: SmsProvider;
+  /** Folder of the built web pages (web/dist, step E.4). Unset: no pages are served. */
+  webDir?: string;
 }
 
 /** Returns the HTTP status for a client error (4xx) raised by Express itself, else null. */
@@ -46,6 +48,22 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Referrer-Policy": "no-referrer",
 };
 
+/**
+ * Headers that replace two of the above on a web page file (step E.4). The other three stay.
+ * The CSP is the OWASP CSP cheat sheet's tightened basic policy, with frame-ancestors 'none' (as
+ * X-Frame-Options DENY) and base-uri 'none' added. no-cache, so a new build is picked up at once.
+ */
+export const PAGE_HEADERS: Readonly<Record<string, string>> = {
+  "Cache-Control": "no-cache",
+  "Content-Security-Policy":
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+};
+
+/** True for /api and anything under it: those paths are only ever API routes. */
+function isApiPath(path: string): boolean {
+  return path === "/api" || path.startsWith("/api/");
+}
+
 const securityHeaders: express.RequestHandler = (_req, res, next) => {
   res.set(SECURITY_HEADERS);
   next();
@@ -68,34 +86,55 @@ const errorHandler: express.ErrorRequestHandler = (err, _req, res, next) => {
 
 /**
  * Without `deps` only /health exists (the health test uses this).
- * With `deps` the /auth and /staff routes are mounted. A bad token secret throws at once, at start-up.
+ * With `deps` the API routes are mounted, at / and under /api. A bad token secret throws at once,
+ * at start-up. With `deps.webDir` the files in it are served as web pages.
  */
 export function createApp(deps?: AppDeps): express.Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(securityHeaders);
-  app.get("/health", (_req, res) => {
+  const api = express.Router();
+  api.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
   if (deps !== undefined) {
     const tokenSecret = assertSecretAllowed(deps.tokenSecret);
     const now = deps.now ?? (() => new Date());
     const sms = deps.sms ?? new FakeSmsProvider();
-    app.use(
+    api.use(
       "/auth",
       express.json({ limit: "10kb" }),
       createAuthRouter({ store: deps.store, tokenSecret, now }),
     );
-    app.use("/staff", createStaffRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/audit", createAuditRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/members", createMembersRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/payments", createPaymentsRouter({ store: deps.store, tokenSecret, now, sms }));
-    app.use("/loans", createLoansRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/expenses", createExpensesRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/payoffs", createPayOffsRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/dashboard", createDashboardRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/reports", createReportsRouter({ store: deps.store, tokenSecret, now }));
-    app.use("/exports", createExportsRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/staff", createStaffRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/audit", createAuditRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/members", createMembersRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/payments", createPaymentsRouter({ store: deps.store, tokenSecret, now, sms }));
+    api.use("/loans", createLoansRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/expenses", createExpensesRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/payoffs", createPayOffsRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/dashboard", createDashboardRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/reports", createReportsRouter({ store: deps.store, tokenSecret, now }));
+    api.use("/exports", createExportsRouter({ store: deps.store, tokenSecret, now }));
+  }
+  // The built web pages call the API under /api (web/src/api-proxy.ts). The routes still answer
+  // without the prefix, for the live check and the /health ping (step E.4).
+  app.use("/api", api);
+  app.use(api);
+  if (deps?.webDir !== undefined) {
+    const pages = express.static(deps.webDir, {
+      setHeaders: (res) => {
+        res.set(PAGE_HEADERS);
+      },
+    });
+    // A missing file falls through to the 404 below. Nothing under /api is ever a page.
+    app.use((req, res, next) => {
+      if (isApiPath(req.path)) {
+        next();
+        return;
+      }
+      void pages(req, res, next);
+    });
   }
   // Our own 404: Express's default one replaces the Content-Security-Policy set above.
   app.use((_req, res) => {

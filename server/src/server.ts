@@ -1,5 +1,5 @@
 // Starts the real server: real database, real signing secret (D-32).
-// Run from inside server/ so ".env" and the default "file:./dev.db" resolve there.
+// Run from inside server/ so ".env" resolves there.
 // Never log a secret, a token or a request body.
 // SMS goes to the fake provider until the Twilio adapter exists (D-07, D-49).
 
@@ -23,7 +23,15 @@ function start(): void {
     throw error;
   }
 
-  const prisma = createPrismaClient(process.env["DATABASE_URL"] ?? "file:./dev.db");
+  // No default since the move to PostgreSQL (step E.2b): the database address must be set.
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (!databaseUrl) {
+    console.error("DATABASE_URL is not set. Set DATABASE_URL in server/.env.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const prisma = createPrismaClient(databaseUrl);
   const app = createApp({
     store: createPrismaStore(prisma),
     tokenSecret,

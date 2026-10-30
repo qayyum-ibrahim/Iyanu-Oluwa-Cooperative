@@ -7,6 +7,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
+    // The Prisma CLI uses the direct address; the app uses the pooled DATABASE_URL (src/db.ts, D-118).
+    url: process.env.DIRECT_URL ?? "",
   },
 });

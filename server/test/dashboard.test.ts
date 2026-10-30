@@ -383,7 +383,7 @@ describe("getDashboard: Lagos month end (A-233 item 2)", () => {
   });
 });
 
-describe("getDashboard on the Prisma store (real SQLite)", () => {
+describe("getDashboard on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

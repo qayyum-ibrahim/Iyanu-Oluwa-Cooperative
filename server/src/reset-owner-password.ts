@@ -21,7 +21,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  const prisma = createPrismaClient(process.env.DATABASE_URL ?? "file:./dev.db");
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.error("DATABASE_URL is not set. Set DATABASE_URL in server/.env. Nothing was changed.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const prisma = createPrismaClient(databaseUrl);
   try {
     const store = createPrismaStore(prisma);
 

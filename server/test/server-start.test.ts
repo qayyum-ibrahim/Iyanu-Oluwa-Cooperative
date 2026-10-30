@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { newTestDbUrl } from "./helpers/temp-db.js";
 
 // Starts the real entry file (src/server.ts) as a child process (step 4.12), the same way as
 // `npm start`: plain node with the tsx loader, so stop signals reach the server itself (step 5.1b).
 // The tsx command waits only 30 ms for its child to take a signal, then kills it (A-153).
-// Every run uses its own settings: a fake secret, a database file in a temporary folder and a
-// free port. The dev database and port 3000 are never used. dotenv never overrides a setting
+// Every run uses its own settings: a fake secret, an unused schema on the local test PostgreSQL
+// (E.2b; /health does not read the database) and a free port. The dev database and port 3000 are never used. dotenv never overrides a setting
 // that is already set, so the values in server/.env are not used for these three.
 // Fake values for tests only.
 
@@ -62,12 +63,11 @@ function newFolder(): string {
   return folder;
 }
 
-function start(settings: { TOKEN_SECRET: string; PORT: number }): Started {
-  const folder = newFolder();
+function start(settings: { TOKEN_SECRET: string; PORT: number; DATABASE_URL?: string }): Started {
   return startWith({
     ...process.env,
     TOKEN_SECRET: settings.TOKEN_SECRET,
-    DATABASE_URL: `file:${join(folder, "test.db")}`,
+    DATABASE_URL: settings.DATABASE_URL ?? newTestDbUrl(),
     PORT: String(settings.PORT),
   });
 }
@@ -119,6 +119,15 @@ describe("server.ts", () => {
     expect(s.output()).not.toContain("server listening");
   });
 
+  it("refuses to start without a database address: message, exit code 1, no port", SLOW, async () => {
+    // An empty value, as dotenv never overrides a setting that is already set (E.2b: no default).
+    const port = await freePort();
+    const s = start({ TOKEN_SECRET: FAKE_SECRET, PORT: port, DATABASE_URL: "" });
+    expect(await s.exited).toBe(1);
+    expect(s.output()).toContain("Set DATABASE_URL in server/.env.");
+    expect(s.output()).not.toContain("server listening");
+  });
+
   it("starts on PORT, answers /health, and stops with exit code 0 on SIGTERM", SLOW, async () => {
     const port = await freePort();
     const s = start({ TOKEN_SECRET: FAKE_SECRET, PORT: port });
@@ -159,7 +168,7 @@ describe("server.ts", () => {
     const file = join(folder, "test.env");
     writeFileSync(
       file,
-      `TOKEN_SECRET=${FAKE_SECRET}\nDATABASE_URL=file:${join(folder, "test.db")}\nPORT=${port}\n`,
+      `TOKEN_SECRET=${FAKE_SECRET}\nDATABASE_URL=${newTestDbUrl()}\nPORT=${port}\n`,
     );
     const env: NodeJS.ProcessEnv = { ...process.env, DOTENV_PATH: file };
     for (const name of ["TOKEN_SECRET", "DATABASE_URL", "PORT", "DOTENV_CONFIG_PATH"]) delete env[name];

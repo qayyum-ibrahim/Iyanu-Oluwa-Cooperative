@@ -1031,7 +1031,7 @@ describe("listLoans (step 5.6)", () => {
   });
 });
 
-describe("disburseLoan on the Prisma store (real SQLite)", () => {
+describe("disburseLoan on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "./generated/prisma/client.js";
+import { Prisma, type PrismaClient } from "./generated/prisma/client.js";
 import {
   DuplicateEmailError,
   DuplicateTokenHashError,
@@ -151,6 +151,18 @@ function hasCode(e: unknown, code: string): boolean {
   return typeof e === "object" && e !== null && "code" in e && e.code === code;
 }
 
+/**
+ * PostgreSQL refused a transaction for a clash (40001 or 40P01). Prisma gives P2034 for a refused query;
+ * a refusal at commit comes as the adapter's own error, whose cause kind is TransactionWriteConflict
+ * (adapter-pg 7.10.1, step E.2b, A-292).
+ */
+function isWriteConflict(e: unknown): boolean {
+  if (hasCode(e, "P2034")) return true;
+  if (typeof e !== "object" || e === null || !("cause" in e)) return false;
+  const cause = e.cause;
+  return typeof cause === "object" && cause !== null && "kind" in cause && cause.kind === "TransactionWriteConflict";
+}
+
 /** A User row as the database holds it: permissions are JSON text (D-34). */
 type UserRow = Omit<UserRecord, "permissions"> & { permissions: string };
 
@@ -207,22 +219,45 @@ const toLockout = (r: { failedLoginCount: number; lockedUntil: Date | null }): L
 /** What a query needs: the client, or the client Prisma hands to a transaction. */
 type Db = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends" | "$use">;
 
-/** Prisma's defaults (2 s wait, 5 s run) are short for a slow machine. My choice (A-108). */
-const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
+/**
+ * Prisma's defaults (2 s wait, 5 s run) are short for a slow machine. My choice (A-108).
+ * Serializable since PostgreSQL (step E.2b, A-292): two transactions that read the same rows and both
+ * write act as if one ran after the other, as on SQLite, so a race cannot pay out twice. PostgreSQL's
+ * default (ReadCommitted) let five pay-offs at once all pass.
+ */
+const TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 30_000,
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+};
+
+/**
+ * How often a transaction runs when PostgreSQL refuses it for a clash (isWriteConflict). Prisma's v7 example uses 5
+ * with no wait; 5 ran out once under the full test run, since both sides of a clash can be refused. My
+ * choice (A-292): 10 tries, each after a random wait of up to 20 ms times the try, so racers spread out.
+ */
+const TRANSACTION_TRIES = 10;
+const TRANSACTION_RETRY_WAIT_MS = 20;
 
 /** Real adapter: stores data through Prisma. */
 export function createPrismaStore(prisma: PrismaClient): Store {
-  return buildStore(
-    prisma,
-    <T>(fn: (tx: Store) => Promise<T>): Promise<T> =>
-      prisma.$transaction(async (tx) => {
-        // A nested call joins this transaction.
-        const txStore: Store = buildStore(tx, <U>(inner: (t: Store) => Promise<U>): Promise<U> =>
-          inner(txStore),
-        );
-        return fn(txStore);
-      }, TRANSACTION_OPTIONS),
-  );
+  return buildStore(prisma, async <T>(fn: (tx: Store) => Promise<T>): Promise<T> => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          // A nested call joins this transaction.
+          const txStore: Store = buildStore(tx, <U>(inner: (t: Store) => Promise<U>): Promise<U> =>
+            inner(txStore),
+          );
+          return fn(txStore);
+        }, TRANSACTION_OPTIONS);
+      } catch (e) {
+        // A refused transaction changed nothing, so it runs again from the start and reads the winner's rows.
+        if (!isWriteConflict(e) || attempt >= TRANSACTION_TRIES) throw e;
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * TRANSACTION_RETRY_WAIT_MS * attempt));
+      }
+    }
+  });
 }
 
 function buildStore(prisma: Db, runTransaction: Store["transaction"]): Store {

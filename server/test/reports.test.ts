@@ -291,7 +291,7 @@ describe("getCategoryReport: a pay-off's day is its Lagos day (A-238 item 2)", (
   });
 });
 
-describe("getCategoryReport on the Prisma store (real SQLite)", () => {
+describe("getCategoryReport on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

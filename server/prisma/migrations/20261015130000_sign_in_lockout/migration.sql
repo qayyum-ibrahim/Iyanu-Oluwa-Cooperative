@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "User" ADD COLUMN "lockedUntil" DATETIME;
-ALTER TABLE "User" ADD COLUMN "failedLoginCount" INTEGER NOT NULL DEFAULT 0;

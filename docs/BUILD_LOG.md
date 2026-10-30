@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step E.2b (size L), 2026-10-30: the switch to PostgreSQL (R-41, D-118, D-119, A-292)
+
+The owner said "fix inconsistencies and go", then "Yes, all three" (delete the 18 SQLite migration folders and the 3 migration tests, remove `@prisma/adapter-better-sqlite3`), then "yes, edit prisma-store.ts and go".
+**Inconsistencies fixed:** PHASE_PLAN said 13 test files break; 14 test files open a database, plus the helper; the 9 not in NEXT_FILES were named in the step header (only their test labels changed). STATUS and DEV_SETUP named only `DATABASE_URL` with the `file:./dev.db` default; now `DATABASE_URL`, `DIRECT_URL`, no default. `server/dev.db` (old SQLite, git-ignored) left on disk (A-292 item 8). The size-M rule against E.2b's L: D-118 kept.
+**Sources:** Prisma v7 transactions page (and the Prisma 8 page, which differs) through fetch agents; PostgreSQL error codes appendix; the PostgreSQL isolation page failed (fetch refused); adapter-pg 7.10.1 `dist/index.mjs` and `index.d.ts` read locally (URLs in A-292).
+**Changed:** `server/prisma/schema.prisma` (`postgresql`), `migration_lock.toml`, new `prisma/migrations/20261030090000_postgres_baseline/migration.sql` (from `prisma migrate diff --from-empty`), the 18 SQLite folders deleted, `prisma.config.ts` (`DIRECT_URL` only), `src/db.ts` (`PrismaPg`, schema from the address), `src/server.ts`, `src/setup-owner.ts`, `src/reset-owner-password.ts` (stop without `DATABASE_URL`), `src/prisma-store.ts` (Serializable store transactions with retry, D-119; outside the first header, owner's word), `.env.example`, `package.json` and lock (SQLite adapter removed), `test/helpers/temp-db.ts` (one schema per test file, local hosts only), `test/db.test.ts` (bigint checks), `test/server-start.test.ts` (one new test), the three migration tests deleted, labels "real PostgreSQL" in nine test files. Docs: STATUS, BUILD_LOG, DECISIONS (D-119), ASSUMPTIONS (A-292, A-291 item 7), PHASE_PLAN, TRACEABILITY, SOURCES, DEV_SETUP, NEXT_FILES.
+**Found by the tests:** the first full run had 5 race tests fail on PostgreSQL, among them five pay-offs at once all paid out and a loan repaid more than once; SQLite had run write transactions one at a time. Fixed with D-119.
+**Works (verified in this session):** `sh scripts/test-db.sh start`: "127.0.0.1:54329 - accepting connections". `npm run check` (server), four runs in a row: each exit 0, "Test Files 57 passed (57)", "Tests 2287 passed (2287)" (2299 − 14 deleted migration tests + 2 new). `npm audit`: "2 moderate severity vulnerabilities" (unchanged). `npm ls @prisma/adapter-better-sqlite3`: "(empty)".
+**Not verified:** the Neon database (E.2c); whether 10 tries are enough there; that a race test can never fail by chance (before the commit-conflict fix, 3 of 7 full runs failed one or two race tests; after it, 4 of 4 passed). Break-on-purpose of D-119: owed at the Phase E run (D-90).
+
+---
+
 ## Step E.2a (size S), 2026-10-29: local test PostgreSQL and the E.2 replan (R-41, D-118, A-291)
 
 The owner said "fix inconsistencies and go, let's use neon", chose "Local Docker (Recommended)" for tests, then "use Colima", then "option 2" (Homebrew), then "brew: yes; Neon: I'll do it in the web console".

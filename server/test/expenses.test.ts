@@ -607,7 +607,7 @@ describe("createExpense: one transaction (D-45)", () => {
   });
 });
 
-describe("createExpense on the Prisma store (real SQLite)", () => {
+describe("createExpense on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {
@@ -962,7 +962,7 @@ describe("listExpenses: filters (D-66, days since U.6b2)", () => {
   });
 });
 
-describe("listExpenses on the Prisma store (real SQLite)", () => {
+describe("listExpenses on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {
@@ -1280,7 +1280,7 @@ describe("deleteExpense: one transaction (D-45)", () => {
   });
 });
 
-describe("deleteExpense on the Prisma store (real SQLite)", () => {
+describe("deleteExpense on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {
@@ -1761,7 +1761,7 @@ describe("updateExpense: one transaction (D-45)", () => {
   });
 });
 
-describe("updateExpense on the Prisma store (real SQLite)", () => {
+describe("updateExpense on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

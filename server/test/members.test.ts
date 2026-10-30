@@ -574,7 +574,7 @@ describe("reactivateMember", () => {
   });
 });
 
-describe("reactivateMember on the Prisma store (real SQLite)", () => {
+describe("reactivateMember on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

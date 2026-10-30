@@ -1176,7 +1176,7 @@ describe("exportKinds as a PDF (9.1l2)", () => {
   });
 });
 
-describe("exports on the Prisma store (real SQLite)", () => {
+describe("exports on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

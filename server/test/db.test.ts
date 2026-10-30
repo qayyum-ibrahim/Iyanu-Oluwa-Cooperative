@@ -1,31 +1,21 @@
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPrismaClient } from "../src/db.js";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
+import { createTempDb, testDbEnv, type TempDb } from "./helpers/temp-db.js";
 
 const serverDir = fileURLToPath(new URL("..", import.meta.url));
-let dir: string;
-let url: string;
+let tmp: TempDb;
 let db: PrismaClient;
 
+// One schema on the local test PostgreSQL, built by the real migrations (step E.2b).
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "io-db-"));
-  url = `file:${join(dir, "test.db")}`;
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
-    cwd: serverDir,
-    env: { ...process.env, DATABASE_URL: url },
-    stdio: "pipe",
-  });
-  db = createPrismaClient(url);
+  tmp = createTempDb();
+  db = tmp.prisma;
 }, 120_000);
 
 afterAll(async () => {
-  await db.$disconnect();
-  rmSync(dir, { recursive: true, force: true });
+  await tmp.cleanup();
 });
 
 const newUser = (email: string) =>
@@ -43,14 +33,14 @@ describe("schema.prisma matches the migrations (no drift, A-143)", () => {
     const r = spawnSync(
       "npx",
       ["prisma", "migrate", "diff", "--from-config-datasource", "--to-schema", "prisma/schema.prisma", "--exit-code"],
-      { cwd: serverDir, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8" },
+      { cwd: serverDir, env: testDbEnv(tmp.url), encoding: "utf8" },
     );
     // The diff text is in the object so a failure shows what differs.
     expect({ status: r.status, diff: r.stdout }).toMatchObject({ status: 0 });
   }, 60_000);
 });
 
-describe("database (real migration, temporary SQLite file)", () => {
+describe("database (real migration, temporary PostgreSQL schema)", () => {
   it("creates a user with default role STAFF and active status", async () => {
     const u = await newUser("a@example.test");
     expect(u.role).toBe("STAFF");
@@ -97,8 +87,8 @@ describe("database (real migration, temporary SQLite file)", () => {
     });
   });
 
-  it("SQLite INTEGER holds the A-17 cap and the largest 64-bit value (A-03)", async () => {
-    await db.$executeRawUnsafe("CREATE TABLE kobo_check (v INTEGER NOT NULL)");
+  it("PostgreSQL bigint holds the A-17 cap and the largest 64-bit value (A-03)", async () => {
+    await db.$executeRawUnsafe("CREATE TABLE kobo_check (v BIGINT NOT NULL)");
     const cap = 99_999_999_999_999n;
     const max = 9_223_372_036_854_775_807n;
     await db.$executeRaw`INSERT INTO kobo_check (v) VALUES (${cap})`;
@@ -106,6 +96,21 @@ describe("database (real migration, temporary SQLite file)", () => {
     const rows = await db.$queryRaw<{ s: string }[]>`
       SELECT CAST(v AS TEXT) AS s FROM kobo_check ORDER BY v`;
     expect(rows.map((r) => r.s)).toEqual([cap.toString(), max.toString()]);
+  });
+
+  it("the money columns are bigint (D-15)", async () => {
+    const rows = await db.$queryRaw<{ c: string }[]>`
+      SELECT table_name || '.' || column_name AS c FROM information_schema.columns
+      WHERE table_schema = current_schema() AND column_name LIKE '%Kobo' AND data_type = 'bigint'
+      ORDER BY 1`;
+    expect(rows.map((r) => r.c)).toEqual([
+      "Expense.amountKobo",
+      "Loan.principalKobo",
+      "PayOff.totalKobo",
+      "PayOffLine.amountKobo",
+      "Payment.totalKobo",
+      "PaymentLine.amountKobo",
+    ]);
   });
 
   // The payment store reads the member and the creator first (A-102), so only these

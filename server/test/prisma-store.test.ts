@@ -26,4 +26,4 @@ function makeEmptyStore(): Store {
 }
 
 // One real database for the whole file. The contract uses unique emails, so tests do not collide.
-runStoreContract("Prisma adapter (real SQLite, real migrations)", () => store, makeEmptyStore);
+runStoreContract("Prisma adapter (real PostgreSQL, real migrations)", () => store, makeEmptyStore);

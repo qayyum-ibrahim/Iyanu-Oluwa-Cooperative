@@ -636,7 +636,7 @@ describe("createPayment: Loan Repaid (DR-08, DR-09, A-145)", () => {
   });
 });
 
-describe("createPayment with Loan Repaid on the Prisma store (real SQLite)", () => {
+describe("createPayment with Loan Repaid on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

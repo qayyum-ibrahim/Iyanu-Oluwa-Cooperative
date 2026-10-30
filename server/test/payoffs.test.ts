@@ -625,7 +625,7 @@ describe("processPayOff: idempotency key (as D-48)", () => {
   });
 });
 
-describe("processPayOff on the Prisma store (real SQLite)", () => {
+describe("processPayOff on the Prisma store (real PostgreSQL)", () => {
   let tmp: TempDb;
   let store: Store;
   beforeAll(() => {

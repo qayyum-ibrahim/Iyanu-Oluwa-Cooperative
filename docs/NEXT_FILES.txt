@@ -4,6 +4,7 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/DOMAIN_RULES.md
+scripts/test-db.sh
 server/package.json
 server/.env.example
 server/prisma.config.ts
@@ -17,6 +18,7 @@ server/src/reset-owner-password.ts
 server/test/db.test.ts
 server/test/server-start.test.ts
 server/test/helpers/temp-db.ts
+server/test/prisma-store.test.ts
 server/test/migration-paid-on.test.ts
 server/test/migration-loan-given-on.test.ts
 server/test/migration-expense-spent-on.test.ts

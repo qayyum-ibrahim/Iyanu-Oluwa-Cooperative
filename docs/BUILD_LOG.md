@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.2a (size S), 2026-10-29: local test PostgreSQL and the E.2 replan (R-41, D-118, A-291)
+
+The owner said "fix inconsistencies and go, let's use neon", chose "Local Docker (Recommended)" for tests, then "use Colima", then "option 2" (Homebrew), then "brew: yes; Neon: I'll do it in the web console".
+**Inconsistencies fixed:** E.2 changed `provider` and left the tests to E.3, but `npm run check` cannot pass between them (18 SQLite migrations, `db.ts`, three `file:./dev.db` defaults and 13 test files break together); replanned as E.2a, E.2b (L, cannot split and stay green) and E.2c, E.3 merged (D-118). STATUS said only that `psql` and `postgres` were missing; Docker's CLI was there, but no daemon, no Docker Desktop and no Colima VM, and Colima needs macOS 13.
+**Sources:** Homebrew, Colima, Neon, Docker Hub and Prisma pages read through fetch agents; local `--help` of the PostgreSQL tools (URLs in A-291).
+**Changed:** `scripts/test-db.sh` (new). Outside git: Homebrew `postgresql@18` 18.6_1 and its dependencies (A-291 item 2); the test cluster in `~/.iyanu-oluwa/test-pg`. The owner made the Neon project and `dev` branch and filled `server/.env`. Docs: STATUS, BUILD_LOG, DECISIONS (D-118), ASSUMPTIONS (A-291), PHASE_PLAN (E.2a to E.2c), TRACEABILITY (R-41), SOURCES, DEV_SETUP, NEXT_FILES.
+**Works (verified in this session):** `brew install postgresql@18`: exit 0, "postgresql@18/18.6_1: 3,872 files, 77.2MB, built in 6 minutes". `sh scripts/test-db.sh start`: "Made a new cluster", "Started on 127.0.0.1:54329", "127.0.0.1:54329 - accepting connections"; `select version()`: "PostgreSQL 18.6 (Homebrew) on x86_64-apple-darwin21.6.0"; `lsof`: "postgres 127.0.0.1:54329"; `stop`: "Stopped", then "no response". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2299 passed (2299)".
+**Not verified:** the Neon project's region and version and the two URLs in `server/.env` (owner's word); `?schema=` with `migrate deploy` (E.2b); the build's future under Homebrew Tier 3.
+
+---
+
 ## Step E.1 (size S), 2026-10-29: Prisma PostgreSQL adapter pinned (R-41, D-117, A-290)
 
 The owner said "go", then "yes, install adapter-pg".

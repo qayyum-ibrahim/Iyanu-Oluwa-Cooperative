@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.6 (size M), 2026-10-30: the Twilio adapter (R-41, D-121, A-296)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** NEXT_FILES listed `server/test/sms.test.ts`, PHASE_PLAN a new `server/test/twilio-sms.test.ts`; the new file was used and `sms.test.ts` is unchanged. OQ-17's default now says that test credentials in the API key fields are not checked (A-295 item 5). The old review items in the STATUS brief (steps 5.7 to 6.7) are labelled as still open.
+**Sources:** Node 22 globals page, Twilio "Twilio's response" page, NCC dialing procedure and numbering plan, ITU E.164 index (PDF not readable), through fetch agents (URLs in A-296).
+**Changed:** `server/src/sms.ts` (`toE164`, `TwilioSmsProvider`, `SmsConfigError`, `readSmsProvider`), `server/src/server.ts` (chooses the provider, stops on a missing setting, logs which provider), `server/.env.example` (the five names), new `server/test/twilio-sms.test.ts` (61 tests). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-296), OPEN_QUESTIONS (OQ-17 default), PHASE_PLAN, TRACEABILITY, SOURCES, DEV_SETUP, NEXT_FILES. No new decision (D-121 holds), no install.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `npm run check` (server): "Test Files 59 passed (59)", "Tests 2363 passed (2363)" (2302 + 61).
+**Not verified:** any request to Twilio (no account used, no network in tests); the E.164 maximum length; that test credentials work in the API key fields (OQ-17); whether `server/.env` sets `SMS_PROVIDER` (not read, rule 8). Break-on-purpose: none now; `sms.ts` (login and secrets) joins the Phase E run (D-90).
+
+---
+
 ## Step E.5 (size S), 2026-10-30: Twilio docs and settings (R-41, D-121, A-295)
 
 The owner said "fix inconsistencies and go".

@@ -1,7 +1,7 @@
 // Starts the real server: real database, real signing secret (D-32).
 // Run from inside server/ so ".env" resolves there.
 // Never log a secret, a token or a request body.
-// SMS goes to the fake provider until the Twilio adapter exists (D-07, D-49).
+// SMS goes to the fake provider unless SMS_PROVIDER=twilio (D-07, D-49, D-121, step E.6).
 
 import "dotenv/config";
 import { existsSync } from "node:fs";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { createPrismaClient } from "./db.js";
 import { createPrismaStore } from "./prisma-store.js";
-import { FakeSmsProvider } from "./sms.js";
+import { SmsConfigError, TwilioSmsProvider, readSmsProvider, type SmsProvider } from "./sms.js";
 import { TokenConfigError, readTokenSecret } from "./tokens.js";
 
 // The built web pages (`npm run build` in web/), served on the same address (D-116, step E.4).
@@ -37,6 +37,19 @@ function start(): void {
     return;
   }
 
+  let sms: SmsProvider;
+  try {
+    sms = readSmsProvider(process.env);
+  } catch (error) {
+    if (error instanceof SmsConfigError) {
+      console.error(`${error.message} Set it in server/.env.`);
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
+  console.log(`SMS provider: ${sms instanceof TwilioSmsProvider ? "twilio" : "fake"}`);
+
   const webDir = existsSync(join(WEB_DIR, "index.html")) ? WEB_DIR : undefined;
   if (webDir === undefined) {
     console.log("web pages not found (run npm run build in web/); serving the API only");
@@ -46,7 +59,7 @@ function start(): void {
   const app = createApp({
     store: createPrismaStore(prisma),
     tokenSecret,
-    sms: new FakeSmsProvider(),
+    sms,
     webDir,
   });
   const port = Number(process.env["PORT"] ?? 3000);

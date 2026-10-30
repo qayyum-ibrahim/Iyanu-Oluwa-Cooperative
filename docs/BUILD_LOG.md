@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.5 (size S), 2026-10-30: Twilio docs and settings (R-41, D-121, A-295)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** OQ-01's default said "SQLite for dev until E.2"; it now names the Neon `dev` branch (A-293). DECISIONS and ASSUMPTIONS were read in their SMS, Twilio and latest entries (D-07, D-49, D-50, D-115, D-120, A-124 to A-126, A-129, A-294), not in full.
+**Sources:** the Twilio docs, the twilio-node README and package.json through fetch agents, `npm view twilio` (URLs in A-295).
+**Changed:** docs only: DECISIONS (D-121), ASSUMPTIONS (A-295; A-125 updated), OPEN_QUESTIONS (OQ-01 default; new OQ-17), PHASE_PLAN, SOURCES, DEV_SETUP, TRACEABILITY, STATUS, NEXT_FILES. No source change, no install.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `npm run check` (server): "Test Files 58 passed (58)", "Tests 2302 passed (2302)". `npm view twilio`: "version": "6.2.0".
+**Not verified:** any request to Twilio (no account used); whether a trial or test-credential request works with an API key; whether a payment receipt is allowed under Twilio's Nigeria content rule (OQ-17); whether ₦ is GSM-7. Break-on-purpose: none (no code).
+
+---
+
 ## Step E.4 (size M), 2026-10-30: the server serves the web pages (R-41, D-120, A-294)
 
 The owner said "fix inconsistencies and go".

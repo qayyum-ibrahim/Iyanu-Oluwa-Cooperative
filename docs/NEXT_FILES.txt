@@ -8,5 +8,6 @@ docs/SOURCES.md
 docs/DEV_SETUP.md
 server/src/sms.ts
 server/src/payment-sms.ts
+server/src/server.ts
 server/.env.example
-server/package.json
+server/test/sms.test.ts

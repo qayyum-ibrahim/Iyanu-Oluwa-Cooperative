@@ -7,7 +7,7 @@ import "dotenv/config";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createApp } from "./app.js";
+import { TrustProxyConfigError, createApp, readTrustProxyHops } from "./app.js";
 import { createPrismaClient } from "./db.js";
 import { createPrismaStore } from "./prisma-store.js";
 import { SmsConfigError, TwilioSmsProvider, readSmsProvider, type SmsProvider } from "./sms.js";
@@ -50,6 +50,19 @@ function start(): void {
   }
   console.log(`SMS provider: ${sms instanceof TwilioSmsProvider ? "twilio" : "fake"}`);
 
+  let trustProxyHops: number;
+  try {
+    trustProxyHops = readTrustProxyHops(process.env);
+  } catch (error) {
+    if (error instanceof TrustProxyConfigError) {
+      console.error(`${error.message} Set it in server/.env.`);
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
+  console.log(`trusted proxies: ${trustProxyHops}`);
+
   const webDir = existsSync(join(WEB_DIR, "index.html")) ? WEB_DIR : undefined;
   if (webDir === undefined) {
     console.log("web pages not found (run npm run build in web/); serving the API only");
@@ -61,6 +74,7 @@ function start(): void {
     tokenSecret,
     sms,
     webDir,
+    trustProxyHops,
   });
   const port = Number(process.env["PORT"] ?? 3000);
 

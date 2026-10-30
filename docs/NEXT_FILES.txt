@@ -6,9 +6,10 @@ docs/ASSUMPTIONS.md
 docs/OPEN_QUESTIONS.md
 docs/SOURCES.md
 docs/DEV_SETUP.md
+docs/TRACEABILITY.md
+.node-version
+scripts/render-build.sh
+scripts/live-check-auth.sh
+server/.env.example
 server/package.json
-server/src/app.ts
 server/src/server.ts
-server/src/auth-routes.ts
-server/test/headers.test.ts
-web/package.json

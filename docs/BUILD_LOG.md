@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.7 (size M), 2026-10-30: Render settings (R-41, D-122, A-297)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** PHASE_PLAN said "build both folders from the repo root", but the root has no `package.json`; the build is now a script that goes into each folder. `npm start` needs tsx and the migration needs the prisma CLI, both devDependencies; the build uses `npm ci --include=dev`. `headers.test.ts` and `web-pages.test.ts` checked that HSTS is absent, and comments in `app.ts` and `auth-routes.ts` waited for OQ-01; both changed. Concurrent writes on Neon (planned at E.7) move to E.8, which runs on the hosted database. DECISIONS read in D-116, D-120, D-121; ASSUMPTIONS in A-283, A-289 to A-296; not in full.
+**Sources:** Render docs (Node version, deploys, free, web services, environment variables, monorepo, health checks, Blueprint in part), Express "behind proxies", OWASP HSTS and HTTP Headers cheat sheets, npm ci docs, through fetch agents (URLs in A-297).
+**Changed:** `server/src/app.ts` (HSTS in `SECURITY_HEADERS`; `trustProxyHops`; `readTrustProxyHops`, `TrustProxyConfigError`, `MAX_TRUST_PROXY_HOPS`), `server/src/auth-routes.ts` (the limit counts `req.ip`), `server/src/server.ts` (reads `TRUST_PROXY_HOPS`, stops on a bad value, logs the number), `server/.env.example` (the name), `server/test/headers.test.ts` and `server/test/web-pages.test.ts` (HSTS expected), new `server/test/trust-proxy.test.ts` (18 tests), new `scripts/render-build.sh`, new `.node-version` (22.14.0). Docs: STATUS, BUILD_LOG, DECISIONS (D-122), ASSUMPTIONS (A-297), PHASE_PLAN, TRACEABILITY, SOURCES, DEV_SETUP, NEXT_FILES. No install.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `sh -n scripts/render-build.sh`: no error. `npm run check` (server): "Test Files 60 passed (60)", "Tests 2381 passed (2381)" (2363 + 18).
+**Not verified:** `scripts/render-build.sh` was not run (it replaces `node_modules` and would migrate Neon); anything on Render: the proxy count and X-Forwarded-For, build access to Neon, Node 22.14.0 there, HSTS in a browser (E.8). Break-on-purpose: none now; `readTrustProxyHops`, the `trust proxy` line and the HSTS header join the Phase E run (D-90).
+
+---
+
 ## Step E.6 (size M), 2026-10-30: the Twilio adapter (R-41, D-121, A-296)
 
 The owner said "fix inconsistencies and go".

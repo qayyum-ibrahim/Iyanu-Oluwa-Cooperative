@@ -22,6 +22,7 @@ const PAGE = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=86400; includeSubDomains",
 };
 const API = {
   "cache-control": "no-store",
@@ -29,6 +30,7 @@ const API = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=86400; includeSubDomains",
 };
 
 let webDir: string;
@@ -68,7 +70,6 @@ function expectHeaders(headers: Record<string, string>, expected: Record<string,
     expect(headers[name], name).toBe(value);
   }
   expect(headers["x-powered-by"]).toBeUndefined();
-  expect(headers["strict-transport-security"]).toBeUndefined();
 }
 
 function expectNotFound(res: request.Response) {

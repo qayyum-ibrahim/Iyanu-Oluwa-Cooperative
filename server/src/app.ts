@@ -23,6 +23,34 @@ export interface AppDeps {
   sms?: SmsProvider;
   /** Folder of the built web pages (web/dist, step E.4). Unset: no pages are served. */
   webDir?: string;
+  /** Proxies in front of the server (Express "trust proxy" as a number, step E.7). Default 0: none. */
+  trustProxyHops?: number;
+}
+
+export class TrustProxyConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TrustProxyConfigError";
+  }
+}
+
+/** Highest TRUST_PROXY_HOPS accepted (A-297). */
+export const MAX_TRUST_PROXY_HOPS = 5;
+
+/**
+ * Reads TRUST_PROXY_HOPS (D-122): missing or empty gives 0, so the socket address is used and
+ * X-Forwarded-For is ignored. Otherwise a whole number from 0 to MAX_TRUST_PROXY_HOPS. Throws
+ * TrustProxyConfigError for anything else; the message never holds the value.
+ */
+export function readTrustProxyHops(env: Readonly<Record<string, string | undefined>>): number {
+  const text = (env["TRUST_PROXY_HOPS"] ?? "").trim();
+  if (text === "") return 0;
+  if (!/^[0-9]$/.test(text) || Number(text) > MAX_TRUST_PROXY_HOPS) {
+    throw new TrustProxyConfigError(
+      `TRUST_PROXY_HOPS must be a whole number from 0 to ${MAX_TRUST_PROXY_HOPS}.`,
+    );
+  }
+  return Number(text);
 }
 
 /** Returns the HTTP status for a client error (4xx) raised by Express itself, else null. */
@@ -38,7 +66,8 @@ function clientErrorStatus(err: unknown): number | null {
 
 /**
  * Security headers on every reply (OWASP REST Security and HTTP Headers cheat sheets, read at 9.2).
- * No HSTS until hosting is known (OQ-01). X-XSS-Protection is left unset on purpose.
+ * HSTS since step E.7 (D-122): Render serves only HTTPS; the short max-age is the OWASP HSTS cheat
+ * sheet's rollout value, no preload. X-XSS-Protection is left unset on purpose.
  */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Cache-Control": "no-store",
@@ -46,10 +75,11 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
+  "Strict-Transport-Security": "max-age=86400; includeSubDomains",
 };
 
 /**
- * Headers that replace two of the above on a web page file (step E.4). The other three stay.
+ * Headers that replace two of the above on a web page file (step E.4). The others stay.
  * The CSP is the OWASP CSP cheat sheet's tightened basic policy, with frame-ancestors 'none' (as
  * X-Frame-Options DENY) and base-uri 'none' added. no-cache, so a new build is picked up at once.
  */
@@ -92,6 +122,9 @@ const errorHandler: express.ErrorRequestHandler = (err, _req, res, next) => {
 export function createApp(deps?: AppDeps): express.Express {
   const app = express();
   app.disable("x-powered-by");
+  // Behind Render's proxy the client address is in X-Forwarded-For (step E.7). 0 keeps it ignored.
+  const trustProxyHops = deps?.trustProxyHops ?? 0;
+  if (trustProxyHops > 0) app.set("trust proxy", trustProxyHops);
   app.use(securityHeaders);
   const api = express.Router();
   api.get("/health", (_req, res) => {

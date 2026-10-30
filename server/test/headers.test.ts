@@ -9,13 +9,15 @@ const SECRET = "test-only-secret-for-headers-test-01234";
 const T0 = new Date("2026-10-28T10:00:00.000Z");
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-// Values from the OWASP REST Security and HTTP Headers cheat sheets (9.2).
+// Values from the OWASP REST Security and HTTP Headers cheat sheets (9.2); HSTS from the OWASP
+// HSTS cheat sheet (E.7, D-122).
 const EXPECTED = {
   "cache-control": "no-store",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=86400; includeSubDomains",
 };
 
 async function build() {
@@ -38,7 +40,6 @@ function expectSecurityHeaders(headers: Record<string, string>) {
   expect(headers["x-xss-protection"]).toBeUndefined();
   expect(headers["x-powered-by"]).toBeUndefined();
   expect(headers["server"]).toBeUndefined();
-  expect(headers["strict-transport-security"]).toBeUndefined();
 }
 
 describe("security headers (9.2)", () => {

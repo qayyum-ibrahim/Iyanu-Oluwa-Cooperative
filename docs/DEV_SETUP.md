@@ -29,6 +29,9 @@ Since E.4 (D-120) every route below also answers under `/api` (for example `GET 
 
 The dev server forwards `/api/...` to the API at `http://localhost:3000` with the `/api` prefix removed (`web/src/api-proxy.ts`). Set `API_TARGET` to use another address. Start the server first. Without the dev server: `npm run build` here, then `npm start` in `server/` and open http://localhost:3000 (E.4).
 
+## Render (E.7, D-122)
+Build command `sh scripts/render-build.sh` (from the repo root; installs both folders with `npm ci --include=dev`, builds `web/`, makes the Prisma client, runs `migrate deploy`). Start command `cd server && npm start`. Node version from `.node-version` (22.14.0). Do not run the build script on this machine: `npm ci` replaces `node_modules` and `db:deploy` uses `server/.env`. Full steps in `docs/DEPLOY.md` (E.8).
+
 ## Rules
 - Versions in `package.json` are exact. Change one only in a step that says so. Commit `package-lock.json`.
 - Never commit `.env` files or `*.db` files (see `.gitignore`).
@@ -36,4 +39,4 @@ The dev server forwards `/api/...` to the API at `http://localhost:3000` with th
 - `legacy-prototype/` is reference only. Do not install or run it.
 
 ## Settings (names only)
-`PORT` (optional, default 3000). `DATABASE_URL` (required since E.2b, the pooled address, used by the app and the scripts). `DIRECT_URL` (the direct address, used by the Prisma CLI). `TEST_DATABASE_URL` (optional, tests only; a local PostgreSQL, default `postgresql://postgres@127.0.0.1:54329/postgres`). `TOKEN_SECRET` (at least 32 bytes; make your own value in `server/.env`; its name is in `server/.env.example`; the running server reads it from step 2.4b). Read by the server since E.6 (D-121, A-296): `SMS_PROVIDER` (`fake` by default, or `twilio`), `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_FROM`. With `SMS_PROVIDER=twilio` and any of the four missing, the server names the missing settings and stops. The start log says which provider is used. More are added with the step that needs them.
+`PORT` (optional, default 3000). `DATABASE_URL` (required since E.2b, the pooled address, used by the app and the scripts). `DIRECT_URL` (the direct address, used by the Prisma CLI). `TEST_DATABASE_URL` (optional, tests only; a local PostgreSQL, default `postgresql://postgres@127.0.0.1:54329/postgres`). `TOKEN_SECRET` (at least 32 bytes; make your own value in `server/.env`; its name is in `server/.env.example`; the running server reads it from step 2.4b). Read by the server since E.6 (D-121, A-296): `SMS_PROVIDER` (`fake` by default, or `twilio`), `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_FROM`. With `SMS_PROVIDER=twilio` and any of the four missing, the server names the missing settings and stops. The start log says which provider is used. Since E.7 (D-122): `TRUST_PROXY_HOPS` (empty or 0 on this machine, so X-Forwarded-For is ignored; a whole number up to 5 on Render, set at E.8); any other value stops the server; the start log says "trusted proxies: N". More are added with the step that needs them.

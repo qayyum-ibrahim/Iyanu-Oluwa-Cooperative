@@ -47,8 +47,9 @@ export function createAuthRouter(deps: AuthRouteDeps): Router {
 
   router.post("/login", async (req, res) => {
     const now = deps.now();
-    // The socket address, not X-Forwarded-For: no "trust proxy" until hosting is known (OQ-01).
-    const limit = loginLimiter.hit(req.socket.remoteAddress ?? "unknown", now);
+    // req.ip is the socket address unless TRUST_PROXY_HOPS is set; then it is the client address
+    // that many proxies away, read from X-Forwarded-For (Express "trust proxy", step E.7, D-122).
+    const limit = loginLimiter.hit(req.ip ?? "unknown", now);
     if (!limit.ok) {
       res.set("Retry-After", String(limit.retryAfterSeconds));
       res.status(429).json(TOO_MANY_REQUESTS);

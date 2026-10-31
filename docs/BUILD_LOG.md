@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.0 (size S), 2026-10-31: design brief and the Phase D plan (R-42, D-125, A-300)
+
+The owner asked for a professional, corporate design and chose "before the hand-over, go with D.0".
+**Sources:** WCAG 2.2 (https://www.w3.org/TR/WCAG22/), MDN `style-src` and `font-src`, read through a fetch agent (A-300 items 1 and 2).
+**Changed:** new `docs/DESIGN.md` (direction, limits, tokens, type, accessibility floor, page frame, components, screens, out of scope). Docs: STATUS, BUILD_LOG, PHASE_PLAN (Phase D, E.9 waits), DECISIONS (D-125), ASSUMPTIONS (A-300), TRACEABILITY (R-42), NEXT_FILES. No source change.
+**Works (verified in this session):** the contrast script printed a pass for every chosen token pair and a fail for the current muted text (4.33:1) and input border (1.27:1) (A-300 item 3). `npm run check` (web): "Test Files 4 passed (4)", "Tests 383 passed (383)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)".
+**Not verified:** the current look in a browser; the system fonts on the client's devices (A-300 item 5). Break-on-purpose: not needed (docs only; Phase D is display code, D-90).
+
+---
+
 ## Step E.8b (size M), 2026-10-31: the proxy count and concurrent writes on Neon (R-41, D-124, A-299)
 
 The owner said "go", then chose option (a) ("recommended"): commit the code first so Render runs it, then the live check, then the docs.

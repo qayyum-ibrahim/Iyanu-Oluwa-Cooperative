@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.7 (size S), 2026-10-31: look-through on the owner's machine (R-42, D-125, A-308)
+
+The owner said "go".
+**Changed:** no source file. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-308), TRACEABILITY (R-42), PHASE_PLAN, NEXT_FILES. DECISIONS: no new decision (D-125 covers D.7). DESIGN: unchanged.
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 393 passed (393)". `npm run build` (web): "dist/assets/index-PkgdRFuu.css 17.61 kB", "built in 318ms". `git status --short` printed nothing.
+**Works (verified on owner's machine):** the owner ran `npm start` in `server/` (Neon `dev` branch), looked at the screens at full width and in a narrow window, and wrote "all fine, no CSP error". Claude did not see the screens or the console.
+**Not verified:** the hosted address with the Phase D look (after the owner pushes). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.6 (size M), 2026-10-31: Staff & access, Audit log and Change password (R-42, D-125, A-307)
 
 The owner said "fix inconsistencies and go".

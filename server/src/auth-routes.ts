@@ -15,6 +15,14 @@ export interface AuthRouteDeps {
   store: Store;
   tokenSecret: string;
   now: () => Date;
+  /** TRUST_PROXY_HOPS (step E.7). Default 0. */
+  trustProxyHops?: number;
+}
+
+/** Entries in the X-Forwarded-For header: 0 when it is missing or blank. */
+export function forwardedForCount(header: string | undefined): number {
+  if (header === undefined) return 0;
+  return header.split(",").filter((entry) => entry.trim() !== "").length;
 }
 
 /** The JSON body as a plain object. Anything else (missing, text, array) counts as empty. */
@@ -44,9 +52,17 @@ export function createAuthRouter(deps: AuthRouteDeps): Router {
   const router = Router();
   // One counter per router, so each app (and each test app) starts with its own (A-42, A-284).
   const loginLimiter = createRateLimiter(LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS);
+  const trustProxyHops = deps.trustProxyHops ?? 0;
 
   router.post("/login", async (req, res) => {
     const now = deps.now();
+    // A sign-in with no X-Forwarded-For of its own reaches us with one entry per proxy, so the
+    // count is the TRUST_PROXY_HOPS value (step E.8b). Logged only on a mismatch; the count only,
+    // never an address.
+    const entries = forwardedForCount(req.get("X-Forwarded-For"));
+    if (entries !== trustProxyHops) {
+      console.log(`sign-in: X-Forwarded-For has ${entries} entries, TRUST_PROXY_HOPS is ${trustProxyHops}`);
+    }
     // req.ip is the socket address unless TRUST_PROXY_HOPS is set; then it is the client address
     // that many proxies away, read from X-Forwarded-For (Express "trust proxy", step E.7, D-122).
     const limit = loginLimiter.hit(req.ip ?? "unknown", now);

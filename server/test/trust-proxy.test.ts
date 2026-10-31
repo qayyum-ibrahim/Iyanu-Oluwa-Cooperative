@@ -1,11 +1,12 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_TRUST_PROXY_HOPS,
   TrustProxyConfigError,
   createApp,
   readTrustProxyHops,
 } from "../src/app.js";
+import { forwardedForCount } from "../src/auth-routes.js";
 import { createMemoryStore } from "../src/memory-store.js";
 import { LOGIN_LIMIT_MAX } from "../src/rate-limit.js";
 
@@ -107,5 +108,56 @@ describe("sign-in limit and the client address (E.7)", () => {
       expect((await login(app)).status).toBe(401);
     }
     expect((await login(app)).status).toBe(429);
+  });
+});
+
+
+describe("forwardedForCount (E.8b)", () => {
+  it.each([
+    { header: undefined, count: 0 },
+    { header: "", count: 0 },
+    { header: " , ", count: 0 },
+    { header: "203.0.113.1", count: 1 },
+    { header: "203.0.113.1, 192.0.2.1", count: 2 },
+    { header: "203.0.113.1,,192.0.2.1, ", count: 2 },
+  ])("counts $header as $count", ({ header, count }) => {
+    expect(forwardedForCount(header)).toBe(count);
+  });
+});
+
+describe("sign-in log of the X-Forwarded-For count (E.8b)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function logLines(spy: { mock: { calls: unknown[][] } }): string[] {
+    return spy.mock.calls.map((call) => String(call[0])).filter((line) => line.startsWith("sign-in:"));
+  }
+
+  it("logs the count and the setting when they differ, never an address", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await login(build(), "203.0.113.1, 192.0.2.1");
+    const lines = logLines(spy);
+    expect(lines).toEqual(["sign-in: X-Forwarded-For has 2 entries, TRUST_PROXY_HOPS is 0"]);
+    expect(lines.join(" ")).not.toContain("203.0.113");
+    expect(lines.join(" ")).not.toContain("192.0.2");
+  });
+
+  it("logs nothing when the count matches the setting", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await login(build(1), "203.0.113.1");
+    await login(build(2), "203.0.113.1, 192.0.2.1");
+    await login(build());
+    expect(logLines(spy)).toEqual([]);
+  });
+
+  it("logs a client's own extra entries", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await login(build(1), "198.51.100.1, 203.0.113.9");
+    await login(build(1));
+    expect(logLines(spy)).toEqual([
+      "sign-in: X-Forwarded-For has 2 entries, TRUST_PROXY_HOPS is 1",
+      "sign-in: X-Forwarded-For has 0 entries, TRUST_PROXY_HOPS is 1",
+    ]);
   });
 });

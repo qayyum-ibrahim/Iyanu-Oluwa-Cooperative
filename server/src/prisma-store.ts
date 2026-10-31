@@ -254,6 +254,8 @@ export function createPrismaStore(prisma: PrismaClient): Store {
       } catch (e) {
         // A refused transaction changed nothing, so it runs again from the start and reads the winner's rows.
         if (!isWriteConflict(e) || attempt >= TRANSACTION_TRIES) throw e;
+        // Shows on Neon whether races clash and how many tries they use (step E.8b). No data.
+        console.log(`store transaction refused for a clash, try ${attempt} of ${TRANSACTION_TRIES}`);
         await new Promise((resolve) => setTimeout(resolve, Math.random() * TRANSACTION_RETRY_WAIT_MS * attempt));
       }
     }

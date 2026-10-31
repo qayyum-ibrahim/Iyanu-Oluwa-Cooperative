@@ -137,7 +137,7 @@ export function createApp(deps?: AppDeps): express.Express {
     api.use(
       "/auth",
       express.json({ limit: "10kb" }),
-      createAuthRouter({ store: deps.store, tokenSecret, now }),
+      createAuthRouter({ store: deps.store, tokenSecret, now, trustProxyHops }),
     );
     api.use("/staff", createStaffRouter({ store: deps.store, tokenSecret, now }));
     api.use("/audit", createAuditRouter({ store: deps.store, tokenSecret, now }));

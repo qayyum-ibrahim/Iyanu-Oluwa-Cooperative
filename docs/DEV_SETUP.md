@@ -30,7 +30,7 @@ Since E.4 (D-120) every route below also answers under `/api` (for example `GET 
 The dev server forwards `/api/...` to the API at `http://localhost:3000` with the `/api` prefix removed (`web/src/api-proxy.ts`). Set `API_TARGET` to use another address. Start the server first. Without the dev server: `npm run build` here, then `npm start` in `server/` and open http://localhost:3000 (E.4).
 
 ## Render (E.7, D-122)
-Build command `sh scripts/render-build.sh` (from the repo root; installs both folders with `npm ci --include=dev`, builds `web/`, makes the Prisma client, runs `migrate deploy`). Start command `cd server && npm start`. Node version from `.node-version` (22.14.0). Do not run the build script on this machine: `npm ci` replaces `node_modules` and `db:deploy` uses `server/.env`. Full steps in `docs/DEPLOY.md` (E.8).
+Build command `sh scripts/render-build.sh` (from the repo root; installs both folders with `npm ci --include=dev`, builds `web/`, makes the Prisma client, runs `migrate deploy`). Start command `cd server && npm start`. Node version from `.node-version` (22.14.0). Do not run the build script on this machine: `npm ci` replaces `node_modules` and `db:deploy` uses `server/.env`. Full steps in `docs/DEPLOY.md` (E.8a). The hosted app uses the Neon root branch; `server/.env` keeps the `dev` branch (D-123).
 
 ## Rules
 - Versions in `package.json` are exact. Change one only in a step that says so. Commit `package-lock.json`.

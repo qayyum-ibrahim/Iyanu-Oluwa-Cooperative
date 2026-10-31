@@ -1,5 +1,17 @@
 # Build log (newest first)
 
+## Step E.8a (size S), 2026-10-31: the first deploy (R-41, D-123, A-298)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** E.8 was labelled S but held a doc, a deploy, a proxy check, a concurrency test and UptimeRobot; it is split into E.8a (S) and E.8b (M). No route or log shows `req.ip` and no concurrency script exists, so the proxy count and the concurrency test move to E.8b, which names its source files. The plan named no Neon branch; the hosted app uses the root branch and `dev` stays local (D-123). The live check's fictional rows on the hosted database are written in DEPLOY.md, run once. Conflict logged: the owner used a real email for the hosted owner account, against D-08; the owner chose it, with a reset of every hosted row after testing (D-123 item 4).
+**Sources:** Render, Neon and UptimeRobot docs through fetch agents; dotenv 18.0.7 `dist/config.cjs` and `dist/index.cjs` read locally (no `DOTENV_CONFIG_PATH`; a set value is not replaced) (URLs in A-298).
+**Changed:** new `docs/DEPLOY.md`. Docs: STATUS, BUILD_LOG, DECISIONS (D-123), ASSUMPTIONS (A-298), PHASE_PLAN, TRACEABILITY, SOURCES, DEV_SETUP, NEXT_FILES. No source change, no install.
+**Works (verified in this session):** `sh scripts/test-db.sh status`: "127.0.0.1:54329 - accepting connections". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2381 passed (2381)". curl against https://iyanu-oluwa-cooperative.onrender.com: `/`, `/index.html`, both asset files, `/health`, `/api/health` 200; `HEAD /health` "HTTP/2 200"; page headers `content-security-policy: default-src 'none'; script-src 'self'; ...`, `cache-control: no-cache`, `strict-transport-security: max-age=86400; includeSubDomains`; nine API areas under `/api` `{"error":"unauthorized"} 401`; `/nope` and `/api/nope` 404 JSON; `http://` "301".
+**Works (verified on owner's machine):** Render build "All migrations have been successfully applied.", "Build successful"; service log "SMS provider: fake", "trusted proxies: 0", "server listening on port 10000"; live check "212 passed, 0 failed" on the hosted address; UptimeRobot "works fine" (owner's word).
+**Not verified:** the `setup:owner` output (not pasted); signed-in pages, exports and the CSP in a browser (DEPLOY.md step 7); Render's Node version at runtime; the proxy count and Neon concurrency (E.8b). Break-on-purpose: none (no code).
+
+---
+
 ## Step E.7 (size M), 2026-10-30: Render settings (R-41, D-122, A-297)
 
 The owner said "fix inconsistencies and go".

@@ -664,35 +664,38 @@ export default function Members({
           onCancel={() => setShowForm(false)}
         />
       )}
-      <div className="member-toolbar">
-        <input
-          type="search"
-          className="search"
-          aria-label="Search by name or Membership ID"
-          placeholder="Search by name or Membership ID"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="filters">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              className={filter === f.value ? "filter-active" : ""}
-              aria-pressed={filter === f.value}
-              onClick={() => changeFilter(f.value)}
-            >
-              {f.label}
-            </button>
-          ))}
+      <section className="panel members-list">
+        {/* The panel head: the count on the left, the search and status filter on the right (D.3) */}
+        <div className="panel-head">
+          <h2>
+            {list.kind === "loaded"
+              ? `${rows.length} ${filter === "all" ? "" : filterLabel.toLowerCase() + " "}members`
+              : "Members"}
+          </h2>
+          <div className="member-toolbar">
+            <input
+              type="search"
+              className="search"
+              aria-label="Search by name or Membership ID"
+              placeholder="Search by name or Membership ID"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="filters" role="group" aria-label="Status">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  className={filter === f.value ? "filter-active" : ""}
+                  aria-pressed={filter === f.value}
+                  onClick={() => changeFilter(f.value)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-      <section className="panel">
-        <h2>
-          {list.kind === "loaded"
-            ? `${rows.length} ${filter === "all" ? "" : filterLabel.toLowerCase() + " "}members`
-            : "Members"}
-        </h2>
         {list.kind === "loading" && <p className="panel-note">Loading…</p>}
         {list.kind === "failed" && list.message && (
           <em role="alert" className="error panel-note">
@@ -711,17 +714,17 @@ export default function Members({
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Status</th>
-                  <th>Action</th>
+                  <th className="row-action">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((m) => (
                   <tr key={m.id}>
-                    <td>{m.membershipId}</td>
+                    <td className="member-id">{m.membershipId}</td>
                     <td>
                       <b>{m.fullName}</b>
                     </td>
-                    <td>{m.phone}</td>
+                    <td className="phone">{m.phone}</td>
                     <td>
                       <span className={m.status === "ACTIVE" ? "pill" : "status-inactive"}>
                         {m.status === "ACTIVE" ? "Active" : "Inactive"}
@@ -733,7 +736,7 @@ export default function Members({
                         </>
                       )}
                     </td>
-                    <td>
+                    <td className="row-action">
                       <button
                         type="button"
                         className="secondary"
@@ -823,10 +826,13 @@ function AddMemberForm({ api, canRecordPayment, onAdded, onCancel }: AddMemberFo
   return (
     <form className="form member-form" onSubmit={submit}>
       <h2 className="form-title">Add member</h2>
-      {field("fullName", "Full name", FULL_NAME_MAX, true)}
-      {field("phone", "Phone number", MEMBER_TEXT_MAX)}
-      {field("address", "Address", MEMBER_TEXT_MAX)}
-      {field("occupation", "Occupation", MEMBER_TEXT_MAX)}
+      {/* Two columns on wide screens, one under 600 px (D.3) */}
+      <div className="member-form-fields">
+        {field("fullName", "Full name", FULL_NAME_MAX, true)}
+        {field("phone", "Phone number", MEMBER_TEXT_MAX)}
+        {field("address", "Address", MEMBER_TEXT_MAX)}
+        {field("occupation", "Occupation", MEMBER_TEXT_MAX)}
+      </div>
       <p className="form-note">
         New members are Active. The Membership ID is given by the system.
         {canRecordPayment && " After saving, the payment form opens for the first payment."}

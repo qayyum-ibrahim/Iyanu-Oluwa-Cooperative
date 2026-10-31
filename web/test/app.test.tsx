@@ -1016,6 +1016,26 @@ describe("members screen (jsdom)", () => {
     expect(container?.querySelector("form")).toBeNull();
     expect(api.calls).toEqual(["list active"]);
   });
+
+  it("puts Add member in the page header and the search and status filter in the list panel head", async () => {
+    await mount(fakeApi({ restore: ADDER, members: [ACTIVE_ONE] }));
+    await openMembers();
+    expect(button("+ Add member").closest(".title")).toBe(el(".title"));
+    const head = el(".members-list .panel-head");
+    expect(head.querySelector("h2")?.textContent).toBe("1 active members");
+    expect(head.querySelector("input[type=search]")).not.toBeNull();
+    const status = el("[role=group][aria-label=Status]");
+    expect(status.closest(".panel-head")).toBe(head);
+    expect(Array.from(status.querySelectorAll("button"), (b) => b.getAttribute("aria-pressed"))).toEqual([
+      "true",
+      "false",
+      "false",
+    ]);
+    await click(button("+ Add member"));
+    expect(
+      Array.from(el(".member-form-fields").querySelectorAll("input"), (i) => i.getAttribute("name")),
+    ).toEqual(["fullName", "phone", "address", "occupation"]);
+  });
 });
 
 describe("member detail helpers", () => {

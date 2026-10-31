@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.3 (size M), 2026-10-31: the Members list and add member (R-42, D-125, A-303)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** DESIGN.md section 7 put "Add member" in the toolbar, section 5 and the code in the page header; the header wins and section 7 is corrected (A-303 item 2). The badge classes are shared with member detail, so D.3 leaves them as D.1 made them and D.3b is not touched. `.search` keeps its look in the shared field rule; its width moves to `.member-toolbar .search`; the toolbar, filter and add form rules use the spacing tokens. PHASE_PLAN's D.2 line no longer names the first group "This month". DESIGN.md section 2 now gives the test count with its command.
+**Changed:** `web/src/Members.tsx` (the list panel gets a `.panel-head` with the count `h2`, the search and the status filter; the filter is a `role="group"` named "Status"; `member-id`, `phone` and `row-action` cell classes; the add form fields inside `.member-form-fields`), `web/src/styles.css` (Members section rewritten on tokens: panel head, toolbar, segmented status filter, tabular IDs and phones, right-aligned Action, two-column form, one column under 600 px), `web/test/app.test.tsx` (one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-303), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (sections 2 and 7), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.3).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 389 passed (389)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-2k7UdBDg.css 14.71 kB", "built in 304ms". `grep -c` counts 22 hex values in `styles.css`, as before.
+**Not verified:** the look in a browser at full width and at phone width; how the panel head wraps on mid-width screens. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.2 (size M), 2026-10-31: the Dashboard (R-42, D-125, A-302)
 
 The owner said "fix inconsistencies and go".

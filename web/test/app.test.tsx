@@ -4890,4 +4890,25 @@ describe("exports page (jsdom)", () => {
     expect(button("Clear").disabled).toBe(false);
     expect(saved).toEqual([XLSX_FILE]);
   });
+
+  it("marks the Categories money heads, and puts the Exports kind choice before the filter row", async () => {
+    await mount(
+      fakeApi({
+        restore: { ...REPORT_VIEWER, permissions: [...REPORT_VIEWER.permissions, "reports.export"] },
+        report: [{ ok: true, value: REPORT }],
+      }),
+    );
+    await openReports();
+    expect(Array.from(document.querySelectorAll(".category-report th.amount"), (th) => th.textContent)).toEqual([
+      "Paid",
+      "Paid out",
+    ]);
+    expect(el(".report-filters .form-actions").textContent).toBe("ClearApply");
+    await click(button("Exports"));
+    const kinds = el(".export-kinds");
+    const filters = el(".export-filters");
+    expect(kinds.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(filters.querySelectorAll(".export-format input[type=radio]")).toHaveLength(2);
+    expect(filters.querySelector(".form-actions")?.textContent).toBe("ClearExport");
+  });
 });

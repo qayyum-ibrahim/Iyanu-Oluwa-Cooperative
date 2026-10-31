@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.5 (size M), 2026-10-31: Categories and Exports (R-42, D-125, A-306)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** DESIGN.md section 7 said "a filter row, then … the kind choice (Exports)", but `Exports.tsx` shows the kind choice first. The code's order stays, and DESIGN.md is corrected (A-306 item 2). The menu says "Exports" and the page title says "Export". The title stays, because D-125 item 2 and DESIGN section 8 keep the copy; this is recorded in A-306 item 2. The `styles.css` comment "restyled at D.5" was written before the work; it now describes the new rules. The A-305 note on the `mutate-8.14.mjs` misses was looked into: X7 and X8 search for `checked.value`, which became `checked` at 9.1j in `server/src/exports.ts`; X1 searches for the row filter line with 6 spaces of indent, and it now has 4; C5 searches for the card label `` Total Outflow · ${month} ``, changed at D.2. The script is on the Desktop, outside git, so it was not changed (A-306 item 3). DESIGN.md section 2 test count is now 243.
+**Changed:** `web/src/Reports.tsx` (`th.amount` on Paid and Paid out; the range line gets `report-range`; header comment), `web/src/Exports.tsx` (header comment only), `web/src/styles.css` (the Categories and Exports filters in one row on tokens, as on Expenses, actions on the right, full width under 600 px; Categories money right-aligned; the kind choice as a panel; kind and format labels at 13 px with 24 px targets; the format choices side by side), `web/test/app.test.tsx` (one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-306), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (sections 2 and 7), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.5).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 392 passed (392)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-Blimu_mZ.css 17.19 kB", "built in 343ms". `grep -c` counts 22 hex values in `styles.css`, as before.
+**Not verified:** the look in a browser at full width and at phone width; how the Exports filter row wraps with the Member and Staff fields shown. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.4 (size M), 2026-10-31: the Expenses page (R-42, D-125, A-305)
 
 The owner said "fix inconsistencies and go".

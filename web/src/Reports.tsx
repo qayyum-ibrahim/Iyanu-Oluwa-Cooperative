@@ -3,6 +3,7 @@
 // (DR-13); the browser shows the amounts as sent (A-18) and does no money sums. The holder of
 // `users.manage` may pick one staff member's records; the names come from GET /staff (A-243 item 3).
 // Title and subtitle from legacy-prototype/src/App.jsx (Categories), with the server's rows (A-244).
+// D.5 (A-306): the filters in one row; the Paid and Paid out heads right-aligned with their money.
 import { useEffect, useState, type FormEvent } from "react";
 import { actorNames } from "./Audit.tsx";
 import { startStaffId } from "./Dashboard.tsx";
@@ -214,7 +215,7 @@ export default function Reports({ api, me, canFilterStaff }: ReportsProps) {
       )}
       {report && (
         <>
-          <p className="form-note">
+          <p className="form-note report-range">
             {reportRange(report.fromDay, report.toDay)}. Paid is the total of payment lines; paid out is what
             pay-offs returned. Paid out is shown beside paid, not taken off it.
           </p>
@@ -225,8 +226,8 @@ export default function Reports({ api, me, canFilterStaff }: ReportsProps) {
                   <tr>
                     <th>Category</th>
                     <th>Refundable</th>
-                    <th>Paid</th>
-                    <th>Paid out</th>
+                    <th className="amount">Paid</th>
+                    <th className="amount">Paid out</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -3,7 +3,8 @@
 // the file, sums the money and scopes Staff to their own records (D-104, DR-13); the browser only
 // sends the filters and saves the file it gets (A-254 item 2). The holder of `users.manage` may
 // pick one staff member's records; the names come from GET /staff (A-243 item 3). The member
-// choice reads GET /members?status=all the first time One member is ticked.
+// choice reads GET /members?status=all the first time One member is ticked. D.5 (A-306): the kind
+// choice in a panel, then the filters and the format in one row; the title stays "Export" (D-125 item 2).
 import { useEffect, useState } from "react";
 import { actorNames } from "./Audit.tsx";
 import { startStaffId } from "./Dashboard.tsx";

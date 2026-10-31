@@ -49,7 +49,7 @@ Under **Advanced**, environment variables:
 | `DIRECT_URL` | the Neon direct address of the root branch (step 1) |
 | `TOKEN_SECRET` | the new secret (step 2) |
 | `SMS_PROVIDER` | `fake` (no SMS is sent; Twilio comes at E.9, OQ-17) |
-| `TRUST_PROXY_HOPS` | `0` (the right number is found at E.8b) |
+| `TRUST_PROXY_HOPS` | `3` (found at E.8b, D-124; start with `0` on a new service, then see "Proxy count" below) |
 
 Do not set `PORT` (Render sets it) or `NODE_VERSION` (`.node-version` gives 22.14.0). Do not set the `TWILIO_` names yet.
 
@@ -102,7 +102,10 @@ Open `https://<name>.onrender.com`, sign in, and open a few pages and one export
 
 A 5-minute ping keeps Render from spinning down (15 idle minutes). `/health` does not touch the database, so Neon can still sleep.
 
+## 9. Proxy count and races (E.8b, D-124)
+1. Sign in once on the hosted address from your normal connection (no VPN). The Render log shows `sign-in: X-Forwarded-For has N entries, TRUST_PROXY_HOPS is H` when N and H differ. Set `TRUST_PROXY_HOPS` to N on Render. The service log then shows `trusted proxies: N`, and a sign-in logs no `sign-in:` line. A new `sign-in:` line later means the proxy chain changed or a client sent its own entries.
+2. From the repo root: `BASE=https://<name>.onrender.com sh scripts/live-check-concurrency.sh`. Paste the last line (`N passed, M failed`) and any `store transaction refused for a clash, try N of 10` lines from the Render log. Each run adds fictional rows (A-299 item 6). Run it once only.
+
 ## Later
-- E.8b: the right `TRUST_PROXY_HOPS` on Render, and concurrent writes on Neon.
 - E.9: the client's fictional test accounts and Twilio (OQ-17).
 - Each push to `main` deploys again. Free web services use the workspace's build pipeline minutes. When they run out, with no payment method, Render stops new builds for the rest of the month (A-298 item 3).

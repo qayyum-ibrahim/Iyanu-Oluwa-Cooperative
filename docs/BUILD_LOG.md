@@ -1,5 +1,16 @@
 # Build log (newest first)
 
+## Step E.8b (size M), 2026-10-31: the proxy count and concurrent writes on Neon (R-41, D-124, A-299)
+
+The owner said "go", then chose option (a) ("recommended"): commit the code first so Render runs it, then the live check, then the docs.
+**Sources:** Express "behind proxies" (A-297 item 2, read at E.7); the pg warning text from the Render log (A-299 item 4). Nothing new fetched.
+**Changed:** `server/src/auth-routes.ts` (`forwardedForCount`; sign-in logs the X-Forwarded-For count when it differs from `TRUST_PROXY_HOPS`, never an address), `server/src/app.ts` (passes `trustProxyHops`), `server/src/prisma-store.ts` (logs each retry, no data), `server/test/trust-proxy.test.ts` (9 tests), new `scripts/live-check-concurrency.sh`. Code commit `e1e3692` (D-124 item 5). Docs: STATUS, BUILD_LOG, DECISIONS (D-124), ASSUMPTIONS (A-299), PHASE_PLAN, TRACEABILITY, DEPLOY, NEXT_FILES. On Render: `TRUST_PROXY_HOPS=3` (owner).
+**Works (verified in this session):** the local test database had a stale `postmaster.pid` (its process number held by a VS Code helper); deleted with the owner's word, then `sh scripts/test-db.sh start` "Started on 127.0.0.1:54329", "accepting connections". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npx vitest run test/payoffs.test.ts --silent=false`: "Tests 42 passed (42)", the retry line 8 times. `sh -n scripts/live-check-concurrency.sh`: no error.
+**Works (verified on owner's machine):** Render log "sign-in: X-Forwarded-For has 3 entries, TRUST_PROXY_HOPS is 0"; after the change "trusted proxies: 3", "server listening on port 10000"; race check on the hosted address "16 passed, 0 failed"; Render log "store transaction refused for a clash, try 1 of 10" 7 times, no higher try.
+**Not verified:** see A-299 item 7 (whether all 3 entries are Render's; `req.ip` against your public address; no sign-in line after the change; the chain staying at 3); DEPLOY.md step 7. A pg SSL-mode warning in the Render log is recorded, no change (A-299 item 4). Break-on-purpose: not run (D-90: once at the end of the phase).
+
+---
+
 ## Step E.8a (size S), 2026-10-31: the first deploy (R-41, D-123, A-298)
 
 The owner said "fix inconsistencies and go".

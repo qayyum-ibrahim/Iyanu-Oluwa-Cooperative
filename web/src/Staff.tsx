@@ -3,7 +3,8 @@
 // Admin is not listed (listStaff in server/src/staff.ts). Labels from legacy-prototype/src/App.jsx
 // (UserManagement); the server has no username or phone, so the form has neither (A-224).
 // Change a staff account's permissions (U.8b, A-225). Deactivate, reactivate and reset a
-// password (U.8c, A-226).
+// password (U.8c, A-226). The DESIGN.md look at D.6 (A-307): the forms in two columns, the row
+// actions on the right.
 import { useEffect, useState, type FormEvent } from "react";
 import type { Api, CallFailure, CreateStaffResult, NewStaff, StaffAccount } from "./api.ts";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./ChangePassword.tsx";
@@ -692,7 +693,7 @@ export default function Staff({ api }: StaffProps) {
                   <th>Status</th>
                   <th>Permissions</th>
                   <th>Created</th>
-                  <th>Actions</th>
+                  <th className="row-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>

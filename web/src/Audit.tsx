@@ -2,6 +2,7 @@
 // holder of `users.manage` (the Super Admin alone, D-25). Read-only. The server sends actor ids;
 // names come from the staff list and the signed-in user, and an unknown id shows as sent (A-227).
 // Table headers from legacy-prototype/src/App.jsx (Recent Activity Log): Time, User, Action, Details.
+// The DESIGN.md look at D.6 (A-307): the filters in one row as on Categories, the time column tabular.
 import { useEffect, useState, type FormEvent } from "react";
 import type { Api, AuditEntry, AuditFilter, AuditPage, CallFailure, StaffAccount, User } from "./api.ts";
 

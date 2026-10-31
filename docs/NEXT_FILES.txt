@@ -5,8 +5,4 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-web/src/Staff.tsx
-web/src/Audit.tsx
-web/src/ChangePassword.tsx
-web/src/styles.css
-web/test/app.test.tsx
+docs/DEPLOY.md

@@ -4119,6 +4119,22 @@ describe("audit log (jsdom)", () => {
     expect(el("[role=alert]").textContent).toBe("The filters were refused. Press Clear and try again.");
     expect(rowTexts()).toHaveLength(0);
   });
+
+  it("puts the Audit filters in the filter row, the staff form's permissions after its fields, and a page header on Change password", async () => {
+    await mount(
+      fakeApi({ restore: STAFF_MANAGER, staff: [staffAccount("s1", "Staff One")], audit: [auditPage([auditEntry("a1")])] }),
+    );
+    await openAudit();
+    expect(el(".audit-filters .form-actions").textContent).toBe("ClearApply");
+    await openStaff();
+    expect(el(".staff th.row-actions").textContent).toBe("Actions");
+    await click(button("+ Add staff"));
+    const parts = Array.from(el(".staff-form fieldset").children, (c) => c.className);
+    expect(parts).toEqual(["field", "field", "field", "field", "permission-grid"]);
+    await click(button("Change password"));
+    expect(el(".title h1").textContent).toBe("Change password");
+    expect(el(".title").nextElementSibling?.matches("form.form")).toBe(true);
+  });
 });
 
 const DASHBOARD: DashboardView = {

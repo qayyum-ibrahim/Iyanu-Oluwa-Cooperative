@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.6 (size M), 2026-10-31: Staff & access, Audit log and Change password (R-42, D-125, A-307)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** STATUS named only the `.audit-paging` 14 px padding, but `.audit-paging` (8, 14 and 20 px), `.staff-form` (18 and 14 px), `.permission-grid` (10, 14 and 7 px) and `.audit-filters` (18 px) all had raw values. All are tokens now, except the paging line's 20 px, which matches the side padding of `.panel h2` and `.panel-note`. `.permission-grid` changed layout at 700 px; it now does so at 600 px like every other screen. The Audit filters had their own `auto-fit` grid; they now share the one-row filter rule of Categories and Exports. DESIGN.md section 7 now covers the Audit filters and Change password. `App.tsx` renders `ChangePassword` alone in `main`, with no page header (read in this session); DESIGN.md section 5 asks for one on every screen, so `ChangePassword.tsx` now has one (A-307 item 2).
+**Changed:** `web/src/Staff.tsx` (`th.row-actions` on Actions; header comment), `web/src/Audit.tsx` (header comment only), `web/src/ChangePassword.tsx` (the page header, then the form), `web/src/styles.css` (staff forms in two columns with the permission grid across both, one column under 600 px; the notes inside staff forms without panel padding; permission labels 13 px with 24 px targets; Actions right-aligned; `.audit-filters` joined to the Categories and Exports filter rule with 220 px fields; the Audit time column tabular; spacing on tokens), `web/test/app.test.tsx` (one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-307), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (sections 2 and 7), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.6).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 393 passed (393)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-PkgdRFuu.css 17.61 kB", "built in 314ms". `grep -c` counts 22 hex values in `styles.css`, as before.
+**Not verified:** the look in a browser at full width and at phone width; whether 220 px fits the longest action name in the Audit select. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.5 (size M), 2026-10-31: Categories and Exports (R-42, D-125, A-306)
 
 The owner said "fix inconsistencies and go".

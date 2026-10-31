@@ -42,52 +42,61 @@ export default function ChangePassword({ onSubmit, onCancel }: ChangePasswordPro
     if (message !== null) setError(message);
   }
 
+  // The page header as on every screen (DESIGN.md section 5; D.6, A-307); the form follows it.
   return (
-    <form className="form" onSubmit={submit}>
-      <h2 className="form-title">Change your password</h2>
-      <label className="field">
-        <span>Current password</span>
-        <input
-          type="password"
-          autoComplete="current-password"
-          required
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>New password ({PASSWORD_MIN_LENGTH} to {PASSWORD_MAX_LENGTH} characters)</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          required
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-        />
-      </label>
-      <label className="field">
-        <span>New password again</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          required
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
-      </label>
-      {error && (
-        <em role="alert" className="error">
-          {error}
-        </em>
-      )}
-      <div className="form-actions">
-        <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
-          Cancel
-        </button>
-        <button type="submit" className="primary-btn" disabled={busy}>
-          {busy ? "Saving…" : "Change password"}
-        </button>
+    <>
+      <div className="title">
+        <div>
+          <h1>Change password</h1>
+          <p>The password you sign in with</p>
+        </div>
       </div>
-    </form>
+      <form className="form" onSubmit={submit}>
+        <h2 className="form-title">Change your password</h2>
+        <label className="field">
+          <span>Current password</span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            required
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>New password ({PASSWORD_MIN_LENGTH} to {PASSWORD_MAX_LENGTH} characters)</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            required
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>New password again</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            required
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </label>
+        {error && (
+          <em role="alert" className="error">
+            {error}
+          </em>
+        )}
+        <div className="form-actions">
+          <button type="button" className="secondary-btn" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button type="submit" className="primary-btn" disabled={busy}>
+            {busy ? "Saving…" : "Change password"}
+          </button>
+        </div>
+      </form>
+    </>
   );
 }

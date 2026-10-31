@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step D.1 (size M), 2026-10-31: tokens, shared components, side menu and sign-in (R-42, D-125, A-301)
+
+The owner said "go" after confirming the side menu and keeping every DESIGN.md limit.
+**Changed:** `web/src/styles.css` rewritten on the DESIGN.md tokens (colour, type, space, radius, shadow on `:root`; 22 hex values, all inside `:root`), the system font stack, a focus ring on every control, shared buttons, small row buttons (`.secondary`), fields, notices and errors with a left bar, panels, page header, tables and badges; the side menu (240 px, fixed) and a top bar under 900 px; the sign-in card on flat deep green. The screen sections keep their layout; only their colours moved to tokens (D.2 to D.6 restyle them). `web/src/App.tsx`: the header becomes the side menu with four groups (`role="group"`, `aria-labelledby`), `aria-current="page"` on the open page (also Change password), the user and Sign out at the bottom; the plain Home and Loading screens get the page header class. `web/src/SignIn.tsx`: the labels use `field`, the button `primary-btn`. `web/test/app.test.tsx`: four new side menu tests; three tests check `aria-current` instead of the class `active`. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-301), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (`--neutral-badge-bg`, the test count, money alignment), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.1).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 387 passed (387)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-Bwktq5nh.css 13.55 kB", "built in 356ms". Contrast of the 11 new colour pairs: all pass (A-301 item 3).
+**Not verified:** the look in a browser at full width and at phone width; focus never hidden behind the fixed menu (2.4.11). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.0 (size S), 2026-10-31: design brief and the Phase D plan (R-42, D-125, A-300)
 
 The owner asked for a professional, corporate design and chose "before the hand-over, go with D.0".

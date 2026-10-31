@@ -5,7 +5,8 @@
 // reactivate a member on member detail (U.7b), the staff list and add staff (U.8a), staff
 // permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d),
 // the dashboard on Home for the holder of `dashboard` (7.5b, A-242), the categories report for the
-// holder of `reports.view` (7.6b, A-244), the exports page for the holder of `reports.export` (8.6, A-255).
+// holder of `reports.view` (7.6b, A-244), the exports page for the holder of `reports.export` (8.6, A-255),
+// the side menu in groups (D.1, D-125).
 import { useEffect, useState } from "react";
 import {
   browserRefreshLock,
@@ -129,7 +130,7 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
 
   if (view.kind === "loading") {
     return (
-      <main>
+      <main className="loading">
         <h1>{SYSTEM_NAME}</h1>
         <p>Loading…</p>
       </main>
@@ -143,9 +144,21 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
   const { me } = view;
   const can = (permission: string) => me.permissions.includes(permission);
   const go = (page: Page) => setView({ ...view, page });
+  // One menu button; aria-current marks the open page (D-125, docs/DESIGN.md section 5).
+  const item = (page: Page, label: string) => (
+    <button
+      type="button"
+      aria-current={view.page === page ? "page" : undefined}
+      onClick={() => go(page)}
+    >
+      {label}
+    </button>
+  );
+  const showRecords = can("members.view") || can("expenses.view");
+  const showReports = can("reports.view") || can("reports.export");
   return (
     <div className="app">
-      <header>
+      <header className="sidebar">
         <div className="brand">
           <b>IO</b>
           <div>
@@ -153,79 +166,43 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
             <small>Cooperative Management</small>
           </div>
         </div>
-        <span className="who">
-          {me.user.displayName}
-          <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
-        </span>
-        <nav>
-          <button
-            type="button"
-            className={view.page === "home" ? "active" : ""}
-            onClick={() => go("home")}
-          >
-            {can("dashboard") ? "Dashboard" : "Home"}
-          </button>
-          {can("members.view") && (
-            <button
-              type="button"
-              className={view.page === "members" ? "active" : ""}
-              onClick={() => go("members")}
-            >
-              Members
-            </button>
+        <nav aria-label="Main menu">
+          <div className="nav-group" role="group" aria-labelledby="nav-overview">
+            <p id="nav-overview">Overview</p>
+            {item("home", can("dashboard") ? "Dashboard" : "Home")}
+          </div>
+          {showRecords && (
+            <div className="nav-group" role="group" aria-labelledby="nav-records">
+              <p id="nav-records">Records</p>
+              {can("members.view") && item("members", "Members")}
+              {can("expenses.view") && item("expenses", "Expenses")}
+            </div>
           )}
-          {can("expenses.view") && (
-            <button
-              type="button"
-              className={view.page === "expenses" ? "active" : ""}
-              onClick={() => go("expenses")}
-            >
-              Expenses
-            </button>
-          )}
-          {can("reports.view") && (
-            <button
-              type="button"
-              className={view.page === "reports" ? "active" : ""}
-              onClick={() => go("reports")}
-            >
-              Categories
-            </button>
-          )}
-          {can("reports.export") && (
-            <button
-              type="button"
-              className={view.page === "exports" ? "active" : ""}
-              onClick={() => go("exports")}
-            >
-              Exports
-            </button>
+          {showReports && (
+            <div className="nav-group" role="group" aria-labelledby="nav-reports">
+              <p id="nav-reports">Reports</p>
+              {can("reports.view") && item("reports", "Categories")}
+              {can("reports.export") && item("exports", "Exports")}
+            </div>
           )}
           {can("users.manage") && (
-            <button
-              type="button"
-              className={view.page === "staff" ? "active" : ""}
-              onClick={() => go("staff")}
-            >
-              Staff &amp; access
-            </button>
-          )}
-          {can("users.manage") && (
-            <button
-              type="button"
-              className={view.page === "audit" ? "active" : ""}
-              onClick={() => go("audit")}
-            >
-              Audit log
-            </button>
+            <div className="nav-group" role="group" aria-labelledby="nav-admin">
+              <p id="nav-admin">Administration</p>
+              {item("staff", "Staff & access")}
+              {item("audit", "Audit log")}
+            </div>
           )}
         </nav>
-        <button type="button" className="secondary" onClick={() => go("password")}>
-          Change password
-        </button>
-        <button type="button" className="logout" onClick={signOut}>
-          Sign out
-        </button>
+        <div className="sidebar-foot">
+          <span className="who">
+            {me.user.displayName}
+            <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
+          </span>
+          {item("password", "Change password")}
+          <button type="button" className="logout" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </header>
       <main>
         {view.page === "password" ? (
@@ -259,10 +236,12 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
         ) : can("dashboard") ? (
           <Dashboard api={api} me={me.user} canFilterStaff={can("users.manage")} />
         ) : (
-          <>
-            <h1>{SYSTEM_NAME}</h1>
-            <p>Signed in as {me.user.displayName}. Choose a page from the menu.</p>
-          </>
+          <div className="title">
+            <div>
+              <h1>{SYSTEM_NAME}</h1>
+              <p>Signed in as {me.user.displayName}. Choose a page from the menu.</p>
+            </div>
+          </div>
         )}
       </main>
     </div>

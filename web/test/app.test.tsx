@@ -774,6 +774,65 @@ describe("screens (jsdom)", () => {
   });
 });
 
+describe("side menu (jsdom)", () => {
+  function groups(): string[] {
+    return Array.from(container?.querySelectorAll("nav .nav-group p") ?? [], (p) => p.textContent ?? "");
+  }
+  function menu(): string[] {
+    return Array.from(container?.querySelectorAll("nav button") ?? [], (b) => b.textContent ?? "");
+  }
+  function current(): string[] {
+    return Array.from(container?.querySelectorAll("[aria-current=page]") ?? [], (b) => b.textContent ?? "");
+  }
+
+  it("shows only the Overview group to a user with no page permission", async () => {
+    await mount(fakeApi({ restore: ME }));
+    expect(groups()).toEqual(["Overview"]);
+    expect(menu()).toEqual(["Home"]);
+    expect(current()).toEqual(["Home"]);
+    expect(el("nav").getAttribute("aria-label")).toBe("Main menu");
+  });
+
+  it("shows each group the user may see, in order, with its buttons", async () => {
+    const all: Me = {
+      ...ME,
+      permissions: ["members.view", "expenses.view", "reports.view", "reports.export", "users.manage"],
+    };
+    await mount(fakeApi({ restore: all }));
+    expect(groups()).toEqual(["Overview", "Records", "Reports", "Administration"]);
+    expect(menu()).toEqual([
+      "Home",
+      "Members",
+      "Expenses",
+      "Categories",
+      "Exports",
+      "Staff & access",
+      "Audit log",
+    ]);
+    const labelled = Array.from(container?.querySelectorAll("nav [role=group]") ?? [], (g) =>
+      document.getElementById(g.getAttribute("aria-labelledby") ?? "")?.textContent,
+    );
+    expect(labelled).toEqual(["Overview", "Records", "Reports", "Administration"]);
+  });
+
+  it("hides a group when the user may see none of its pages", async () => {
+    await mount(fakeApi({ restore: { ...ME, permissions: ["reports.export"] } }));
+    expect(groups()).toEqual(["Overview", "Reports"]);
+    expect(menu()).toEqual(["Home", "Exports"]);
+  });
+
+  it("moves aria-current to the page that is open", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    expect(current()).toEqual(["Home"]);
+    await click(button("Members"));
+    expect(current()).toEqual(["Members"]);
+    await click(button("Change password"));
+    expect(current()).toEqual(["Change password"]);
+    await click(button("Cancel"));
+    expect(current()).toEqual(["Home"]);
+  });
+});
+
 describe("members helpers", () => {
   it("searches by name or Membership ID, ignoring case and outer spaces", () => {
     const all = [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE];
@@ -4089,7 +4148,7 @@ describe("dashboard (jsdom)", () => {
   it("shows the dashboard on Home for a Staff holder, with no staff filter", async () => {
     const api = await mount(fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: true, value: DASHBOARD }] }));
     expect(() => button("Home")).toThrow();
-    expect(button("Dashboard").className).toBe("active");
+    expect(button("Dashboard").getAttribute("aria-current")).toBe("page");
     expect(el("h1").textContent).toBe("Dashboard");
     expect(api.calls).toEqual(["dashboard"]);
     expect(api.dashboardQueries).toEqual([{}]);
@@ -4276,7 +4335,7 @@ describe("categories report (jsdom)", () => {
     const api = await mount(fakeApi({ restore: REPORT_VIEWER, report: [{ ok: true, value: REPORT }] }));
     expect(api.calls).toEqual([]);
     await openReports();
-    expect(button("Categories").className).toBe("active");
+    expect(button("Categories").getAttribute("aria-current")).toBe("page");
     expect(el("h1").textContent).toBe("Categories");
     expect(api.calls).toEqual(["report"]);
     expect(api.reportQueries).toEqual([{}]);
@@ -4515,7 +4574,7 @@ describe("exports page (jsdom)", () => {
   it("shows the tick boxes and Excel to a Staff holder, Export waits for a tick, and reads nothing first", async () => {
     const api = await mount(fakeApi({ restore: EXPORTER }));
     await click(button("Exports"));
-    expect(button("Exports").className).toBe("active");
+    expect(button("Exports").getAttribute("aria-current")).toBe("page");
     expect(el("h1").textContent).toBe("Export");
     expect(inputs("checkbox").map((b) => `${b.value}:${b.checked}`)).toEqual(
       EXPORT_KIND_CHOICES.map((c) => `${c.kind}:false`),

@@ -32,7 +32,7 @@ export default function SignIn({ onSignIn, notice }: SignInProps) {
         <h1>Sign in</h1>
         <p>IYANU-OLUWA Cooperative Management System</p>
         {notice && <p className="notice">{notice}</p>}
-        <label>
+        <label className="field">
           <span>Email</span>
           <input
             type="email"
@@ -42,7 +42,7 @@ export default function SignIn({ onSignIn, notice }: SignInProps) {
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label>
+        <label className="field">
           <span>Password</span>
           <input
             type="password"
@@ -52,7 +52,7 @@ export default function SignIn({ onSignIn, notice }: SignInProps) {
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="primary-btn" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
         {error && (

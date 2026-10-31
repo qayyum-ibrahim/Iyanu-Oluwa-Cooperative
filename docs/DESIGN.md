@@ -14,7 +14,7 @@ A calm, plain look that suits a finance office. People will trust it with money 
 |---|---|---|
 | The page CSP is `default-src 'none'; style-src 'self'` and has no `font-src` (D-120) | MDN: a missing `font-src` falls back to `default-src`; `'none'` loads nothing. Inline `style="..."` and `<style>` are blocked without `'unsafe-inline'`, a nonce or a hash (A-300 item 2) | No web fonts and no font files. We use the system font stack. No `style=` in the TSX; every rule goes in `web/src/styles.css`. |
 | No new dependency without the owner's word (CLAUDE.md) | | Plain CSS. No Tailwind, no UI kit, no chart library, no icon font. Icons, if any, are inline SVG in the TSX. |
-| 241 screen tests find things by text and role (`web/test/app.test.tsx`) | | Labels, button names, headings and roles stay the same unless a step says otherwise and changes the tests too. |
+| The screen tests find things by text and role (`web/test/app.test.tsx`; 234 `it(` lines counted at D.1, the D.0 figure 241 was not rechecked) | | Labels, button names, headings and roles stay the same unless a step says otherwise and changes the tests too. |
 | The browser does no money sums (A-18) | | The design shows only figures the server sends. No new totals and no charts that need sums. |
 | WCAG 2.2 AA (R-39; read at D.0, A-300 item 1) | | See section 4. |
 
@@ -44,7 +44,8 @@ Every colour, size and space in `styles.css` comes from these. No hex codes outs
 | `--danger-soft` | `#fef3f2` | error notice background |
 | `--warning` | `#9a3412` | warning text (On loan) |
 | `--warning-soft` | `#fff7ed` | warning background |
-| `--neutral-badge` | `#374151` on `#f1f5f9` | Inactive and other neutral badges |
+| `--neutral-badge` | `#374151` | Inactive and other neutral badges (text) |
+| `--neutral-badge-bg` | `#f1f5f9` | neutral badge background (split from `--neutral-badge` at D.1, A-301) |
 
 ### Type
 System font stack: `system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`. Body text 14 px with line height 1.5. Sizes: 12 (column heads, badges), 13 (notes, table cells), 14 (body, inputs, buttons), 16 (panel titles), 20 (KPI figures), 24 (page titles). Weights 400, 500 and 600 only. Money and counts use `font-variant-numeric: tabular-nums`.
@@ -73,7 +74,7 @@ The screens already share these class names (`field`, `primary-btn`, `secondary-
 - **Inputs and selects:** 36 px high, with the `--border-input` border and 6 px corners. The label sits above the input at 13 px weight 500 in `--text` (not 11 px, not muted). Help and error text sits under the input. An error turns the border `--danger`.
 - **Panels and cards:** white, a 1 px `--border` line, 8 px corners and the one shadow. The panel title is 16 px weight 600, with a line under it.
 - **KPI card:** the label (13 px, muted), the figure (20 px, weight 600, tabular), and an optional line under it (12 px, muted).
-- **Tables:** the column head is 12 px weight 600, muted, on `--surface-muted`. Cells are 13 px with 10 by 12 px padding and a line between rows, and a row lightens on hover. Money columns are right-aligned and tabular. Wide tables scroll inside `table-wrap`, never the whole page.
+- **Tables:** the column head is 12 px weight 600, muted, on `--surface-muted`. Cells are 13 px with 10 by 12 px padding and a line between rows, and a row lightens on hover. Money columns are right-aligned and tabular (each screen's step right-aligns its money cells and their column heads together; until then they stay left-aligned, A-301). Wide tables scroll inside `table-wrap`, never the whole page.
 - **Badges:** 12 px weight 500 with 6 px corners and a word. Active is green-soft, Inactive is neutral, On loan is warning-soft.
 - **Notices and errors:** a box with a 4 px left bar (green for a notice, red for an error) and text in the bar's colour. Errors keep `role="alert"`.
 - **Empty and loading states:** one muted line inside the panel, for example "No expenses this month." These texts stay as they are now.

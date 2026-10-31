@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.3b (size M), 2026-10-31: member detail (R-42, D-125, A-304)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** DESIGN.md section 7 named "payments and loans tables" and "profile and balance cards across the top"; the code shows Profile, Balances, Loans, then Payments, stacked. Section 7 now describes the code's order. Profile and Balances stay stacked: a wrapper would re-indent the balance cards and break the search text of break-on-purpose mutation V21 (A-304 item 2). DESIGN.md section 2 test count now 241.
+**Changed:** `web/src/Members.tsx` (the badges under the name and subtitle, the action buttons in `.title-actions`; `th.amount` on Balance, Principal, Repaid, Outstanding and Total), `web/src/styles.css` (member detail section on tokens: badges row, profile in one row of three, a list under 600 px, balance cards in the KPI card look, money right-aligned in the balances, loans, payments and pay-off tables, dates on one line; payment form Date, method and Total in one row, loan form in two columns, one column under 600 px; breakdown, SMS toggle and pay-off rules on tokens), `web/test/app.test.tsx` (one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-304), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (sections 2 and 7), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.3b).
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run check` (web), second run: "Test Files 4 passed (4)", "Tests 390 passed (390)". The first web run failed 1 test, the new one ("no button: Record payment"): its role `FULL` has no `payments.create`; the test now adds it, no source change. `npm run build` (web): "dist/assets/index-BWdYmhIX.css 15.98 kB", "built in 329ms". `grep -c` counts 22 hex values in `styles.css`, as before. A read-only anchor check found the same 17 unmatched mutation texts before and after the change (A-304 item 3).
+**Not verified:** the look in a browser at full width and at phone width; header wrapping with a long name. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.3 (size M), 2026-10-31: the Members list and add member (R-42, D-125, A-303)
 
 The owner said "fix inconsistencies and go".

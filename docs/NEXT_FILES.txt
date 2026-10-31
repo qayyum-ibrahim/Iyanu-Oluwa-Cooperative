@@ -5,6 +5,6 @@ docs/PHASE_PLAN.md
 docs/DECISIONS.md
 docs/ASSUMPTIONS.md
 docs/TRACEABILITY.md
-web/src/Members.tsx
+web/src/Expenses.tsx
 web/src/styles.css
 web/test/app.test.tsx

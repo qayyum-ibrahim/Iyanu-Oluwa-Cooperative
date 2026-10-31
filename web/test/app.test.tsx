@@ -1197,6 +1197,33 @@ describe("member detail (jsdom)", () => {
     expect(container?.querySelector(".loan")).toBeNull();
   });
 
+  it("puts the badges under the name, the actions on the right, and marks the money columns", async () => {
+    await mount(
+      fakeApi({
+        restore: { ...FULL, permissions: [...FULL.permissions, "payments.create"] },
+        members: [ACTIVE_ONE],
+        balances: { ok: true, value: DETAIL_BALANCES },
+        loans: { ok: true, value: [ACTIVE_LOAN] },
+        payments: { ok: true, value: [payment("p1", "2026-10-21T09:00:00.000Z", "1000.00")] },
+      }),
+    );
+    await openDetail("Test Member One");
+    const badges = el(".title .badges");
+    expect(badges.textContent).toBe("ActiveOn loan");
+    expect(badges.parentElement?.querySelector("h1")?.textContent).toBe("Test Member One");
+    expect(button("Record payment").closest(".title-actions")).toBe(el(".title .title-actions"));
+    expect(Array.from(el(".profile").querySelectorAll("dt"), (d) => d.textContent)).toEqual([
+      "Phone",
+      "Address",
+      "Occupation",
+    ]);
+    const moneyHeads = (table: string) =>
+      Array.from(el(`table.${table}`).querySelectorAll("th.amount"), (th) => th.textContent);
+    expect(moneyHeads("balances")).toEqual(["Balance"]);
+    expect(moneyHeads("loans")).toEqual(["Principal", "Repaid", "Outstanding"]);
+    expect(moneyHeads("payments")).toEqual(["Total"]);
+  });
+
   it("shows loans newest first, and each payment's method, lines and own total", async () => {
     const older: Loan = { ...ACTIVE_LOAN, id: "l0", givenOn: "2026-10-01", createdAt: "2026-10-01T09:00:00.000Z", repaid: "20000.00", outstanding: "0.00", status: "FULLY_REPAID" };
     const transfer: Payment = {

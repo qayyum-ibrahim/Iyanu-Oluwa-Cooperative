@@ -1455,12 +1455,14 @@ function MemberDetail({
           <p>
             {m.membershipId} · Joined {formatDate(m.createdAt)}
           </p>
+          <div className="badges">
+            <span className={m.status === "ACTIVE" ? "pill" : "status-inactive"}>
+              {m.status === "ACTIVE" ? "Active" : "Inactive"}
+            </span>
+            {onLoan && <span className="loan">On loan</span>}
+          </div>
         </div>
-        <div className="badges">
-          <span className={m.status === "ACTIVE" ? "pill" : "status-inactive"}>
-            {m.status === "ACTIVE" ? "Active" : "Inactive"}
-          </span>
-          {onLoan && <span className="loan">On loan</span>}
+        <div className="title-actions">
           {canRecordPayment && m.status === "ACTIVE" && open === null && (
             <button type="button" className="primary-btn" onClick={() => openForm("payment")}>
               Record payment
@@ -1542,7 +1544,7 @@ function MemberDetail({
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th>Balance</th>
+                    <th className="amount">Balance</th>
                     <th>Refundable</th>
                   </tr>
                 </thead>
@@ -1574,9 +1576,9 @@ function MemberDetail({
                 <thead>
                   <tr>
                     <th>Given</th>
-                    <th>Principal</th>
-                    <th>Repaid</th>
-                    <th>Outstanding</th>
+                    <th className="amount">Principal</th>
+                    <th className="amount">Repaid</th>
+                    <th className="amount">Outstanding</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -1619,7 +1621,7 @@ function MemberDetail({
                     <th>Date</th>
                     <th>Method</th>
                     <th>Breakdown</th>
-                    <th>Total</th>
+                    <th className="amount">Total</th>
                   </tr>
                 </thead>
                 <tbody>

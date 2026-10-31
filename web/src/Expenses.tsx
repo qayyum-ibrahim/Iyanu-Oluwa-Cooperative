@@ -6,6 +6,7 @@
 // Expenses are running costs only (D-106, D-107): the server lists no Loan or Membership
 // Withdrawal row, and the category filter offers the running costs alone.
 // One card per month of the day spent, newest month first (9.1g, D-110 item 2); no month subtotal.
+// D.4 (A-305): the count and the total in the history panel's head; money right-aligned.
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   Api,
@@ -465,7 +466,7 @@ function ExpenseForm({ api, editing, onSaved, onCancel }: ExpenseFormProps) {
             <option value="CASH">{METHOD_LABELS.CASH}</option>
           </select>
         </label>
-        <label className="field">
+        <label className="field field-wide">
           <span>Description</span>
           <input
             type="text"
@@ -476,7 +477,7 @@ function ExpenseForm({ api, editing, onSaved, onCancel }: ExpenseFormProps) {
           />
         </label>
         {form.category === OTHERS_CATEGORY && (
-          <label className="field">
+          <label className="field field-wide">
             <span>Narration</span>
             <input
               type="text"
@@ -730,19 +731,21 @@ export default function Expenses({ api, canCreate, canEdit, canDelete }: Expense
           </button>
         </div>
       </form>
-      <section className="panel">
-        <h2>Expense history</h2>
+      <section className="panel expense-history">
+        <div className="panel-head">
+          <h2>Expense history</h2>
+          {list.kind === "loaded" && (
+            <div className="expense-total">
+              <span>{expenseCount(rows.length)}</span>
+              <b>Total {formatNaira(list.list.total)}</b>
+            </div>
+          )}
+        </div>
         {list.kind === "loading" && <p className="panel-note">Loading…</p>}
         {list.kind === "failed" && list.message && (
           <em role="alert" className="error panel-note">
             {list.message}
           </em>
-        )}
-        {list.kind === "loaded" && (
-          <div className="expense-total">
-            <span>{expenseCount(rows.length)}</span>
-            <b>Total {formatNaira(list.list.total)}</b>
-          </div>
         )}
         {list.kind === "loaded" && rows.length === 0 && (
           <p className="panel-note">No expenses found.</p>
@@ -757,9 +760,9 @@ export default function Expenses({ api, canCreate, canEdit, canDelete }: Expense
                     <th>Date</th>
                     <th>Category</th>
                     <th>Description</th>
-                    <th>Amount</th>
+                    <th className="amount">Amount</th>
                     <th>Method</th>
-                    {actions && <th>Action</th>}
+                    {actions && <th className="row-actions">Action</th>}
                   </tr>
                 </thead>
                 <tbody>

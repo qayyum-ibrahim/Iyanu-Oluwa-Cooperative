@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.4 (size M), 2026-10-31: the Expenses page (R-42, D-125, A-305)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** DESIGN.md section 7 and PHASE_PLAN asked for "a total card"; the code shows the count and the total as a line inside the "Expense history" panel. The count and the total now sit in the panel's head, and DESIGN.md section 7 and PHASE_PLAN are corrected (A-305 item 2). The shared rules `.payment-form, .loan-form, .expense-form, .expense-delete` and their fieldset gap moved to tokens; member detail's payment and loan forms change with them (24 px below each form, 16 px between fields). The PHASE_PLAN line now names the delete confirm. The search texts of `~/Desktop/mutate-U.8e2.mjs` and `mutate-8.14.mjs` in `Expenses.tsx` are kept (A-305 item 3). DESIGN.md section 2 test count now 242.
+**Changed:** `web/src/Expenses.tsx` (the history panel gets a `.panel-head` with the `h2` and the count and total; `th.amount` on Amount, `th.row-actions` on Action; Description and Narration labels get `field-wide`; header comment), `web/src/styles.css` (Expenses section on tokens: filters in one row with Clear and Apply on the right, the total at 20 px in `--text`, month cards, money and actions right-aligned, dates on one line, the expense form in two columns, one column under 600 px; the shared form margin and gap on tokens; the row button gap 8 px), `web/test/app.test.tsx` (one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-305), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (sections 2 and 7), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.4).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 391 passed (391)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-BYYkNxIV.css 16.57 kB", "built in 305ms". `grep -c` counts 22 hex values in `styles.css`, as before. The read-only anchor check gave the same output before and after the change (A-305 item 3).
+**Not verified:** the look in a browser at full width and at phone width; how the filter row wraps at mid width. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.3b (size M), 2026-10-31: member detail (R-42, D-125, A-304)
 
 The owner said "fix inconsistencies and go".

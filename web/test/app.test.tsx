@@ -2474,6 +2474,23 @@ describe("expenses page (jsdom)", () => {
     expect(rowTexts()).toHaveLength(0);
     expect(container?.querySelector(".expense-total")).toBeNull();
   });
+
+  it("puts the count and the total in the history panel head, and marks the money and action columns", async () => {
+    await mount(fakeApi({ restore: EXPENSE_EDITOR, expenses: MIXED_EXPENSES }));
+    await openExpenses();
+    expect(button("+ Record expense").closest(".title")).toBe(el(".title"));
+    const head = el(".expense-history .panel-head");
+    expect(head.querySelector("h2")?.textContent).toBe("Expense history");
+    expect(el(".expense-total").closest(".panel-head")).toBe(head);
+    const card = el(".expense-month");
+    expect(Array.from(card.querySelectorAll("th.amount"), (th) => th.textContent)).toEqual(["Amount"]);
+    expect(Array.from(card.querySelectorAll("th.row-actions"), (th) => th.textContent)).toEqual(["Action"]);
+    await click(button("+ Record expense"));
+    await choose(formSelect("category"), "Others");
+    expect(
+      Array.from(document.querySelectorAll(".expense-form .field-wide input"), (i) => i.getAttribute("name")),
+    ).toEqual(["description", "narration"]);
+  });
 });
 
 const EXPENSE_FORM: ExpenseFormInput = {

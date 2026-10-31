@@ -665,12 +665,12 @@ td.amount {
 }
 
 /* Payment form (U.4e2), from the prototype's breakdown box; loan form (U.5b); expense form (U.6d);
-   expense delete confirm (U.6e) */
+   expense delete confirm (U.6e); spacing on tokens at D.4 */
 .payment-form,
 .loan-form,
 .expense-form,
 .expense-delete {
-  margin-bottom: 18px;
+  margin-bottom: var(--space-5);
 }
 .payment-form fieldset,
 .loan-form fieldset,
@@ -680,7 +680,7 @@ td.amount {
   padding: 0;
   min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: var(--space-4);
 }
 /* D.3b: the payment form's date, method and total in one row, the loan form in two columns;
    one column under 600 px */
@@ -770,52 +770,93 @@ td.amount {
   }
 }
 
-/* Expenses page (U.6c) */
+/* Expenses page (U.6c; D.4): the filters in one row, the count and the total in the history
+   panel's head, one card per month, money right-aligned; the expense form in two columns, the
+   description and narration across both; one column under 600 px */
+.expense-form {
+  max-width: 720px;
+}
+.expense-form fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.expense-form .field-wide {
+  grid-column: 1 / -1;
+}
 .expense-filters {
   max-width: none;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
 }
-.expense-filters .error,
+.expense-filters .field {
+  width: 180px;
+}
 .expense-filters .form-actions {
-  grid-column: 1 / -1;
+  margin-left: auto;
+}
+.expense-filters .error {
+  flex-basis: 100%;
+  order: 1;
 }
 .expense-total {
   display: flex;
-  justify-content: space-between;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
 .expense-total b {
-  color: var(--primary);
-  font-size: 15px;
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 /* One card per month (9.1g) */
 .expense-month {
-  margin: 14px 20px;
+  margin: var(--space-4) 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
 }
 .expense-month h3 {
   margin: 0;
-  padding: 10px 14px;
+  padding: 10px var(--space-3);
   font-size: var(--text-md);
+  font-weight: 600;
   background: var(--surface-muted);
   border-bottom: 1px solid var(--border);
 }
+.expenses .amount,
+.expenses .row-actions {
+  text-align: right;
+}
+.expenses td:first-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 600px) {
+  .expense-form fieldset {
+    grid-template-columns: 1fr;
+  }
+  .expense-filters .field,
+  .expense-filters .form-actions {
+    width: 100%;
+  }
+  .expense-month {
+    margin: var(--space-3);
+  }
+}
 
-/* Expense edit and delete (U.6e) */
+/* Row actions in tables: expenses (U.6e) and staff */
 .row-actions {
   white-space: nowrap;
 }
 .row-actions .secondary + .secondary {
-  margin-left: 6px;
+  margin-left: var(--space-2);
 }
 
 /* Pay-off at the bottom of member detail (U.7a, R-13) */

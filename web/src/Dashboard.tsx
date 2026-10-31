@@ -4,6 +4,7 @@
 // may pick one staff member's records; the names come from GET /staff (A-241 item 3).
 // Card labels from legacy-prototype/src/App.jsx (Dashboard), with the server's figures (A-242).
 // Total Outflow cards: every outflow, Loan and Membership Withdrawal included (D-106, D-107).
+// Layout from docs/DESIGN.md (D.2): the filters in the page header, the cards in three groups.
 import { useEffect, useState, type FormEvent } from "react";
 import { actorNames } from "./Audit.tsx";
 import type { Api, CallFailure, Dashboard as DashboardView, DashboardQuery, StaffAccount, User } from "./api.ts";
@@ -67,20 +68,47 @@ export function dashboardMessage(reason: CallFailure): string | null {
   }
 }
 
-/** The cards in order: label and amount (or count) as the server sent it. */
-export function dashboardCards(d: DashboardView): { label: string; value: string }[] {
-  const month = formatMonth(d.month);
+/** One group of cards under its heading (D.2, DESIGN.md section 7). */
+export interface DashboardGroup {
+  id: string;
+  heading: string;
+  cards: { label: string; value: string }[];
+}
+
+/**
+ * The cards in their groups, in order: the chosen month, all time, then the position now. Each
+ * label and amount (or count) as the server sent it; the group heading names the period.
+ */
+export function dashboardGroups(d: DashboardView): DashboardGroup[] {
   return [
-    { label: "Active Members", value: String(d.activeMembers) },
-    { label: `Income · ${month}`, value: formatNaira(d.income.month) },
-    { label: "Income · All Time", value: formatNaira(d.income.allTime) },
-    { label: `Total Expenditures · ${month}`, value: formatNaira(d.expenditure.month) },
-    { label: "Total Expenditures · All Time", value: formatNaira(d.expenditure.allTime) },
-    { label: "Outstanding Loans", value: formatNaira(d.outstandingLoans) },
-    { label: `Withdrawals · ${month}`, value: formatNaira(d.membershipWithdrawal.month) },
-    { label: "Withdrawals · All Time", value: formatNaira(d.membershipWithdrawal.allTime) },
-    { label: `Total Outflow · ${month}`, value: formatNaira(d.totalOutflow.month) },
-    { label: "Total Outflow · All Time", value: formatNaira(d.totalOutflow.allTime) },
+    {
+      id: "month",
+      heading: formatMonth(d.month),
+      cards: [
+        { label: "Income", value: formatNaira(d.income.month) },
+        { label: "Total Expenditures", value: formatNaira(d.expenditure.month) },
+        { label: "Withdrawals", value: formatNaira(d.membershipWithdrawal.month) },
+        { label: "Total Outflow", value: formatNaira(d.totalOutflow.month) },
+      ],
+    },
+    {
+      id: "all-time",
+      heading: "All time",
+      cards: [
+        { label: "Income", value: formatNaira(d.income.allTime) },
+        { label: "Total Expenditures", value: formatNaira(d.expenditure.allTime) },
+        { label: "Withdrawals", value: formatNaira(d.membershipWithdrawal.allTime) },
+        { label: "Total Outflow", value: formatNaira(d.totalOutflow.allTime) },
+      ],
+    },
+    {
+      id: "position",
+      heading: "Position",
+      cards: [
+        { label: "Active Members", value: String(d.activeMembers) },
+        { label: "Outstanding Loans", value: formatNaira(d.outstandingLoans) },
+      ],
+    },
   ];
 }
 
@@ -167,53 +195,53 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
 
   return (
     <>
-      <div className="title">
+      <div className="title dashboard-head">
         <div>
           <h1>Dashboard</h1>
           <p>Overview of cooperative activity, income and expenditure</p>
         </div>
-      </div>
-      <form className="form dashboard-filters" onSubmit={apply}>
-        <label className="field">
-          <span>Month</span>
-          <input
-            type="month"
-            name="month"
-            value={form.month}
-            onChange={(e) => setForm({ ...form, month: e.target.value })}
-          />
-        </label>
-        {staff !== null && (
+        <form className="dashboard-filters" onSubmit={apply}>
           <label className="field">
-            <span>Staff</span>
-            <select
-              name="staffId"
-              value={form.staffId}
-              onChange={(e) => setForm({ ...form, staffId: e.target.value })}
-            >
-              <option value="">All staff</option>
-              {[...actorNames(me, staff)].map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <span>Month</span>
+            <input
+              type="month"
+              name="month"
+              value={form.month}
+              onChange={(e) => setForm({ ...form, month: e.target.value })}
+            />
           </label>
-        )}
-        {error && (
-          <em role="alert" className="error">
-            {error}
-          </em>
-        )}
-        <div className="form-actions">
-          <button type="button" className="secondary-btn" onClick={clear}>
-            Clear
-          </button>
-          <button type="submit" className="primary-btn">
-            Apply
-          </button>
-        </div>
-      </form>
+          {staff !== null && (
+            <label className="field">
+              <span>Staff</span>
+              <select
+                name="staffId"
+                value={form.staffId}
+                onChange={(e) => setForm({ ...form, staffId: e.target.value })}
+              >
+                <option value="">All staff</option>
+                {[...actorNames(me, staff)].map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="form-actions">
+            <button type="button" className="secondary-btn" onClick={clear}>
+              Clear
+            </button>
+            <button type="submit" className="primary-btn">
+              Apply
+            </button>
+          </div>
+          {error && (
+            <em role="alert" className="error">
+              {error}
+            </em>
+          )}
+        </form>
+      </div>
       {view.kind === "loading" && <p className="panel-note">Loading…</p>}
       {view.kind === "failed" && view.message && (
         <em role="alert" className="error">
@@ -227,15 +255,20 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
             running costs only. Total Outflow is all money going out: running costs, loans given and
             Membership Withdrawals. Income counts every payment line.
           </p>
-          <div className="cards">
-            {dashboardCards(dashboard).map((c) => (
-              <div key={c.label} className="card">
-                <span>{c.label}</span>
-                <b>{c.value}</b>
+          {dashboardGroups(dashboard).map((g) => (
+            <section key={g.id} className="kpi-group" aria-labelledby={`kpi-${g.id}`}>
+              <h2 id={`kpi-${g.id}`}>{g.heading}</h2>
+              <div className="cards">
+                {g.cards.map((c) => (
+                  <div key={c.label} className="card">
+                    <span>{c.label}</span>
+                    <b>{c.value}</b>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <section className="panel">
+            </section>
+          ))}
+          <section className="panel recent-panel">
             <h2>Recent expenses</h2>
             {dashboard.recentExpenses.length === 0 && (
               <p className="panel-note">No expenses this month.</p>
@@ -248,7 +281,7 @@ export default function Dashboard({ api, me, canFilterStaff }: DashboardProps) {
                       <th>Date</th>
                       <th>Category</th>
                       <th>Description</th>
-                      <th>Amount</th>
+                      <th className="amount">Amount</th>
                       <th>Method</th>
                     </tr>
                   </thead>

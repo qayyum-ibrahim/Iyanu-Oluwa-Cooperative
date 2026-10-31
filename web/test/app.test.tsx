@@ -65,7 +65,7 @@ import {
 import ChangePassword, { checkNewPassword } from "../src/ChangePassword.tsx";
 import {
   checkDashboardFilter,
-  dashboardCards,
+  dashboardGroups,
   dashboardMessage,
   formatMonth,
   lagosMonth,
@@ -4080,6 +4080,15 @@ function cardTexts(): string[] {
   return Array.from(container?.querySelectorAll(".card") ?? []).map((c) => c.textContent ?? "");
 }
 
+/** Each card group as "heading: card, card", the heading found through aria-labelledby. */
+function groupTexts(): string[] {
+  return Array.from(container?.querySelectorAll<HTMLElement>(".kpi-group") ?? []).map((g) => {
+    const heading = document.getElementById(g.getAttribute("aria-labelledby") ?? "")?.textContent;
+    const cards = Array.from(g.querySelectorAll(".card"), (c) => c.textContent ?? "");
+    return `${heading}: ${cards.join(", ")}`;
+  });
+}
+
 describe("dashboard helpers", () => {
   it("gives this month in Lagos, an hour ahead of UTC", () => {
     expect(lagosMonth(new Date("2026-10-31T22:59:00.000Z"))).toBe("2026-10");
@@ -4120,18 +4129,36 @@ describe("dashboard helpers", () => {
     expect(dashboardMessage("not_found")).toBe("Something went wrong. Try again.");
   });
 
-  it("lists the cards in order with the amounts as sent", () => {
-    expect(dashboardCards(DASHBOARD)).toEqual([
-      { label: "Active Members", value: "12" },
-      { label: "Income · Oct 2026", value: "₦125,000.00" },
-      { label: "Income · All Time", value: "₦3,400,000.50" },
-      { label: "Total Expenditures · Oct 2026", value: "₦15,000.00" },
-      { label: "Total Expenditures · All Time", value: "₦220,000.00" },
-      { label: "Outstanding Loans", value: "₦90,000.00" },
-      { label: "Withdrawals · Oct 2026", value: "₦0.00" },
-      { label: "Withdrawals · All Time", value: "₦48,000.00" },
-      { label: "Total Outflow · Oct 2026", value: "₦65,000.00" },
-      { label: "Total Outflow · All Time", value: "₦358,000.00" },
+  it("lists the cards in their groups, in order, with the amounts as sent", () => {
+    expect(dashboardGroups(DASHBOARD)).toEqual([
+      {
+        id: "month",
+        heading: "Oct 2026",
+        cards: [
+          { label: "Income", value: "₦125,000.00" },
+          { label: "Total Expenditures", value: "₦15,000.00" },
+          { label: "Withdrawals", value: "₦0.00" },
+          { label: "Total Outflow", value: "₦65,000.00" },
+        ],
+      },
+      {
+        id: "all-time",
+        heading: "All time",
+        cards: [
+          { label: "Income", value: "₦3,400,000.50" },
+          { label: "Total Expenditures", value: "₦220,000.00" },
+          { label: "Withdrawals", value: "₦48,000.00" },
+          { label: "Total Outflow", value: "₦358,000.00" },
+        ],
+      },
+      {
+        id: "position",
+        heading: "Position",
+        cards: [
+          { label: "Active Members", value: "12" },
+          { label: "Outstanding Loans", value: "₦90,000.00" },
+        ],
+      },
     ]);
   });
 });
@@ -4152,17 +4179,10 @@ describe("dashboard (jsdom)", () => {
     expect(el("h1").textContent).toBe("Dashboard");
     expect(api.calls).toEqual(["dashboard"]);
     expect(api.dashboardQueries).toEqual([{}]);
-    expect(cardTexts()).toEqual([
-      "Active Members12",
-      "Income · Oct 2026₦125,000.00",
-      "Income · All Time₦3,400,000.50",
-      "Total Expenditures · Oct 2026₦15,000.00",
-      "Total Expenditures · All Time₦220,000.00",
-      "Outstanding Loans₦90,000.00",
-      "Withdrawals · Oct 2026₦0.00",
-      "Withdrawals · All Time₦48,000.00",
-      "Total Outflow · Oct 2026₦65,000.00",
-      "Total Outflow · All Time₦358,000.00",
+    expect(groupTexts()).toEqual([
+      "Oct 2026: Income₦125,000.00, Total Expenditures₦15,000.00, Withdrawals₦0.00, Total Outflow₦65,000.00",
+      "All time: Income₦3,400,000.50, Total Expenditures₦220,000.00, Withdrawals₦48,000.00, Total Outflow₦358,000.00",
+      "Position: Active Members12, Outstanding Loans₦90,000.00",
     ]);
     expect(text()).toContain("1 Oct 2026 to 31 Oct 2026");
     expect(el(".form-note").textContent).toContain("Total Expenditures is the running costs only.");
@@ -4196,7 +4216,7 @@ describe("dashboard (jsdom)", () => {
     await type(el("input[name=month]"), "2026-09");
     await click(button("Apply"));
     expect(api.dashboardQueries).toEqual([{}, { month: "2026-09" }]);
-    expect(cardTexts()[1]).toBe("Income · Sep 2026₦125,000.00");
+    expect(groupTexts()[0]).toMatch(/^Sep 2026: Income₦125,000.00, /);
     expect(text()).toContain("No expenses this month.");
     expect(rowTexts()).toHaveLength(0);
   });
@@ -4250,6 +4270,19 @@ describe("dashboard (jsdom)", () => {
     expect(cardTexts()).toHaveLength(10);
     await click(button("Clear"));
     expect(api.dashboardQueries).toEqual([{ createdById: "u1" }, {}, {}]);
+  });
+
+  it("puts the filters in the page header, not in a form card, and right-aligns the Amount column", async () => {
+    await mount(fakeApi({ restore: DASHBOARD_VIEWER, dashboard: [{ ok: true, value: DASHBOARD }] }));
+    const filters = el("form.dashboard-filters");
+    expect(filters.closest(".title")).toBe(el(".title"));
+    expect(filters.classList.contains("form")).toBe(false);
+    expect(filters.querySelector("input[name=month]")).not.toBeNull();
+    expect(Array.from(container?.querySelectorAll(".recent-expenses .amount") ?? [], (c) => c.tagName)).toEqual([
+      "TH",
+      "TD",
+      "TD",
+    ]);
   });
 
   it("shows the message and no cards when the dashboard cannot be read", async () => {

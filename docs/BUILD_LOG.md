@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.2 (size M), 2026-10-31: the Dashboard (R-42, D-125, A-302)
+
+The owner said "fix inconsistencies and go".
+**Inconsistencies fixed:** `.dashboard-filters` shared its rules with `.report-filters` and `.export-filters`; the Dashboard now has its own rules and the other two are unchanged until D.5. The `.card` comment named the balance summary, but only the Dashboard uses `.card`; comment rewritten. The Categories totals row was described as "the dashboard card colour"; it keeps its green-soft look under a new comment. DESIGN.md named the first group "This month", but a past month can be chosen; the heading is the month the server sent (A-302 item 2). The card labels and their tests change with the groups (DESIGN.md section 7). The Amount column and its head right-align together (A-301).
+**Changed:** `web/src/Dashboard.tsx` (the filter form inside the page header, without the `form` card class; `dashboardGroups` replaces `dashboardCards`; three `section` groups with an `h2` each and `aria-labelledby`; `th.amount`), `web/src/styles.css` (header filter row, KPI groups and white cards, right-aligned Amount in `.recent-expenses` only, comments), `web/test/app.test.tsx` (the groups helper test, a `groupTexts` helper, the card checks by group, one new layout test). Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-302), TRACEABILITY (R-42), PHASE_PLAN, DESIGN (section 7 and the test count), NEXT_FILES. DECISIONS: no new decision (D-125 covers D.2).
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 388 passed (388)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-avnyLh8L.css 14.07 kB", "built in 314ms". `grep` counts 22 hex values in `styles.css`, as before; no new colour, so no new contrast pair.
+**Not verified:** the look in a browser at full width and at phone width; how the header row wraps beside the title. Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.1 (size M), 2026-10-31: tokens, shared components, side menu and sign-in (R-42, D-125, A-301)
 
 The owner said "go" after confirming the side menu and keeping every DESIGN.md limit.

@@ -14,7 +14,7 @@ A calm, plain look that suits a finance office. People will trust it with money 
 |---|---|---|
 | The page CSP is `default-src 'none'; style-src 'self'` and has no `font-src` (D-120) | MDN: a missing `font-src` falls back to `default-src`; `'none'` loads nothing. Inline `style="..."` and `<style>` are blocked without `'unsafe-inline'`, a nonce or a hash (A-300 item 2) | No web fonts and no font files. We use the system font stack. No `style=` in the TSX; every rule goes in `web/src/styles.css`. |
 | No new dependency without the owner's word (CLAUDE.md) | | Plain CSS. No Tailwind, no UI kit, no chart library, no icon font. Icons, if any, are inline SVG in the TSX. |
-| The screen tests find things by text and role (`web/test/app.test.tsx`; 234 `it(` lines counted at D.1, the D.0 figure 241 was not rechecked) | | Labels, button names, headings and roles stay the same unless a step says otherwise and changes the tests too. |
+| The screen tests find things by text and role (`web/test/app.test.tsx`; 239 lines starting with two or four spaces and `it(` at D.2, A-302 item 3) | | Labels, button names, headings and roles stay the same unless a step says otherwise and changes the tests too. |
 | The browser does no money sums (A-18) | | The design shows only figures the server sends. No new totals and no charts that need sums. |
 | WCAG 2.2 AA (R-39; read at D.0, A-300 item 1) | | See section 4. |
 
@@ -81,7 +81,7 @@ The screens already share these class names (`field`, `primary-btn`, `secondary-
 
 ## 7. Screens
 - **Sign-in:** a centred card on the deep green page, with the brand mark, the system name and the form. There is no gradient: one flat colour.
-- **Dashboard:** the page header with the month and staff filters in one row in the header area (not a form card). Two rows of KPI cards: "This month" (Income, Total Expenditures, Withdrawals, Total Outflow) and "All time" (the same four), then a "Position" row (Active Members, Outstanding Loans). The recent expenses table follows. These are the server's figures only, so the labels may move under group headings; the tests name the labels, so D.2 changes the tests with the layout.
+- **Dashboard:** the page header with the month and staff filters in one row in the header area (not a form card). Two rows of KPI cards: the chosen month, headed by its name, for example "Oct 2026" (Income, Total Expenditures, Withdrawals, Total Outflow) and "All time" (the same four), then a "Position" row (Active Members, Outstanding Loans). The recent expenses table follows, with Amount right-aligned. These are the server's figures only; the group heading names the period, so the card labels carry no period (D.2, A-302).
 - **Members:** a toolbar row (search, status filter, Add member), then the table. The member detail shows the profile and balance cards across the top, then the payments and loans tables, with the forms in panels.
 - **Expenses:** a filter row, then a total card, then one panel per month.
 - **Categories and Exports:** a filter row, then the table (Categories) or the kind choice (Exports).

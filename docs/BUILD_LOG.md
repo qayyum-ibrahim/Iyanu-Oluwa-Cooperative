@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step D.9 (size S), 2026-11-01: select and date fields on phones (R-42, A-310)
+
+The owner said "go".
+**Changed:** `web/src/styles.css` (a last block: `appearance: none` on the field selects and the breakdown select with a CSS arrow; date and month fields `display: block`, `min-width: 0`, `max-width: 100%`, value aligned left). No test change: jsdom applies no CSS. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-310), TRACEABILITY (R-42), PHASE_PLAN (D.9), DESIGN section 6, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 399 passed (399)". `npm run build` (web): "dist/assets/index-lGbiWn9W.css 18.90 kB", "built in 489ms". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)".
+**Not verified:** the look on an iPhone (Safari and Chrome) and in desktop browsers (D.10). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.8 (size M), 2026-11-01: closable menu and fixed top bar under 900 px (R-42, D-126, A-309)
 
 The owner asked for a closable menu on phones and tablets and a fixed bar, overruled D-125 item 6, and said "go".

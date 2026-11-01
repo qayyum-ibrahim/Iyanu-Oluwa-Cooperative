@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step 9.5 (size M), 2026-11-01: review of data, audit and hosting assumptions (R-37, D-128, A-314)
+
+The owner said "fix Inconsistencies and go".
+**Changed:** docs only. ASSUMPTIONS (18 rows reviewed: A-20, A-35, A-57, A-68, A-73, A-74, A-75, A-78, A-79, A-90, A-91, A-92, A-106, A-108, A-112, A-163, A-170, A-191; new A-314), DECISIONS (D-128), PHASE_PLAN (9.5 done, 9.5b added, 9.6 replanned for PostgreSQL, Phase 9 goal says PostgreSQL), TRACEABILITY (R-37, R-38), STATUS, BUILD_LOG, NEXT_FILES. No code changed.
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". Web not run (no web change).
+**Not verified:** `npm audit` not rerun. Break-on-purpose: not needed (docs only).
+
+---
+
 ## Step E.9 (size S), 2026-11-01: hand-over for client testing (R-41, D-127, A-313)
 
 The owner said "go, keep SMS_PROVIDER=fake for E.9", then chose "Client uses your account" (one Super Admin only).

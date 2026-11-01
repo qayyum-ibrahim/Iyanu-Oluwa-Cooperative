@@ -3,6 +3,9 @@ docs/BUILD_LOG.md
 docs/PHASE_PLAN.md
 docs/ASSUMPTIONS.md
 docs/DECISIONS.md
-docs/OPEN_QUESTIONS.md
 docs/TRACEABILITY.md
-docs/CLIENT_TEST.md
+server/src/prisma-store.ts
+server/src/sessions.ts
+server/test/helpers/store-contract.ts
+server/test/prisma-store.test.ts
+server/test/sessions.test.ts

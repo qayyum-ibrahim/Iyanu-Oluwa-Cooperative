@@ -10,7 +10,13 @@ import { fileURLToPath } from "node:url";
 import { TrustProxyConfigError, createApp, readTrustProxyHops } from "./app.js";
 import { createPrismaClient } from "./db.js";
 import { createPrismaStore } from "./prisma-store.js";
-import { SmsConfigError, TwilioSmsProvider, readSmsProvider, type SmsProvider } from "./sms.js";
+import {
+  SmsConfigError,
+  TermiiSmsProvider,
+  TwilioSmsProvider,
+  readSmsProvider,
+  type SmsProvider,
+} from "./sms.js";
 import { TokenConfigError, readTokenSecret } from "./tokens.js";
 
 // The built web pages (`npm run build` in web/), served on the same address (D-116, step E.4).
@@ -48,7 +54,9 @@ function start(): void {
     }
     throw error;
   }
-  console.log(`SMS provider: ${sms instanceof TwilioSmsProvider ? "twilio" : "fake"}`);
+  const smsName =
+    sms instanceof TwilioSmsProvider ? "twilio" : sms instanceof TermiiSmsProvider ? "termii" : "fake";
+  console.log(`SMS provider: ${smsName}`);
 
   let trustProxyHops: number;
   try {

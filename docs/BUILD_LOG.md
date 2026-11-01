@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step E.10 (size M), 2026-11-01: the Termii SMS adapter (R-41, D-129, A-315)
+
+The owner first asked for a Twilio trial test send ("Option 1, go"), then asked about Brevo, then said "I want to change to Termii" and "yes, continue with the Termii adapter". No Twilio send was made.
+**Changed:** `server/src/sms.ts` (`TermiiSmsProvider`, `TermiiConfig`, `TERMII_TIMEOUT_MS`, `TERMII_CHANNEL`; `readSmsProvider` takes `termii`, needs the three settings and an https base URL; the error for an unknown provider now says "fake, twilio or termii"), `server/src/server.ts` (the start log names `termii`), `server/.env.example` (the three `TERMII_` names), new `server/test/termii-sms.test.ts` (45). Docs: STATUS, BUILD_LOG, DECISIONS (D-129), ASSUMPTIONS (A-315), OPEN_QUESTIONS (OQ-17), PHASE_PLAN (E.10, E.10b), TRACEABILITY (R-41), DEPLOY, DEV_SETUP, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (server: generate, typecheck, lint, test) before the change: "Test Files 60 passed (60)", "Tests 2390 passed (2390)"; after: "Test Files 61 passed (61)", "Tests 2435 passed (2435)". Web not run (no web change).
+**Not verified:** a real send through Termii (E.10b: needs a funded wallet, an approved sender ID and the `dnd` route); the Termii error body. Break-on-purpose: security code (the API key, the https rule), in the Phase 9 run (9.10, D-90).
+
+---
+
 ## Step 9.5 (size M), 2026-11-01: review of data, audit and hosting assumptions (R-37, D-128, A-314)
 
 The owner said "fix Inconsistencies and go".

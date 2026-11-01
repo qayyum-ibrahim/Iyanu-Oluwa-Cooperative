@@ -1,6 +1,6 @@
-// SMS provider interface, a fake provider (step 4.6, D-07) and the Twilio adapter (step E.6, D-121).
-// No store. The Twilio adapter is the only network code: one HTTPS POST through the fetch it is
-// given. Secrets come from the settings and are never logged or put in an error message.
+// SMS provider interface, a fake provider (step 4.6, D-07), the Twilio adapter (step E.6, D-121)
+// and the Termii adapter (step E.10). No store. The two adapters are the only network code: one
+// HTTPS POST each through the fetch they are given. Secrets come from the settings and are never logged or put in an error message.
 // Logic code must treat send() as "may fail" and save the payment first (D-07). A real adapter
 // may also throw, so callers catch.
 
@@ -154,6 +154,69 @@ export class TwilioSmsProvider implements SmsProvider {
   }
 }
 
+export interface TermiiConfig {
+  /** The account's own base URL from the Termii dashboard, https only (step E.10). */
+  baseUrl: string;
+  apiKey: string;
+  /** An approved Termii sender ID, 3 to 11 characters. */
+  senderId: string;
+}
+
+/** Claude's choice, as for Twilio (A-296): a payment request waits at most this long for Termii. */
+export const TERMII_TIMEOUT_MS = 10_000;
+/** Termii: "Ideal for transactional or critical messages"; reaches numbers on DND too (E.10). */
+export const TERMII_CHANNEL = "dnd";
+
+/**
+ * Sends one SMS per call: a JSON POST to {baseUrl}/api/sms/send with the API key in the body,
+ * as the Termii docs ask (step E.10). 200 with code "ok" and a message_id is a success. The docs
+ * show no error body, so every other answer, a network error or the timeout is a provider error.
+ * It does not retry.
+ */
+export class TermiiSmsProvider implements SmsProvider {
+  readonly #config: TermiiConfig;
+  readonly #fetch: FetchFn;
+
+  constructor(config: TermiiConfig, fetchFn: FetchFn = fetch) {
+    this.#config = { ...config, baseUrl: config.baseUrl.replace(/\/+$/, "") };
+    this.#fetch = fetchFn;
+  }
+
+  async send(message: SmsMessage): Promise<SmsResult> {
+    const e164 = typeof message.to === "string" ? toE164(message.to) : null;
+    if (e164 === null) return { ok: false, reason: "invalid_number" };
+    if (isBlank(message.body)) return { ok: false, reason: "invalid_message" };
+
+    const { baseUrl, apiKey, senderId } = this.#config;
+    let response: Response;
+    try {
+      response = await this.#fetch(`${baseUrl}/api/sms/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Termii wants the number in international format without "+", for example 234...
+        body: JSON.stringify({
+          to: e164.slice(1),
+          from: senderId,
+          sms: message.body,
+          type: "plain",
+          channel: TERMII_CHANNEL,
+          api_key: apiKey,
+        }),
+        signal: AbortSignal.timeout(TERMII_TIMEOUT_MS),
+      });
+    } catch {
+      return { ok: false, reason: "provider_error" };
+    }
+
+    const data = await readJson(response);
+    const id = field(data, "message_id");
+    if (response.status === 200 && field(data, "code") === "ok" && typeof id === "string" && id.length > 0) {
+      return { ok: true, providerMessageId: id };
+    }
+    return { ok: false, reason: "provider_error" };
+  }
+}
+
 export class SmsConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -168,10 +231,33 @@ const TWILIO_SETTINGS = [
   "TWILIO_FROM",
 ] as const;
 
+const TERMII_SETTINGS = ["TERMII_BASE_URL", "TERMII_API_KEY", "TERMII_SENDER_ID"] as const;
+
+function requireSettings(
+  env: Readonly<Record<string, string | undefined>>,
+  provider: string,
+  keys: readonly string[],
+): void {
+  const missing = keys.filter((key) => isBlank(env[key]));
+  if (missing.length > 0) {
+    const verb = missing.length === 1 ? "is" : "are";
+    throw new SmsConfigError(`SMS_PROVIDER is ${provider} but ${missing.join(", ")} ${verb} not set.`);
+  }
+}
+
+/** True only for an https address: the Termii API key travels in the request body. */
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Chooses the provider from SMS_PROVIDER (D-121): missing, empty or "fake" gives the fake;
- * "twilio" needs all four Twilio settings. Throws SmsConfigError otherwise. The message names
- * settings only, never a value.
+ * Chooses the provider from SMS_PROVIDER (D-121, E.10): missing, empty or "fake" gives the fake;
+ * "twilio" needs all four Twilio settings; "termii" needs all three Termii settings and an https
+ * base URL. Throws SmsConfigError otherwise. The message names settings only, never a value.
  */
 export function readSmsProvider(
   env: Readonly<Record<string, string | undefined>>,
@@ -179,14 +265,25 @@ export function readSmsProvider(
 ): SmsProvider {
   const name = (env["SMS_PROVIDER"] ?? "").trim();
   if (name === "" || name === "fake") return new FakeSmsProvider();
-  if (name !== "twilio") throw new SmsConfigError("SMS_PROVIDER must be fake or twilio.");
+  const value = (key: string): string => (env[key] ?? "").trim();
 
-  const missing = TWILIO_SETTINGS.filter((key) => isBlank(env[key]));
-  if (missing.length > 0) {
-    const verb = missing.length === 1 ? "is" : "are";
-    throw new SmsConfigError(`SMS_PROVIDER is twilio but ${missing.join(", ")} ${verb} not set.`);
+  if (name === "termii") {
+    requireSettings(env, "termii", TERMII_SETTINGS);
+    if (!isHttpsUrl(value("TERMII_BASE_URL"))) {
+      throw new SmsConfigError("TERMII_BASE_URL must be an https address.");
+    }
+    return new TermiiSmsProvider(
+      {
+        baseUrl: value("TERMII_BASE_URL"),
+        apiKey: value("TERMII_API_KEY"),
+        senderId: value("TERMII_SENDER_ID"),
+      },
+      fetchFn,
+    );
   }
-  const value = (key: (typeof TWILIO_SETTINGS)[number]): string => (env[key] ?? "").trim();
+  if (name !== "twilio") throw new SmsConfigError("SMS_PROVIDER must be fake, twilio or termii.");
+
+  requireSettings(env, "twilio", TWILIO_SETTINGS);
   return new TwilioSmsProvider(
     {
       accountSid: value("TWILIO_ACCOUNT_SID"),

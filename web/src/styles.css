@@ -44,6 +44,8 @@
   --shadow: 0 1px 2px rgb(15 23 42 / 6%);
   --control-height: 36px;
   --sidebar-width: 240px;
+  --topbar-height: 56px;
+  --backdrop: rgb(15 23 42 / 45%);
 
   font-family: var(--font);
   font-size: var(--text-md);
@@ -429,70 +431,97 @@ td.amount {
   padding: 0 var(--space-3) var(--space-2);
   font-weight: 500;
 }
+/* The menu panel fills the side menu on wide screens; the toggle and backdrop are narrow only (D-126) */
+.menu-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.menu-toggle,
+.menu-backdrop {
+  display: none;
+}
 
-/* Narrow screens: the menu becomes a top bar; the groups scroll sideways, no hamburger */
+/* Narrow screens: a fixed top bar with the brand and Menu; the menu opens as a panel from the left (D-126) */
 @media (max-width: 899px) {
   .sidebar {
-    position: static;
+    position: sticky;
+    top: 0;
+    z-index: 20;
     width: auto;
-    display: grid;
-    grid-template-columns: 1fr auto;
+    height: var(--topbar-height);
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-4);
     overflow: visible;
   }
   .brand {
     padding: 0;
   }
-  .sidebar nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: flex;
-    gap: var(--space-4);
-    overflow-x: auto;
-    padding-bottom: var(--space-1);
-  }
-  .nav-group {
-    display: flex;
+  .menu-toggle {
+    display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-2);
+    min-height: var(--control-height);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--sidebar-active);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--sidebar-text);
+    font-weight: 500;
   }
-  .nav-group p {
-    margin: 0;
-    padding: 0 var(--space-1) 0 0;
-    white-space: nowrap;
+  .menu-toggle[aria-expanded="true"] {
+    background: var(--sidebar-active);
   }
-  .sidebar-foot {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
+  /* Three bars drawn with borders: no icon file, as the page CSP allows none (D-125 item 4) */
+  .menu-icon {
+    width: 16px;
+    height: 12px;
+    border-top: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    background: linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+  }
+  .menu-panel {
+    position: fixed;
+    top: var(--topbar-height);
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(280px, 85vw);
+    padding: var(--space-4) var(--space-3);
+    background: var(--sidebar);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+  .menu-open .menu-panel {
+    transform: none;
+    visibility: visible;
+  }
+  .menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-height) 0 0 0;
+    z-index: 25;
     padding: 0;
     border: 0;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-items: center;
-  }
-  .who {
-    padding: 0 var(--space-2) 0 0;
-    text-align: right;
+    background: var(--backdrop);
   }
   .app > main {
     margin-left: 0;
     padding: var(--space-5) var(--space-4) 60px;
   }
 }
-@media (max-width: 600px) {
-  .sidebar {
-    grid-template-columns: 1fr;
-  }
-  .sidebar-foot {
-    grid-column: 1;
-    grid-row: 3;
-    justify-content: flex-start;
-  }
-  .sidebar nav {
-    grid-row: 2;
+@media (prefers-reduced-motion: reduce) {
+  .menu-panel {
+    transition: none;
   }
 }
 

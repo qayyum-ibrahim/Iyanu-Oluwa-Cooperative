@@ -833,6 +833,77 @@ describe("side menu (jsdom)", () => {
   });
 });
 
+// Under 900 px the menu is a panel the Menu button opens; CSS hides it while closed (D.8, D-126).
+describe("menu panel (jsdom)", () => {
+  function toggle(): HTMLButtonElement {
+    return el<HTMLButtonElement>(".menu-toggle");
+  }
+  function isOpen(): boolean {
+    return el(".app").classList.contains("menu-open");
+  }
+  async function press(key: string) {
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    });
+  }
+
+  it("starts closed, with the Menu button naming the panel it controls", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    expect(toggle().textContent).toBe("Menu");
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(toggle().getAttribute("aria-controls")).toBe("menu-panel");
+    expect(el("#menu-panel").querySelector("nav")).not.toBeNull();
+    expect(el("#menu-panel").querySelector(".sidebar-foot")).not.toBeNull();
+    expect(isOpen()).toBe(false);
+    expect(container?.querySelector(".menu-backdrop")).toBeNull();
+  });
+
+  it("opens and closes with the Menu button", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await click(toggle());
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(isOpen()).toBe(true);
+    expect(el(".menu-backdrop").getAttribute("aria-label")).toBe("Close menu");
+    await click(toggle());
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(isOpen()).toBe(false);
+  });
+
+  it("closes when a page is chosen", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await click(toggle());
+    await click(button("Members"));
+    expect(isOpen()).toBe(false);
+    expect(el("[aria-current=page]").textContent).toBe("Members");
+  });
+
+  it("closes on a tap outside the panel", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await click(toggle());
+    await click(el(".menu-backdrop"));
+    expect(isOpen()).toBe(false);
+    expect(container?.querySelector(".menu-backdrop")).toBeNull();
+  });
+
+  it("closes on Escape and gives the focus back to the Menu button", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await click(toggle());
+    await press("Enter");
+    expect(isOpen()).toBe(true);
+    await press("Escape");
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(toggle());
+  });
+
+  it("closes when the user signs out", async () => {
+    await mount(fakeApi({ restore: VIEWER }));
+    await click(toggle());
+    await click(button("Sign out"));
+    expect(el("h1").textContent).toBe("Sign in");
+    expect(container?.querySelector(".menu-backdrop")).toBeNull();
+  });
+});
+
 describe("members helpers", () => {
   it("searches by name or Membership ID, ignoring case and outer spaces", () => {
     const all = [ACTIVE_ONE, ACTIVE_TWO, INACTIVE_ONE];

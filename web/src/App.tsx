@@ -6,8 +6,8 @@
 // permissions (U.8b), deactivate, reactivate and reset a staff password (U.8c), the audit log (U.8d),
 // the dashboard on Home for the holder of `dashboard` (7.5b, A-242), the categories report for the
 // holder of `reports.view` (7.6b, A-244), the exports page for the holder of `reports.export` (8.6, A-255),
-// the side menu in groups (D.1, D-125).
-import { useEffect, useState } from "react";
+// the side menu in groups (D.1, D-125), closable under 900 px (D.8, D-126).
+import { useEffect, useRef, useState } from "react";
 import {
   browserRefreshLock,
   createApi,
@@ -92,6 +92,9 @@ export interface AppProps {
 
 export default function App({ makeApi = browserApi, saveFile = browserSaveFile }: AppProps) {
   const [view, setView] = useState<View>({ kind: "loading" });
+  // The menu panel under 900 px (D-126); CSS hides it there while closed, wide screens ignore it.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const [api] = useState(() =>
     makeApi(() => setView({ kind: "signed-out", notice: SESSION_ENDED })),
   );
@@ -107,6 +110,17 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
     };
   }, [api]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      toggleRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
   async function signIn(email: string, password: string): Promise<string | null> {
     const result = await api.login(email, password);
     if (result.ok) setView({ kind: "signed-in", me: result.me, page: "home" });
@@ -114,6 +128,7 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
   }
 
   async function signOut() {
+    setMenuOpen(false);
     await api.logout();
     setView({ kind: "signed-out" });
   }
@@ -143,7 +158,10 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
 
   const { me } = view;
   const can = (permission: string) => me.permissions.includes(permission);
-  const go = (page: Page) => setView({ ...view, page });
+  const go = (page: Page) => {
+    setMenuOpen(false);
+    setView({ ...view, page });
+  };
   // One menu button; aria-current marks the open page (D-125, docs/DESIGN.md section 5).
   const item = (page: Page, label: string) => (
     <button
@@ -157,7 +175,7 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
   const showRecords = can("members.view") || can("expenses.view");
   const showReports = can("reports.view") || can("reports.export");
   return (
-    <div className="app">
+    <div className={menuOpen ? "app menu-open" : "app"}>
       <header className="sidebar">
         <div className="brand">
           <b>IO</b>
@@ -166,44 +184,66 @@ export default function App({ makeApi = browserApi, saveFile = browserSaveFile }
             <small>Cooperative Management</small>
           </div>
         </div>
-        <nav aria-label="Main menu">
-          <div className="nav-group" role="group" aria-labelledby="nav-overview">
-            <p id="nav-overview">Overview</p>
-            {item("home", can("dashboard") ? "Dashboard" : "Home")}
+        <button
+          type="button"
+          className="menu-toggle"
+          ref={toggleRef}
+          aria-expanded={menuOpen}
+          aria-controls="menu-panel"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          <span className="menu-icon" aria-hidden="true" />
+          Menu
+        </button>
+        <div className="menu-panel" id="menu-panel">
+          <nav aria-label="Main menu">
+            <div className="nav-group" role="group" aria-labelledby="nav-overview">
+              <p id="nav-overview">Overview</p>
+              {item("home", can("dashboard") ? "Dashboard" : "Home")}
+            </div>
+            {showRecords && (
+              <div className="nav-group" role="group" aria-labelledby="nav-records">
+                <p id="nav-records">Records</p>
+                {can("members.view") && item("members", "Members")}
+                {can("expenses.view") && item("expenses", "Expenses")}
+              </div>
+            )}
+            {showReports && (
+              <div className="nav-group" role="group" aria-labelledby="nav-reports">
+                <p id="nav-reports">Reports</p>
+                {can("reports.view") && item("reports", "Categories")}
+                {can("reports.export") && item("exports", "Exports")}
+              </div>
+            )}
+            {can("users.manage") && (
+              <div className="nav-group" role="group" aria-labelledby="nav-admin">
+                <p id="nav-admin">Administration</p>
+                {item("staff", "Staff & access")}
+                {item("audit", "Audit log")}
+              </div>
+            )}
+          </nav>
+          <div className="sidebar-foot">
+            <span className="who">
+              {me.user.displayName}
+              <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
+            </span>
+            {item("password", "Change password")}
+            <button type="button" className="logout" onClick={signOut}>
+              Sign out
+            </button>
           </div>
-          {showRecords && (
-            <div className="nav-group" role="group" aria-labelledby="nav-records">
-              <p id="nav-records">Records</p>
-              {can("members.view") && item("members", "Members")}
-              {can("expenses.view") && item("expenses", "Expenses")}
-            </div>
-          )}
-          {showReports && (
-            <div className="nav-group" role="group" aria-labelledby="nav-reports">
-              <p id="nav-reports">Reports</p>
-              {can("reports.view") && item("reports", "Categories")}
-              {can("reports.export") && item("exports", "Exports")}
-            </div>
-          )}
-          {can("users.manage") && (
-            <div className="nav-group" role="group" aria-labelledby="nav-admin">
-              <p id="nav-admin">Administration</p>
-              {item("staff", "Staff & access")}
-              {item("audit", "Audit log")}
-            </div>
-          )}
-        </nav>
-        <div className="sidebar-foot">
-          <span className="who">
-            {me.user.displayName}
-            <small>{me.user.role === "SUPER_ADMIN" ? "Super Admin" : "Staff"}</small>
-          </span>
-          {item("password", "Change password")}
-          <button type="button" className="logout" onClick={signOut}>
-            Sign out
-          </button>
         </div>
       </header>
+      {menuOpen && (
+        <button
+          type="button"
+          className="menu-backdrop"
+          aria-label="Close menu"
+          tabIndex={-1}
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
       <main>
         {view.page === "password" ? (
           <ChangePassword onSubmit={changePassword} onCancel={() => go("home")} />

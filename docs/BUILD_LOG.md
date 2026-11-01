@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step D.8 (size M), 2026-11-01: closable menu and fixed top bar under 900 px (R-42, D-126, A-309)
+
+The owner asked for a closable menu on phones and tablets and a fixed bar, overruled D-125 item 6, and said "go".
+**Changed:** `web/src/App.tsx` (menu state, the Menu button, the menu panel around the nav and the foot, the dark layer, Escape), `web/src/styles.css` (`--topbar-height`, `--backdrop`; the narrow-screen rules rewritten: sticky bar, sliding panel, reduced motion), `web/test/app.test.tsx` (6 tests in "menu panel (jsdom)"). Docs: STATUS, BUILD_LOG, DECISIONS (D-126), ASSUMPTIONS (A-309), TRACEABILITY (R-42), PHASE_PLAN (D.8 to D.10), DESIGN section 5, NEXT_FILES.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 399 passed (399)". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run build` (web): "dist/assets/index-D58MT_wp.css 18.31 kB", "built in 302ms".
+**Not verified:** the look and the slide on a phone or tablet (D.10). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.7 (size S), 2026-10-31: look-through on the owner's machine (R-42, D-125, A-308)
 
 The owner said "go".

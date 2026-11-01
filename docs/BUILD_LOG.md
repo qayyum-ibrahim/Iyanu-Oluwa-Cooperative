@@ -1,5 +1,15 @@
 # Build log (newest first)
 
+## Step D.11 (size S), 2026-11-01: phone menu and date field text (R-42, A-311)
+
+The owner said "go". D.10's first run on the owner's iPhone found two faults: "I can't navigate with the sidebar on mobile" and "the text is not centered vertically on the date field".
+**Changed:** `web/src/styles.css`: `.menu-backdrop` `z-index` 25 to 15 under 900 px; `.field input[type=date]` and `[type=month]` get `height: var(--control-height)` and `line-height: calc(var(--control-height) - 2px)`. No test change: jsdom applies no CSS. Docs: STATUS, BUILD_LOG, ASSUMPTIONS (A-311), TRACEABILITY (R-42), PHASE_PLAN (D.11), DESIGN sections 5 and 6, NEXT_FILES.
+**Cause (read in this session):** under 900 px `.sidebar` is `position: sticky` with `z-index: 20`, so the menu panel inside it stays in that layer whatever its own `z-index: 30`; the dark layer, outside the bar at `z-index: 25`, covered the panel, so every tap closed the menu instead of opening a page.
+**Works (verified in this session):** `npm run check` (web): "Test Files 4 passed (4)", "Tests 399 passed (399)". `npm run build` (web): "dist/assets/index-DK78FYaI.css 18.97 kB", "built in 306ms". `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)".
+**Not verified:** both fixes on an iPhone (Safari and Chrome) and in desktop browsers (D.10 again). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.9 (size S), 2026-11-01: select and date fields on phones (R-42, A-310)
 
 The owner said "go".

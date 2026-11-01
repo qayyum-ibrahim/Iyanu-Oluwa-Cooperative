@@ -509,7 +509,8 @@ td.amount {
     display: block;
     position: fixed;
     inset: var(--topbar-height) 0 0 0;
-    z-index: 25;
+    /* Under the bar (20): the panel sits inside the bar's layer, so a higher layer here would cover it (D.11) */
+    z-index: 15;
     padding: 0;
     border: 0;
     background: var(--backdrop);
@@ -1185,6 +1186,9 @@ td.amount {
   min-width: 0;
   max-width: 100%;
   text-align: left;
+  /* A fixed height and line height keep the value in the middle once the native look is off (D.11) */
+  height: var(--control-height);
+  line-height: calc(var(--control-height) - 2px);
 }
 /* WebKit only; kept apart, as a selector one browser does not know drops the whole rule */
 .field input[type="date"]::-webkit-date-and-time-value,

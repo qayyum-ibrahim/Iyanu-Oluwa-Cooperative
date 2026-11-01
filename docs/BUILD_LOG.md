@@ -1,5 +1,13 @@
 # Build log (newest first)
 
+## Step D.10 (size S), 2026-11-01: the owner's phone check (R-42, A-312)
+
+The owner said "go". The first run found two faults on the owner's iPhone, fixed at D.11 (A-311). After D.11 the owner checked again and said "all fine" (verified on owner's machine).
+**Changed:** docs only: STATUS, BUILD_LOG, ASSUMPTIONS (A-312), TRACEABILITY (R-42), PHASE_PLAN (D.10), NEXT_FILES. No code changed, so no check was run for this entry; the D.11 checks (web 399, server 2390) stand.
+**Not verified:** a narrow desktop window and the desktop calendar button (the owner did not say). Break-on-purpose: not needed (display code, D-90).
+
+---
+
 ## Step D.11 (size S), 2026-11-01: phone menu and date field text (R-42, A-311)
 
 The owner said "go". D.10's first run on the owner's iPhone found two faults: "I can't navigate with the sidebar on mobile" and "the text is not centered vertically on the date field".

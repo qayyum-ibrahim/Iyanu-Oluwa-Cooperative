@@ -1,5 +1,14 @@
 # Build log (newest first)
 
+## Step E.9 (size S), 2026-11-01: hand-over for client testing (R-41, D-127, A-313)
+
+The owner said "go, keep SMS_PROVIDER=fake for E.9", then chose "Client uses your account" (one Super Admin only).
+**Changed:** new `docs/CLIENT_TEST.md` (before the hand-over, rules, 13 test lines, report table, end of testing); `docs/DEPLOY.md` (the `SMS_PROVIDER` row and "Later"). Docs: STATUS, BUILD_LOG, DECISIONS (D-127), ASSUMPTIONS (A-313), TRACEABILITY (R-41), PHASE_PLAN (E.9), OPEN_QUESTIONS (OQ-17 to Phase 10), NEXT_FILES. No code changed.
+**Works (verified in this session):** `npm run check` (server): "Test Files 60 passed (60)", "Tests 2390 passed (2390)". `npm run check` (web): "Test Files 4 passed (4)", "Tests 399 passed (399)".
+**Not verified:** the client signing in and testing (the Phase E exit). Break-on-purpose: not needed (docs only).
+
+---
+
 ## Step D.10 (size S), 2026-11-01: the owner's phone check (R-42, A-312)
 
 The owner said "go". The first run found two faults on the owner's iPhone, fixed at D.11 (A-311). After D.11 the owner checked again and said "all fine" (verified on owner's machine).

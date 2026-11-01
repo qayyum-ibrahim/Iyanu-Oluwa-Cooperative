@@ -48,7 +48,7 @@ Under **Advanced**, environment variables:
 | `DATABASE_URL` | the Neon pooled address of the root branch (step 1) |
 | `DIRECT_URL` | the Neon direct address of the root branch (step 1) |
 | `TOKEN_SECRET` | the new secret (step 2) |
-| `SMS_PROVIDER` | `fake` (no SMS is sent; Twilio comes at E.9, OQ-17) |
+| `SMS_PROVIDER` | `fake` (no SMS is sent; kept for the client test at E.9, owner 2026-11-01; Twilio waits for OQ-17) |
 | `TRUST_PROXY_HOPS` | `3` (found at E.8b, D-124; start with `0` on a new service, then see "Proxy count" below) |
 
 Do not set `PORT` (Render sets it) or `NODE_VERSION` (`.node-version` gives 22.14.0). Do not set the `TWILIO_` names yet.
@@ -107,5 +107,5 @@ A 5-minute ping keeps Render from spinning down (15 idle minutes). `/health` doe
 2. From the repo root: `BASE=https://<name>.onrender.com sh scripts/live-check-concurrency.sh`. Paste the last line (`N passed, M failed`) and any `store transaction refused for a clash, try N of 10` lines from the Render log. Each run adds fictional rows (A-299 item 6). Run it once only.
 
 ## Later
-- E.9: the client's fictional test accounts and Twilio (OQ-17).
+- E.9: the hand-over for client testing is in `docs/CLIENT_TEST.md` (D-127). SMS stays `fake`; Twilio waits for OQ-17.
 - Each push to `main` deploys again. Free web services use the workspace's build pipeline minutes. When they run out, with no payment method, Render stops new builds for the rest of the month (A-298 item 3).
